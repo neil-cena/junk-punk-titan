@@ -7,6 +7,10 @@ local REMOTE_FOLDER_NAME = "Remotes"
 
 local RemoteNames = {
 	RequestPurchase = "RequestPurchase",
+	PlaceBlueprint = "PlaceBlueprint",
+	FinishBlueprint = "FinishBlueprint",
+	BlueprintPlaced = "BlueprintPlaced",
+	BlueprintFinished = "BlueprintFinished",
 	BuildingDismantled = "BuildingDismantled",
 	ScrapUpdated = "ScrapUpdated",
 	RoleSelected = "RoleSelected",
@@ -72,6 +76,10 @@ function Remotes.Get()
 		return {
 			Folder = folder,
 			RequestPurchase = getOrCreateRemoteFunction(folder, RemoteNames.RequestPurchase),
+			PlaceBlueprint = getOrCreateRemoteEvent(folder, RemoteNames.PlaceBlueprint),
+			FinishBlueprint = getOrCreateRemoteFunction(folder, RemoteNames.FinishBlueprint),
+			BlueprintPlaced = getOrCreateRemoteEvent(folder, RemoteNames.BlueprintPlaced),
+			BlueprintFinished = getOrCreateRemoteEvent(folder, RemoteNames.BlueprintFinished),
 			BuildingDismantled = getOrCreateRemoteEvent(folder, RemoteNames.BuildingDismantled),
 			ScrapUpdated = getOrCreateRemoteEvent(folder, RemoteNames.ScrapUpdated),
 			RoleSelected = getOrCreateRemoteEvent(folder, RemoteNames.RoleSelected),
@@ -84,6 +92,10 @@ function Remotes.Get()
 	return {
 		Folder = folder,
 		RequestPurchase = waitForRemoteFunction(folder, RemoteNames.RequestPurchase),
+		PlaceBlueprint = waitForRemoteEvent(folder, RemoteNames.PlaceBlueprint),
+		FinishBlueprint = waitForRemoteFunction(folder, RemoteNames.FinishBlueprint),
+		BlueprintPlaced = waitForRemoteEvent(folder, RemoteNames.BlueprintPlaced),
+		BlueprintFinished = waitForRemoteEvent(folder, RemoteNames.BlueprintFinished),
 		BuildingDismantled = waitForRemoteEvent(folder, RemoteNames.BuildingDismantled),
 		ScrapUpdated = waitForRemoteEvent(folder, RemoteNames.ScrapUpdated),
 		RoleSelected = waitForRemoteEvent(folder, RemoteNames.RoleSelected),

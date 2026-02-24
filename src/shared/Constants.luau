@@ -32,6 +32,22 @@ local Constants = {
 		ProgressPerSecond = 12.5,
 	},
 
+	BUILDING = {
+		GridSize = 4,
+		GhostTransparency = 0.6,
+		PlacementMaxDistance = 50,
+		Sizes = {
+			Turret = Vector3.new(4, 4, 4),
+			Drill = Vector3.new(4, 6, 4),
+			Wall = Vector3.new(8, 8, 2),
+		},
+		Colors = {
+			Turret = Color3.fromRGB(200, 180, 60),
+			Drill = Color3.fromRGB(120, 120, 120),
+			Wall = Color3.fromRGB(90, 80, 70),
+		},
+	},
+
 	SCALING = {
 		OptimalPlayers = 3,
 		PlayerDeltaEnemyFactor = 0.5,

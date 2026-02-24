@@ -26,3 +26,11 @@ export type PurchaseResponse = {
 	remainingScrap: number,
 	reason: string?,
 }
+
+export type BlueprintData = {
+	id: string,
+	buildingType: BuildingType,
+	position: Vector3,
+	ownerUserId: number,
+	isFinished: boolean,
+}

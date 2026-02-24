@@ -5,10 +5,12 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 
 local Remotes = require(Shared:WaitForChild("Remotes"))
 local EconomyService = require(script:WaitForChild("Services"):WaitForChild("EconomyService"))
+local BuildingService = require(script:WaitForChild("Services"):WaitForChild("BuildingService"))
 local EnemyService = require(script:WaitForChild("Services"):WaitForChild("EnemyService"))
 local RoleService = require(script:WaitForChild("Services"):WaitForChild("RoleService"))
 
 Remotes.Get()
 EconomyService.Init(100)
+BuildingService.Init()
 RoleService.Init()
 EnemyService.Init()

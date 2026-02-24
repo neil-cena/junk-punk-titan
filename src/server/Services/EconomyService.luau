@@ -71,13 +71,17 @@ local function validatePurchase(buildingType: BuildingType, currentCount: number
 	}
 end
 
+function EconomyService.TryPurchase(buildingType: BuildingType, currentCount: number): PurchaseResponse
+	return validatePurchase(buildingType, currentCount)
+end
+
 function EconomyService.Init(initialScrap: number?): ()
 	if typeof(initialScrap) == "number" then
 		teamScrap = math.max(0, initialScrap :: number)
 	end
 
 	remotes.RequestPurchase.OnServerInvoke = function(_player: Player, buildingType: BuildingType, currentCount: number)
-		return validatePurchase(buildingType, currentCount)
+		return EconomyService.TryPurchase(buildingType, currentCount)
 	end
 
 	remotes.ScrapUpdated:FireAllClients(teamScrap)
