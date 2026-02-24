@@ -194,6 +194,14 @@ local function finishBlueprint(_player: Player, blueprintId: string): PurchaseRe
 	return response
 end
 
+local function getNextBuildCosts(): { [BuildingType]: number }
+	return {
+		Turret = EconomyService.GetCost(Constants.BASE_COSTS.Turret, builtCounts.Turret),
+		Drill = EconomyService.GetCost(Constants.BASE_COSTS.Drill, builtCounts.Drill),
+		Wall = EconomyService.GetCost(Constants.BASE_COSTS.Wall, builtCounts.Wall),
+	}
+end
+
 function BuildingService.RegisterDestroyedSlot(position: Vector3)
 	local key = positionSlotKey(position)
 	blockedSlots[key] = os.clock() + Constants.BUILDING.RebuildCooldownSeconds
@@ -206,6 +214,9 @@ function BuildingService.Init(): ()
 
 	remotes.FinishBlueprint.OnServerInvoke = function(player: Player, blueprintId: string)
 		return finishBlueprint(player, blueprintId)
+	end
+	remotes.RequestBuildCosts.OnServerInvoke = function(_player: Player)
+		return getNextBuildCosts()
 	end
 end
 

@@ -8,6 +8,7 @@ local REMOTE_FOLDER_NAME = "Remotes"
 local RemoteNames = {
 	RequestPurchase = "RequestPurchase",
 	RequestEconomyState = "RequestEconomyState",
+	RequestBuildCosts = "RequestBuildCosts",
 	DebugCommand = "DebugCommand",
 	PlaceBlueprint = "PlaceBlueprint",
 	FinishBlueprint = "FinishBlueprint",
@@ -86,6 +87,7 @@ function Remotes.Get()
 			Folder = folder,
 			RequestPurchase = getOrCreateRemoteFunction(folder, RemoteNames.RequestPurchase),
 			RequestEconomyState = getOrCreateRemoteFunction(folder, RemoteNames.RequestEconomyState),
+			RequestBuildCosts = getOrCreateRemoteFunction(folder, RemoteNames.RequestBuildCosts),
 			DebugCommand = getOrCreateRemoteEvent(folder, RemoteNames.DebugCommand),
 			PlaceBlueprint = getOrCreateRemoteEvent(folder, RemoteNames.PlaceBlueprint),
 			FinishBlueprint = getOrCreateRemoteFunction(folder, RemoteNames.FinishBlueprint),
@@ -111,6 +113,7 @@ function Remotes.Get()
 		Folder = folder,
 		RequestPurchase = waitForRemoteFunction(folder, RemoteNames.RequestPurchase),
 		RequestEconomyState = waitForRemoteFunction(folder, RemoteNames.RequestEconomyState),
+		RequestBuildCosts = waitForRemoteFunction(folder, RemoteNames.RequestBuildCosts),
 		DebugCommand = waitForRemoteEvent(folder, RemoteNames.DebugCommand),
 		PlaceBlueprint = waitForRemoteEvent(folder, RemoteNames.PlaceBlueprint),
 		FinishBlueprint = waitForRemoteFunction(folder, RemoteNames.FinishBlueprint),

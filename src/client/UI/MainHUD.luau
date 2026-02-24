@@ -25,15 +25,11 @@ local currentStormSteel = 0
 local scrapLabel: TextLabel? = nil
 local stormSteelLabel: TextLabel? = nil
 local dismantleBars: { [BasePart]: BillboardGui } = {}
+local buildCostButtons: { [BuildingType]: TextButton } = {}
 local roleScreen: ScreenGui? = nil
 local threatLabel: TextLabel? = nil
 local stormBannerLabel: TextLabel? = nil
 local tetherStatusLabel: TextLabel? = nil
-
-local function getCostPreview(buildingType: BuildingType): number
-	local base = Constants.BASE_COSTS[buildingType]
-	return math.floor(base + 0.5)
-end
 
 local function animateScrapPop(label: TextLabel)
 	local grow = TweenService:Create(label, TweenInfo.new(0.08, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
@@ -275,8 +271,9 @@ local function createToolbar(parent: Instance)
 		slot.TextColor3 = Color3.fromRGB(255, 255, 255)
 		slot.TextScaled = true
 		slot.Font = Enum.Font.GothamBold
-		slot.Text = string.format("%s\n$%d\n[%s]", info.name, getCostPreview(info.name), info.key)
+		slot.Text = string.format("%s\n$%d\n[%s]", info.name, Constants.BASE_COSTS[info.name], info.key)
 		slot.Parent = frame
+		buildCostButtons[info.name] = slot
 
 		local colorSwatch = Instance.new("Frame")
 		colorSwatch.Name = "Swatch"
@@ -289,6 +286,45 @@ local function createToolbar(parent: Instance)
 		slot.MouseButton1Click:Connect(function()
 			BlueprintController.StartPlacing(info.name)
 		end)
+	end
+end
+
+local function refreshBuildCosts()
+	local ok, response = pcall(function()
+		return remotes.RequestBuildCosts:InvokeServer()
+	end)
+	if not ok or type(response) ~= "table" then
+		return
+	end
+
+	local keys: { { name: BuildingType, key: string } } = {
+		{ name = "Turret", key = "1" },
+		{ name = "Drill", key = "2" },
+		{ name = "Wall", key = "3" },
+	}
+
+	for _, info in keys do
+		local button = buildCostButtons[info.name]
+		local costValue = response[info.name]
+		if button ~= nil and type(costValue) == "number" then
+			local newText = string.format("%s\n$%d\n[%s]", info.name, math.floor(costValue + 0.5), info.key)
+			local changed = button.Text ~= newText
+			button.Text = newText
+
+			if changed then
+				local originalSize = button.Size
+				local pulseUp = TweenService:Create(button, TweenInfo.new(0.08, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+					Size = UDim2.new(originalSize.X.Scale, originalSize.X.Offset + 8, originalSize.Y.Scale, originalSize.Y.Offset + 6),
+				})
+				local pulseDown = TweenService:Create(button, TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+					Size = originalSize,
+				})
+				pulseUp:Play()
+				pulseUp.Completed:Connect(function()
+					pulseDown:Play()
+				end)
+			end
+		end
 	end
 end
 
@@ -520,6 +556,9 @@ function MainHUD.Init()
 	remotes.TetherStatus.OnClientEvent:Connect(function(activePads: number, requiredPads: number)
 		updateTetherStatus(activePads, requiredPads)
 	end)
+	remotes.BlueprintFinished.OnClientEvent:Connect(function(_blueprintId: string, _position: Vector3)
+		refreshBuildCosts()
+	end)
 
 	local ok, snapshot = pcall(function()
 		return remotes.RequestEconomyState:InvokeServer()
@@ -535,6 +574,8 @@ function MainHUD.Init()
 			updateStormSteel(stormSteelValue)
 		end
 	end
+
+	refreshBuildCosts()
 
 	RunService.Heartbeat:Connect(updateDismantleBars)
 end
