@@ -57,7 +57,11 @@ function TheftComponent.StartDismantle(part: BasePart, enemyModel: Model?): ()
 	local localToken = state.runToken
 	task.spawn(function()
 		local lastTick = os.clock()
-		while part.Parent ~= nil and state.isBeingDismantled and state.runToken == localToken and state.dismantleProgress < 100 do
+		while part.Parent ~= nil
+			and state.isBeingDismantled
+			and state.runToken == localToken
+			and state.dismantleProgress < 100
+			and (enemyModel == nil or enemyModel.Parent ~= nil) do
 			task.wait(0.2)
 
 			local now = os.clock()

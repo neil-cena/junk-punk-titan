@@ -48,6 +48,12 @@ local function createScrapRatModel(spawnPosition: Vector3): Model
 	humanoid.Parent = rat
 
 	rat.PrimaryPart = root
+	CollectionService:AddTag(rat, "ScrapRatEnemy")
+	rat.AncestryChanged:Connect(function(_, parent)
+		if parent == nil then
+			removeRatFromActive(rat)
+		end
+	end)
 	rat.Parent = workspace
 	return rat
 end

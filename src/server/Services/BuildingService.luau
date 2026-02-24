@@ -30,6 +30,7 @@ BuildingService.__index = BuildingService
 local remotes = RemotesModule.Get()
 local blueprints: { [string]: InternalBlueprintData } = {}
 local blockedSlots: { [string]: number } = {}
+local activeBuildingTasks: { [BasePart]: thread } = {}
 local builtCounts: { [BuildingType]: number } = {
 	Turret = 0,
 	Drill = 0,
@@ -101,6 +102,138 @@ local function createFinalBuilding(buildingType: BuildingType, position: Vector3
 	CollectionService:AddTag(part, DISMANTLABLE_TAG)
 	TheftComponent.Attach(part)
 	return part
+end
+
+local function killRatFromBuilding(targetRat: Model)
+	local root = targetRat.PrimaryPart
+	local atPosition = if root ~= nil then root.Position else targetRat:GetPivot().Position
+	if targetRat.Parent ~= nil then
+		targetRat:Destroy()
+	end
+
+	local bundle = Instance.new("Part")
+	bundle.Name = "ScrapBundle"
+	bundle.Size = Vector3.new(1.2, 1.2, 1.2)
+	bundle.Shape = Enum.PartType.Ball
+	bundle.Material = Enum.Material.Metal
+	bundle.Color = Color3.fromRGB(168, 168, 168)
+	bundle.Anchored = false
+	bundle.CanCollide = true
+	bundle.Position = atPosition + Vector3.new(0, 1.5, 0)
+	bundle.Parent = Workspace
+
+	EconomyService.AddScrap(Constants.COMBAT.RatKillScrapReward)
+	remotes.EnemyKilled:FireAllClients(atPosition)
+end
+
+local function playTurretMuzzleFlash(turretPart: BasePart, targetPosition: Vector3)
+	local direction = (targetPosition - turretPart.Position)
+	if direction.Magnitude < 0.01 then
+		direction = Vector3.new(0, 0, -1)
+	end
+
+	local flash = Instance.new("Part")
+	flash.Name = "TurretMuzzleFlash"
+	flash.Anchored = true
+	flash.CanCollide = false
+	flash.Material = Enum.Material.Neon
+	flash.Color = Color3.fromRGB(255, 186, 92)
+	flash.Size = Vector3.new(0.25, 0.25, 0.25)
+	flash.CFrame = CFrame.lookAt(turretPart.Position + Vector3.new(0, turretPart.Size.Y * 0.35, 0), targetPosition) * CFrame.new(0, 0, -1.8)
+	flash.Parent = Workspace
+
+	task.delay(0.06, function()
+		if flash.Parent ~= nil then
+			flash:Destroy()
+		end
+	end)
+end
+
+local function ensureDrillFx(drillPart: BasePart): Attachment
+	local attachment = drillPart:FindFirstChild("DrillFxAttachment")
+	if attachment and attachment:IsA("Attachment") then
+		return attachment
+	end
+
+	local newAttachment = Instance.new("Attachment")
+	newAttachment.Name = "DrillFxAttachment"
+	newAttachment.Position = Vector3.new(0, -drillPart.Size.Y * 0.5 + 0.15, 0)
+	newAttachment.Parent = drillPart
+
+	local emitter = Instance.new("ParticleEmitter")
+	emitter.Name = "DrillSparks"
+	emitter.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+	emitter.Color = ColorSequence.new(Color3.fromRGB(255, 188, 103), Color3.fromRGB(173, 119, 78))
+	emitter.Lifetime = NumberRange.new(0.12, 0.22)
+	emitter.Speed = NumberRange.new(1, 3)
+	emitter.Rate = 10
+	emitter.SpreadAngle = Vector2.new(30, 30)
+	emitter.Size = NumberSequence.new(0.08, 0.02)
+	emitter.Parent = newAttachment
+
+	return newAttachment
+end
+
+local function getNearestRat(position: Vector3, maxRange: number): Model?
+	local nearest: Model? = nil
+	local nearestDist = maxRange
+	for _, instance in CollectionService:GetTagged("ScrapRatEnemy") do
+		if instance:IsA("Model") and instance.Parent ~= nil then
+			local root = instance.PrimaryPart
+			if root ~= nil then
+				local distance = (root.Position - position).Magnitude
+				if distance <= nearestDist then
+					nearestDist = distance
+					nearest = instance
+				end
+			end
+		end
+	end
+	return nearest
+end
+
+local function activateBuildingBehavior(part: BasePart, buildingType: BuildingType)
+	local existing = activeBuildingTasks[part]
+	if existing ~= nil then
+		return
+	end
+
+	if buildingType == "Turret" then
+		activeBuildingTasks[part] = task.spawn(function()
+			while part.Parent ~= nil do
+				task.wait(Constants.BUILDING.TurretFireInterval)
+				local targetRat = getNearestRat(part.Position, Constants.BUILDING.TurretRange)
+				if targetRat ~= nil then
+					local root = targetRat.PrimaryPart
+					if root ~= nil then
+						playTurretMuzzleFlash(part, root.Position)
+					end
+					killRatFromBuilding(targetRat)
+				end
+			end
+			activeBuildingTasks[part] = nil
+		end)
+	elseif buildingType == "Drill" then
+		activeBuildingTasks[part] = task.spawn(function()
+			local drillAttachment = ensureDrillFx(part)
+			local emitter = drillAttachment:FindFirstChild("DrillSparks")
+			while part.Parent ~= nil do
+				task.wait(Constants.BUILDING.DrillTickInterval)
+				part.CFrame = part.CFrame * CFrame.Angles(0, math.rad(20), 0)
+				if emitter and emitter:IsA("ParticleEmitter") then
+					emitter:Emit(18)
+				end
+				EconomyService.AddScrap(Constants.BUILDING.DrillScrapPerTick)
+			end
+			activeBuildingTasks[part] = nil
+		end)
+	end
+
+	part.AncestryChanged:Connect(function(_, parent)
+		if parent == nil then
+			activeBuildingTasks[part] = nil
+		end
+	end)
 end
 
 local function positionSlotKey(position: Vector3): string
@@ -186,7 +319,8 @@ local function finishBlueprint(_player: Player, blueprintId: string): PurchaseRe
 		blueprint.ghostPart:Destroy()
 	end
 
-	createFinalBuilding(blueprint.buildingType, blueprint.position)
+	local builtPart = createFinalBuilding(blueprint.buildingType, blueprint.position)
+	activateBuildingBehavior(builtPart, blueprint.buildingType)
 	builtCounts[blueprint.buildingType] = countForType + 1
 	blueprints[blueprintId] = nil
 	remotes.BlueprintFinished:FireAllClients(blueprintId, blueprint.position)
