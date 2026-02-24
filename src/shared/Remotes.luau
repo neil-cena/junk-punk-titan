@@ -9,6 +9,7 @@ local RemoteNames = {
 	RequestPurchase = "RequestPurchase",
 	RequestEconomyState = "RequestEconomyState",
 	RequestBuildCosts = "RequestBuildCosts",
+	UseWrench = "UseWrench",
 	DebugCommand = "DebugCommand",
 	PlaceBlueprint = "PlaceBlueprint",
 	FinishBlueprint = "FinishBlueprint",
@@ -25,6 +26,8 @@ local RemoteNames = {
 	TetherStatus = "TetherStatus",
 	RoleSelected = "RoleSelected",
 	WaveStarted = "WaveStarted",
+	RepairMinigameResult = "RepairMinigameResult",
+	DrillRepaired = "DrillRepaired",
 }
 
 local function getOrCreateRemoteFolder(): Folder
@@ -88,6 +91,7 @@ function Remotes.Get()
 			RequestPurchase = getOrCreateRemoteFunction(folder, RemoteNames.RequestPurchase),
 			RequestEconomyState = getOrCreateRemoteFunction(folder, RemoteNames.RequestEconomyState),
 			RequestBuildCosts = getOrCreateRemoteFunction(folder, RemoteNames.RequestBuildCosts),
+			UseWrench = getOrCreateRemoteFunction(folder, RemoteNames.UseWrench),
 			DebugCommand = getOrCreateRemoteEvent(folder, RemoteNames.DebugCommand),
 			PlaceBlueprint = getOrCreateRemoteEvent(folder, RemoteNames.PlaceBlueprint),
 			FinishBlueprint = getOrCreateRemoteFunction(folder, RemoteNames.FinishBlueprint),
@@ -104,6 +108,8 @@ function Remotes.Get()
 			TetherStatus = getOrCreateRemoteEvent(folder, RemoteNames.TetherStatus),
 			RoleSelected = getOrCreateRemoteEvent(folder, RemoteNames.RoleSelected),
 			WaveStarted = getOrCreateRemoteEvent(folder, RemoteNames.WaveStarted),
+			RepairMinigameResult = getOrCreateRemoteEvent(folder, RemoteNames.RepairMinigameResult),
+			DrillRepaired = getOrCreateRemoteEvent(folder, RemoteNames.DrillRepaired),
 		}
 	end
 
@@ -114,6 +120,7 @@ function Remotes.Get()
 		RequestPurchase = waitForRemoteFunction(folder, RemoteNames.RequestPurchase),
 		RequestEconomyState = waitForRemoteFunction(folder, RemoteNames.RequestEconomyState),
 		RequestBuildCosts = waitForRemoteFunction(folder, RemoteNames.RequestBuildCosts),
+		UseWrench = waitForRemoteFunction(folder, RemoteNames.UseWrench),
 		DebugCommand = waitForRemoteEvent(folder, RemoteNames.DebugCommand),
 		PlaceBlueprint = waitForRemoteEvent(folder, RemoteNames.PlaceBlueprint),
 		FinishBlueprint = waitForRemoteFunction(folder, RemoteNames.FinishBlueprint),
@@ -130,6 +137,8 @@ function Remotes.Get()
 		TetherStatus = waitForRemoteEvent(folder, RemoteNames.TetherStatus),
 		RoleSelected = waitForRemoteEvent(folder, RemoteNames.RoleSelected),
 		WaveStarted = waitForRemoteEvent(folder, RemoteNames.WaveStarted),
+		RepairMinigameResult = waitForRemoteEvent(folder, RemoteNames.RepairMinigameResult),
+		DrillRepaired = waitForRemoteEvent(folder, RemoteNames.DrillRepaired),
 	}
 end
 

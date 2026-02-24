@@ -1,5 +1,6 @@
 --!strict
 
+local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
@@ -12,6 +13,7 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Constants = require(Shared:WaitForChild("Constants"))
 local Remotes = require(Shared:WaitForChild("Remotes"))
 local BlueprintController = require(script.Parent:WaitForChild("BlueprintController"))
+local MainHUD = require(script.Parent.Parent:WaitForChild("UI"):WaitForChild("MainHUD"))
 
 local ToolController = {}
 
@@ -19,7 +21,9 @@ local remotes = Remotes.Get()
 local lastShotAt = 0
 local isInitialized = false
 local SHOTGUN_TOOL_NAME = "RustyShotgun"
-local activeTool: Tool? = nil
+local WRENCH_TOOL_NAME = "RustyWrench"
+local activeShotgun: Tool? = nil
+local activeWrench: Tool? = nil
 local boundTools: { [Tool]: boolean } = {}
 
 local function canFireNow(): boolean
@@ -81,12 +85,12 @@ local function playShotEffects(rayOrigin: Vector3, rayDirection: Vector3)
 end
 
 local function fireShotgun()
-	if activeTool == nil then
+	if activeShotgun == nil then
 		return
 	end
 
 	local character = LocalPlayer.Character
-	if character == nil or activeTool.Parent ~= character then
+	if character == nil or activeShotgun.Parent ~= character then
 		return
 	end
 
@@ -127,6 +131,63 @@ local function fireShotgun()
 	remotes.HitEnemy:FireServer(ratModel, Constants.COMBAT.ShotgunDamage * damageMult)
 end
 
+local function findDrillModel(instance: Instance?): BasePart?
+	local current = instance
+	while current ~= nil do
+		if current:IsA("BasePart") and CollectionService:HasTag(current, "Drill") then
+			return current
+		end
+		current = current.Parent
+	end
+	return nil
+end
+
+local function useWrench()
+	if activeWrench == nil then
+		return
+	end
+
+	local character = LocalPlayer.Character
+	if character == nil or activeWrench.Parent ~= character then
+		return
+	end
+
+	if BlueprintController.IsPlacing() then
+		return
+	end
+
+	local camera = Workspace.CurrentCamera
+	if camera == nil then
+		return
+	end
+
+	local mousePos = UserInputService:GetMouseLocation()
+	local unitRay = camera:ViewportPointToRay(mousePos.X, mousePos.Y)
+	local rayParams = RaycastParams.new()
+	rayParams.FilterType = Enum.RaycastFilterType.Exclude
+	rayParams.FilterDescendantsInstances = { LocalPlayer.Character }
+	local result = Workspace:Raycast(unitRay.Origin, unitRay.Direction * Constants.BUILDING.PlacementMaxDistance, rayParams)
+	if result == nil then
+		return
+	end
+
+	local drillPart = findDrillModel(result.Instance)
+	if drillPart == nil then
+		return
+	end
+
+	local ok, response = pcall(function()
+		return remotes.UseWrench:InvokeServer(drillPart)
+	end)
+	if not ok or type(response) ~= "table" then
+		return
+	end
+
+	if response.allowed == true then
+		MainHUD.ShowRepairMinigame(drillPart)
+	end
+end
+
 local function bindShotgunTool(tool: Tool)
 	if boundTools[tool] then
 		return
@@ -134,12 +195,12 @@ local function bindShotgunTool(tool: Tool)
 	boundTools[tool] = true
 
 	tool.Equipped:Connect(function()
-		activeTool = tool
+		activeShotgun = tool
 	end)
 
 	tool.Unequipped:Connect(function()
-		if activeTool == tool then
-			activeTool = nil
+		if activeShotgun == tool then
+			activeShotgun = nil
 		end
 	end)
 
@@ -150,8 +211,38 @@ local function bindShotgunTool(tool: Tool)
 	tool.AncestryChanged:Connect(function(_, parent)
 		if parent == nil then
 			boundTools[tool] = nil
-			if activeTool == tool then
-				activeTool = nil
+			if activeShotgun == tool then
+				activeShotgun = nil
+			end
+		end
+	end)
+end
+
+local function bindWrenchTool(tool: Tool)
+	if boundTools[tool] then
+		return
+	end
+	boundTools[tool] = true
+
+	tool.Equipped:Connect(function()
+		activeWrench = tool
+	end)
+
+	tool.Unequipped:Connect(function()
+		if activeWrench == tool then
+			activeWrench = nil
+		end
+	end)
+
+	tool.Activated:Connect(function()
+		useWrench()
+	end)
+
+	tool.AncestryChanged:Connect(function(_, parent)
+		if parent == nil then
+			boundTools[tool] = nil
+			if activeWrench == tool then
+				activeWrench = nil
 			end
 		end
 	end)
@@ -161,12 +252,16 @@ local function bindContainer(container: Instance)
 	for _, child in container:GetChildren() do
 		if child:IsA("Tool") and child.Name == SHOTGUN_TOOL_NAME then
 			bindShotgunTool(child)
+		elseif child:IsA("Tool") and child.Name == WRENCH_TOOL_NAME then
+			bindWrenchTool(child)
 		end
 	end
 
 	container.ChildAdded:Connect(function(child)
 		if child:IsA("Tool") and child.Name == SHOTGUN_TOOL_NAME then
 			bindShotgunTool(child)
+		elseif child:IsA("Tool") and child.Name == WRENCH_TOOL_NAME then
+			bindWrenchTool(child)
 		end
 	end)
 end
@@ -181,7 +276,8 @@ function ToolController.Init()
 	bindContainer(backpack)
 
 	LocalPlayer.CharacterAdded:Connect(function(character)
-		activeTool = nil
+		activeShotgun = nil
+		activeWrench = nil
 		bindContainer(character)
 	end)
 

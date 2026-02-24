@@ -5,6 +5,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
 
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui") :: PlayerGui
@@ -30,6 +31,9 @@ local roleScreen: ScreenGui? = nil
 local threatLabel: TextLabel? = nil
 local stormBannerLabel: TextLabel? = nil
 local tetherStatusLabel: TextLabel? = nil
+local activeRepairMinigame: Frame? = nil
+local repairRenderConnection: RBXScriptConnection? = nil
+local repairInputConnection: RBXScriptConnection? = nil
 
 local function animateScrapPop(label: TextLabel)
 	local grow = TweenService:Create(label, TweenInfo.new(0.08, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
@@ -526,6 +530,174 @@ local function updateTetherStatus(activePads: number, requiredPads: number)
 
 	tetherStatusLabel.Text = ("Tethers: %d/%d ACTIVE"):format(activePads, requiredPads)
 	TweenService:Create(tetherStatusLabel, TweenInfo.new(0.15, Enum.EasingStyle.Quad), { TextTransparency = 0 }):Play()
+end
+
+local function clearRepairMinigame()
+	if repairRenderConnection ~= nil then
+		repairRenderConnection:Disconnect()
+		repairRenderConnection = nil
+	end
+	if repairInputConnection ~= nil then
+		repairInputConnection:Disconnect()
+		repairInputConnection = nil
+	end
+	if activeRepairMinigame ~= nil then
+		activeRepairMinigame:Destroy()
+		activeRepairMinigame = nil
+	end
+end
+
+function MainHUD.ShowRepairMinigame(drillPart: BasePart)
+	if not isInitialized then
+		return
+	end
+
+	local rootGui = PlayerGui:FindFirstChild("MainHUDGui")
+	if rootGui == nil or not rootGui:IsA("ScreenGui") then
+		return
+	end
+
+	clearRepairMinigame()
+
+	local frame = Instance.new("Frame")
+	frame.Name = "RepairMinigame"
+	frame.AnchorPoint = Vector2.new(0.5, 1)
+	frame.Position = UDim2.new(0.5, 0, 0.86, 0)
+	frame.Size = UDim2.fromOffset(360, 92)
+	frame.BackgroundColor3 = Color3.fromRGB(24, 24, 28)
+	frame.BackgroundTransparency = 0.15
+	frame.Parent = rootGui
+	activeRepairMinigame = frame
+
+	local title = Instance.new("TextLabel")
+	title.Name = "Title"
+	title.Size = UDim2.new(1, -10, 0, 28)
+	title.Position = UDim2.fromOffset(5, 6)
+	title.BackgroundTransparency = 1
+	title.Font = Enum.Font.GothamBold
+	title.TextColor3 = Color3.fromRGB(220, 240, 255)
+	title.TextScaled = true
+	title.Text = "Pressure Hiss - Click / Press E"
+	title.Parent = frame
+
+	local barBg = Instance.new("Frame")
+	barBg.Name = "BarBackground"
+	barBg.AnchorPoint = Vector2.new(0.5, 0)
+	barBg.Position = UDim2.new(0.5, 0, 0, 42)
+	barBg.Size = UDim2.fromOffset(320, 28)
+	barBg.BackgroundColor3 = Color3.fromRGB(70, 70, 75)
+	barBg.BorderSizePixel = 0
+	barBg.Parent = frame
+
+	local successWidth = math.clamp(Constants.MAINTENANCE.MinigameSuccessZoneWidth, 0.08, 0.45)
+	local successStart = math.random() * (1 - successWidth)
+
+	local successZone = Instance.new("Frame")
+	successZone.Name = "SuccessZone"
+	successZone.Size = UDim2.new(successWidth, 0, 1, 0)
+	successZone.Position = UDim2.new(successStart, 0, 0, 0)
+	successZone.BackgroundColor3 = Color3.fromRGB(90, 205, 115)
+	successZone.BorderSizePixel = 0
+	successZone.Parent = barBg
+
+	local needleWidth = 0.02
+	local needle = Instance.new("Frame")
+	needle.Name = "Needle"
+	needle.AnchorPoint = Vector2.new(0.5, 0)
+	needle.Size = UDim2.new(needleWidth, 0, 1, 0)
+	needle.Position = UDim2.new(0, 0, 0, 0)
+	needle.BackgroundColor3 = Color3.fromRGB(255, 210, 70)
+	needle.BorderSizePixel = 0
+	needle.Parent = barBg
+
+	local feedback = Instance.new("TextLabel")
+	feedback.Name = "Feedback"
+	feedback.Size = UDim2.new(1, -10, 0, 22)
+	feedback.Position = UDim2.new(0, 5, 1, -25)
+	feedback.BackgroundTransparency = 1
+	feedback.Font = Enum.Font.GothamBold
+	feedback.TextScaled = true
+	feedback.Text = ""
+	feedback.Parent = frame
+
+	local progress = 0
+	local resolved = false
+	local minigameSpeed = math.max(0.5, Constants.MAINTENANCE.MinigameBarSpeed)
+	local successEnd = successStart + successWidth
+
+	local function finish(success: boolean)
+		if resolved then
+			return
+		end
+		resolved = true
+
+		if repairRenderConnection ~= nil then
+			repairRenderConnection:Disconnect()
+			repairRenderConnection = nil
+		end
+		if repairInputConnection ~= nil then
+			repairInputConnection:Disconnect()
+			repairInputConnection = nil
+		end
+
+		remotes.RepairMinigameResult:FireServer(drillPart, success)
+		if success then
+			feedback.Text = ("+%d Stability!"):format(Constants.MAINTENANCE.WrenchSuccessRestore)
+			feedback.TextColor3 = Color3.fromRGB(120, 245, 120)
+		else
+			feedback.Text = "CLOGGED!"
+			feedback.TextColor3 = Color3.fromRGB(255, 110, 110)
+		end
+
+		local fadeTween = TweenService:Create(frame, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			BackgroundTransparency = 1,
+		})
+		local titleTween = TweenService:Create(title, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			TextTransparency = 1,
+		})
+		local feedbackTween = TweenService:Create(feedback, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			TextTransparency = 1,
+		})
+		fadeTween:Play()
+		titleTween:Play()
+		feedbackTween:Play()
+		task.delay(0.5, function()
+			if activeRepairMinigame == frame then
+				clearRepairMinigame()
+			end
+		end)
+	end
+
+	local function submitAttempt()
+		local hitPoint = progress
+		if hitPoint >= successStart and hitPoint <= successEnd then
+			finish(true)
+		else
+			finish(false)
+		end
+	end
+
+	repairInputConnection = UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: boolean)
+		if gameProcessed or resolved then
+			return
+		end
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.KeyCode == Enum.KeyCode.E then
+			submitAttempt()
+		end
+	end)
+
+	repairRenderConnection = RunService.RenderStepped:Connect(function(dt: number)
+		if resolved then
+			return
+		end
+
+		progress += dt * minigameSpeed
+		needle.Position = UDim2.new(math.clamp(progress, 0, 1), 0, 0, 0)
+
+		if progress >= 1 then
+			finish(false)
+		end
+	end)
 end
 
 function MainHUD.Init()

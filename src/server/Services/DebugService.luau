@@ -8,6 +8,7 @@ local RemotesModule = require(Shared:WaitForChild("Remotes"))
 
 local EconomyService = require(script.Parent:WaitForChild("EconomyService"))
 local EnemyService = require(script.Parent:WaitForChild("EnemyService"))
+local ResourceService = require(script.Parent:WaitForChild("ResourceService"))
 local StormService = require(script.Parent:WaitForChild("StormService"))
 
 local DebugService = {}
@@ -28,6 +29,8 @@ function DebugService.Init(): ()
 		elseif command == "AddScrap" then
 			local amount = if typeof(payload) == "number" then payload :: number else 100
 			EconomyService.AddScrap(math.max(1, math.floor(amount)))
+		elseif command == "DrainStability" then
+			ResourceService.DrainAllDrillStability(15)
 		end
 	end)
 end

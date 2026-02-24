@@ -100,6 +100,9 @@ local function createFinalBuilding(buildingType: BuildingType, position: Vector3
 	part.CFrame = CFrame.new(position + Vector3.new(0, part.Size.Y * 0.5, 0))
 	part.Parent = Workspace
 	CollectionService:AddTag(part, DISMANTLABLE_TAG)
+	if buildingType == "Drill" then
+		CollectionService:AddTag(part, "Drill")
+	end
 	TheftComponent.Attach(part)
 	return part
 end
@@ -223,7 +226,6 @@ local function activateBuildingBehavior(part: BasePart, buildingType: BuildingTy
 				if emitter and emitter:IsA("ParticleEmitter") then
 					emitter:Emit(18)
 				end
-				EconomyService.AddScrap(Constants.BUILDING.DrillScrapPerTick)
 			end
 			activeBuildingTasks[part] = nil
 		end)

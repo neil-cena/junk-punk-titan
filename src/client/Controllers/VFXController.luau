@@ -28,6 +28,7 @@ type ActiveDismantleEffect = {
 
 local gearPool: { BasePart } = {}
 local activeEffects: { [BasePart]: ActiveDismantleEffect } = {}
+local drillSmokeEffects: { [BasePart]: ParticleEmitter } = {}
 local stormBlur: BlurEffect? = nil
 local stormColor: ColorCorrectionEffect? = nil
 local stormWindSound: Sound? = nil
@@ -189,6 +190,73 @@ local function bindDismantlable(part: BasePart)
 	refreshDismantleState(part)
 end
 
+local function ensureDrillSmoke(drill: BasePart): ParticleEmitter
+	local existing = drillSmokeEffects[drill]
+	if existing ~= nil and existing.Parent ~= nil then
+		return existing
+	end
+
+	local attachment = Instance.new("Attachment")
+	attachment.Name = "DrillSmokeAttachment"
+	attachment.Position = Vector3.new(0, drill.Size.Y * 0.4, 0)
+	attachment.Parent = drill
+
+	local emitter = Instance.new("ParticleEmitter")
+	emitter.Name = "DrillSmoke"
+	emitter.Texture = "rbxasset://textures/particles/smoke_main.dds"
+	emitter.Color = ColorSequence.new(Color3.fromRGB(70, 70, 70), Color3.fromRGB(30, 30, 30))
+	emitter.Lifetime = NumberRange.new(1.2, 1.8)
+	emitter.Speed = NumberRange.new(0.5, 1.3)
+	emitter.SpreadAngle = Vector2.new(20, 35)
+	emitter.Rate = 16
+	emitter.Size = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.8),
+		NumberSequenceKeypoint.new(1, 2.2),
+	})
+	emitter.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.2),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	emitter.Parent = attachment
+	drillSmokeEffects[drill] = emitter
+	return emitter
+end
+
+local function clearDrillSmoke(drill: BasePart)
+	local emitter = drillSmokeEffects[drill]
+	if emitter == nil then
+		return
+	end
+	local attachment = emitter.Parent
+	emitter:Destroy()
+	if attachment ~= nil and attachment:IsA("Attachment") then
+		attachment:Destroy()
+	end
+	drillSmokeEffects[drill] = nil
+end
+
+local function refreshDrillSmoke(drill: BasePart)
+	local stabilityAttr = drill:GetAttribute("Stability")
+	local stability = if typeof(stabilityAttr) == "number" then math.clamp(stabilityAttr :: number, 0, 100) else 100
+	if stability < 20 then
+		ensureDrillSmoke(drill)
+	else
+		clearDrillSmoke(drill)
+	end
+end
+
+local function bindDrillFx(drill: BasePart)
+	drill:GetAttributeChangedSignal("Stability"):Connect(function()
+		refreshDrillSmoke(drill)
+	end)
+	drill.AncestryChanged:Connect(function(_, parent)
+		if parent == nil then
+			clearDrillSmoke(drill)
+		end
+	end)
+	refreshDrillSmoke(drill)
+end
+
 local function playBuildFlash(position: Vector3)
 	local ring = Instance.new("Part")
 	ring.Name = "BuildFlashRing"
@@ -321,6 +389,56 @@ local function stopStormFx()
 	end
 end
 
+local function playRepairSuccessFx(position: Vector3)
+	local marker = Instance.new("Part")
+	marker.Name = "RepairBurstMarker"
+	marker.Anchored = true
+	marker.CanCollide = false
+	marker.Transparency = 1
+	marker.Size = Vector3.new(0.2, 0.2, 0.2)
+	marker.Position = position + Vector3.new(0, 2, 0)
+	marker.Parent = Workspace
+
+	local attachment = Instance.new("Attachment")
+	attachment.Parent = marker
+
+	local burst = Instance.new("ParticleEmitter")
+	burst.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+	burst.Color = ColorSequence.new(Color3.fromRGB(255, 255, 255), Color3.fromRGB(255, 215, 130))
+	burst.Lifetime = NumberRange.new(0.2, 0.35)
+	burst.Speed = NumberRange.new(4, 8)
+	burst.SpreadAngle = Vector2.new(60, 60)
+	burst.Rate = 0
+	burst.Parent = attachment
+	burst:Emit(24)
+
+	local hiss = Instance.new("Sound")
+	hiss.Name = "RepairSteamHiss"
+	hiss.SoundId = "rbxassetid://9118823107"
+	hiss.Volume = 0.25
+	hiss.Parent = SoundService
+	hiss:Play()
+
+	local clank = Instance.new("Sound")
+	clank.Name = "RepairClank"
+	clank.SoundId = "rbxassetid://12222253"
+	clank.Volume = 0.3
+	clank.Parent = SoundService
+	clank:Play()
+
+	task.delay(1.2, function()
+		if hiss.Parent ~= nil then
+			hiss:Destroy()
+		end
+		if clank.Parent ~= nil then
+			clank:Destroy()
+		end
+		if marker.Parent ~= nil then
+			marker:Destroy()
+		end
+	end)
+end
+
 function VFXController.Init()
 	if isInitialized then
 		return
@@ -343,6 +461,18 @@ function VFXController.Init()
 		end
 	end)
 
+	for _, instance in CollectionService:GetTagged("Drill") do
+		if instance:IsA("BasePart") then
+			bindDrillFx(instance)
+		end
+	end
+
+	CollectionService:GetInstanceAddedSignal("Drill"):Connect(function(instance)
+		if instance:IsA("BasePart") then
+			bindDrillFx(instance)
+		end
+	end)
+
 	remotes.ScrapUpdated.OnClientEvent:Connect(function(newValue: number)
 		local delta = newValue - lastScrap
 		if delta > 0 then
@@ -362,6 +492,9 @@ function VFXController.Init()
 	end)
 	remotes.StormEnded.OnClientEvent:Connect(function()
 		stopStormFx()
+	end)
+	remotes.DrillRepaired.OnClientEvent:Connect(function(position: Vector3)
+		playRepairSuccessFx(position)
 	end)
 end
 

@@ -17,6 +17,7 @@ local remotes = RemotesModule.Get()
 local playerRoles: { [number]: RoleName } = {}
 local peakPlayerCount = 0
 local SHOTGUN_TOOL_NAME = "RustyShotgun"
+local WRENCH_TOOL_NAME = "RustyWrench"
 local legacyBuff = {
 	scrapGatherMult = 1,
 	reloadSpeedMult = 1,
@@ -71,6 +72,38 @@ local function createRustyShotgunTool(): Tool
 	return tool
 end
 
+local function createWrenchTool(): Tool
+	local tool = Instance.new("Tool")
+	tool.Name = WRENCH_TOOL_NAME
+	tool.RequiresHandle = true
+	tool.CanBeDropped = false
+
+	local handle = Instance.new("Part")
+	handle.Name = "Handle"
+	handle.Size = Vector3.new(1.2, 0.25, 0.25)
+	handle.Color = Color3.fromRGB(87, 65, 47)
+	handle.Material = Enum.Material.Metal
+	handle.CanCollide = false
+	handle.Parent = tool
+
+	local head = Instance.new("Part")
+	head.Name = "WrenchHead"
+	head.Size = Vector3.new(0.4, 0.7, 0.2)
+	head.Color = Color3.fromRGB(140, 140, 140)
+	head.Material = Enum.Material.Metal
+	head.CanCollide = false
+	head.Massless = true
+	head.Parent = tool
+
+	local weld = Instance.new("WeldConstraint")
+	weld.Part0 = handle
+	weld.Part1 = head
+	weld.Parent = handle
+
+	head.CFrame = handle.CFrame * CFrame.new(0.45, 0.22, 0)
+	return tool
+end
+
 local function removeShotgun(player: Player)
 	local backpack = player:FindFirstChild("Backpack")
 	if backpack ~= nil then
@@ -91,6 +124,32 @@ local function removeShotgun(player: Player)
 	local character = player.Character
 	if character ~= nil then
 		local equipped = character:FindFirstChild(SHOTGUN_TOOL_NAME)
+		if equipped ~= nil then
+			equipped:Destroy()
+		end
+	end
+end
+
+local function removeWrench(player: Player)
+	local backpack = player:FindFirstChild("Backpack")
+	if backpack ~= nil then
+		local existing = backpack:FindFirstChild(WRENCH_TOOL_NAME)
+		if existing ~= nil then
+			existing:Destroy()
+		end
+	end
+
+	local starterGear = player:FindFirstChild("StarterGear")
+	if starterGear ~= nil then
+		local existing = starterGear:FindFirstChild(WRENCH_TOOL_NAME)
+		if existing ~= nil then
+			existing:Destroy()
+		end
+	end
+
+	local character = player.Character
+	if character ~= nil then
+		local equipped = character:FindFirstChild(WRENCH_TOOL_NAME)
 		if equipped ~= nil then
 			equipped:Destroy()
 		end
@@ -118,6 +177,27 @@ local function ensureShotgunForRole(player: Player, roleName: RoleName)
 	end
 end
 
+local function ensureWrenchForRole(player: Player, roleName: RoleName)
+	if roleName ~= "Fixer" then
+		removeWrench(player)
+		return
+	end
+
+	local backpack = player:FindFirstChild("Backpack") or player:WaitForChild("Backpack")
+	local starterGear = player:FindFirstChild("StarterGear") or player:WaitForChild("StarterGear")
+
+	local character = player.Character
+	local hasEquipped = character ~= nil and character:FindFirstChild(WRENCH_TOOL_NAME) ~= nil
+
+	if backpack:FindFirstChild(WRENCH_TOOL_NAME) == nil and not hasEquipped then
+		createWrenchTool().Parent = backpack
+	end
+
+	if starterGear:FindFirstChild(WRENCH_TOOL_NAME) == nil then
+		createWrenchTool().Parent = starterGear
+	end
+end
+
 local function applyRoleAttributes(player: Player, roleName: RoleName)
 	local roleDefinition = Constants.ROLE_DEFINITIONS[roleName]
 	if roleDefinition == nil then
@@ -142,6 +222,7 @@ local function applyRoleAttributes(player: Player, roleName: RoleName)
 	end
 
 	ensureShotgunForRole(player, roleName)
+	ensureWrenchForRole(player, roleName)
 end
 
 function RoleService.AssignRole(player: Player, roleName: string): boolean

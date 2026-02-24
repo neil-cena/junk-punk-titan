@@ -61,6 +61,19 @@ local Constants = {
 		LegacyReloadSpeedBuff = 0.15,
 	},
 
+	MAINTENANCE = {
+		ResourceTickSeconds = 10,
+		DrillBaseOutput = 10,
+		StabilityDegradationPercent = 1,
+		StabilityDegradationInterval = 2,
+		WrenchSuccessRestore = 40,
+		OverclockDurationSeconds = 30,
+		OverclockMultiplier = 1.2,
+		ClogDurationSeconds = 5,
+		MinigameBarSpeed = 1.4,
+		MinigameSuccessZoneWidth = 0.18,
+	},
+
 	WAVES = {
 		IntervalSeconds = 120,
 		BaseEnemyCount = 5,
