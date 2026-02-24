@@ -63,10 +63,6 @@ local function playLootFountain(increaseAmount: number)
 	end
 
 	task.spawn(function()
-		pcall(function()
-			task.desynchronize()
-		end)
-
 		local count = math.clamp(math.floor(increaseAmount / 5), 5, 8)
 		for _ = 1, count do
 			local gear = acquireGear()

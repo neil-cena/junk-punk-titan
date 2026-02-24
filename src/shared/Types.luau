@@ -34,3 +34,5 @@ export type BlueprintData = {
 	ownerUserId: number,
 	isFinished: boolean,
 }
+
+return {}
