@@ -29,6 +29,7 @@ BuildingService.__index = BuildingService
 
 local remotes = RemotesModule.Get()
 local blueprints: { [string]: InternalBlueprintData } = {}
+local blockedSlots: { [string]: number } = {}
 local builtCounts: { [BuildingType]: number } = {
 	Turret = 0,
 	Drill = 0,
@@ -102,6 +103,27 @@ local function createFinalBuilding(buildingType: BuildingType, position: Vector3
 	return part
 end
 
+local function positionSlotKey(position: Vector3): string
+	local snapped = snapToGrid(position)
+	return ("%d:%d:%d"):format(math.round(snapped.X), math.round(snapped.Y), math.round(snapped.Z))
+end
+
+local function getRemainingSlotCooldown(position: Vector3): number
+	local key = positionSlotKey(position)
+	local blockedUntil = blockedSlots[key]
+	if blockedUntil == nil then
+		return 0
+	end
+
+	local remaining = blockedUntil - os.clock()
+	if remaining <= 0 then
+		blockedSlots[key] = nil
+		return 0
+	end
+
+	return remaining
+end
+
 local function placeBlueprint(player: Player, buildingType: BuildingType, requestedPosition: Vector3): ()
 	if Constants.BUILDING.Sizes[buildingType] == nil then
 		return
@@ -109,6 +131,10 @@ local function placeBlueprint(player: Player, buildingType: BuildingType, reques
 
 	local ok, snappedPos = isPositionValid(player, requestedPosition)
 	if not ok or snappedPos == nil then
+		return
+	end
+
+	if getRemainingSlotCooldown(snappedPos) > 0 then
 		return
 	end
 
@@ -166,6 +192,11 @@ local function finishBlueprint(_player: Player, blueprintId: string): PurchaseRe
 	remotes.BlueprintFinished:FireAllClients(blueprintId, blueprint.position)
 
 	return response
+end
+
+function BuildingService.RegisterDestroyedSlot(position: Vector3)
+	local key = positionSlotKey(position)
+	blockedSlots[key] = os.clock() + Constants.BUILDING.RebuildCooldownSeconds
 end
 
 function BuildingService.Init(): ()

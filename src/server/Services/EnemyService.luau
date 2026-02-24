@@ -4,12 +4,14 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local PathfindingService = game:GetService("PathfindingService")
 local CollectionService = game:GetService("CollectionService")
+local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Constants = require(Shared:WaitForChild("Constants"))
 local RemotesModule = require(Shared:WaitForChild("Remotes"))
 local TheftComponent = require(Shared:WaitForChild("TheftComponent"))
 local EconomyService = require(script.Parent:WaitForChild("EconomyService"))
+local BuildingService = require(script.Parent:WaitForChild("BuildingService"))
 
 local EnemyService = {}
 EnemyService.__index = EnemyService
@@ -17,7 +19,13 @@ EnemyService.__index = EnemyService
 local remotes = RemotesModule.Get()
 local peakPlayerCount = 0
 local currentWave = 0
-local activeRats: { Model } = {}
+local activeRats: { [Model]: true } = {}
+local burrowPositions = {
+	Vector3.new(-220, 0.2, -220),
+	Vector3.new(220, 0.2, -220),
+	Vector3.new(-220, 0.2, 220),
+	Vector3.new(220, 0.2, 220),
+}
 
 local function updatePeakPlayerCount()
 	peakPlayerCount = math.max(peakPlayerCount, #Players:GetPlayers())
@@ -57,14 +65,39 @@ local function spawnScrapBundle(atPosition: Vector3)
 	bundle.Parent = workspace
 end
 
-local function getTargetBuilding(): BasePart?
+local function getBuildingTypeAndBaseCost(buildingPart: BasePart): (string?, number)
+	for buildingType, baseCost in Constants.BASE_COSTS do
+		if string.find(buildingPart.Name, buildingType) ~= nil then
+			return buildingType, baseCost
+		end
+	end
+
+	return nil, 0
+end
+
+local function getMostExpensiveBuilding(): BasePart?
+	local best: BasePart? = nil
+	local bestCost = -1
+	local bestProgress = math.huge
 	local tagged = CollectionService:GetTagged("DismantlableBuilding")
 	for _, instance in tagged do
 		if instance:IsA("BasePart") and instance.Parent ~= nil then
-			return instance
+			local _, baseCost = getBuildingTypeAndBaseCost(instance)
+			local progressAttr = instance:GetAttribute("DismantleProgress")
+			local progress = if typeof(progressAttr) == "number" then progressAttr :: number else 0
+
+			if baseCost > bestCost then
+				best = instance
+				bestCost = baseCost
+				bestProgress = progress
+			elseif baseCost == bestCost and progress < bestProgress then
+				best = instance
+				bestProgress = progress
+			end
 		end
 	end
-	return nil
+
+	return best
 end
 
 function EnemyService.GetDifficultyMultiplier(): number
@@ -92,6 +125,152 @@ end
 function EnemyService.StartDismantle(targetBuilding: BasePart, ratModel: Model): ()
 	TheftComponent.Attach(targetBuilding)
 	TheftComponent.StartDismantle(targetBuilding, ratModel)
+	remotes.ThreatDetected:FireAllClients(targetBuilding.Name, targetBuilding.Position)
+end
+
+local function removeRatFromActive(ratModel: Model)
+	activeRats[ratModel] = nil
+end
+
+local function despawnRat(ratModel: Model)
+	removeRatFromActive(ratModel)
+	if ratModel.Parent ~= nil then
+		ratModel:Destroy()
+	end
+end
+
+local moveToWithShortTimeout: (Humanoid, Vector3, number) -> boolean
+
+local function pickNearestBurrow(position: Vector3): Vector3
+	local nearest = burrowPositions[1]
+	local nearestDistance = (nearest - position).Magnitude
+	for index = 2, #burrowPositions do
+		local candidate = burrowPositions[index]
+		local candidateDistance = (candidate - position).Magnitude
+		if candidateDistance < nearestDistance then
+			nearest = candidate
+			nearestDistance = candidateDistance
+		end
+	end
+	return nearest
+end
+
+local function attachStolenScrapVisual(ratModel: Model): BasePart?
+	local root = ratModel.PrimaryPart
+	if root == nil then
+		return nil
+	end
+
+	local visual = Instance.new("Part")
+	visual.Name = "StolenScrapVisual"
+	visual.Size = Vector3.new(0.7, 0.7, 0.7)
+	visual.Shape = Enum.PartType.Ball
+	visual.Material = Enum.Material.Metal
+	visual.Color = Color3.fromRGB(170, 170, 170)
+	visual.CanCollide = false
+	visual.Massless = true
+	visual.CFrame = root.CFrame * CFrame.new(0, 0.8, -0.7)
+	visual.Parent = ratModel
+
+	local weld = Instance.new("WeldConstraint")
+	weld.Part0 = root
+	weld.Part1 = visual
+	weld.Parent = root
+
+	return visual
+end
+
+local function ensureBurrowHole(position: Vector3): BasePart
+	local hole = Instance.new("Part")
+	hole.Name = "ScrapRatHole"
+	hole.Anchored = true
+	hole.CanCollide = false
+	hole.Material = Enum.Material.Slate
+	hole.Color = Color3.fromRGB(25, 25, 25)
+	hole.Transparency = 0.15
+	hole.Size = Vector3.new(5, 0.2, 5)
+	hole.Position = position
+	hole.Parent = Workspace
+	return hole
+end
+
+local function fleeAndDespawnRat(ratModel: Model)
+	if ratModel.Parent == nil then
+		despawnRat(ratModel)
+		return
+	end
+
+	local root = ratModel.PrimaryPart
+	local humanoid = ratModel:FindFirstChildOfClass("Humanoid")
+	if root == nil or humanoid == nil then
+		despawnRat(ratModel)
+		return
+	end
+
+	local visual = attachStolenScrapVisual(ratModel)
+	local holePosition = pickNearestBurrow(root.Position)
+	local hole = ensureBurrowHole(holePosition)
+
+	moveToWithShortTimeout(humanoid, holePosition, 2.5)
+	if visual ~= nil and visual.Parent ~= nil then
+		visual:Destroy()
+	end
+
+	despawnRat(ratModel)
+	task.delay(1.2, function()
+		if hole.Parent ~= nil then
+			hole:Destroy()
+		end
+	end)
+end
+
+moveToWithShortTimeout = function(humanoid: Humanoid, targetPosition: Vector3, timeoutSeconds: number): boolean
+	local completed = false
+	local reached = false
+	local connection = humanoid.MoveToFinished:Connect(function(success: boolean)
+		completed = true
+		reached = success
+	end)
+
+	humanoid:MoveTo(targetPosition)
+	local deadline = os.clock() + timeoutSeconds
+	while not completed and os.clock() < deadline do
+		task.wait(0.05)
+	end
+
+	connection:Disconnect()
+	return reached
+end
+
+local function dismantleAndDestroyBuilding(dismantledPart: BasePart, ratModel: Model?)
+	local finalPosition = dismantledPart.Position
+
+	if dismantledPart.Parent ~= nil then
+		dismantledPart.Parent = nil
+	end
+
+	BuildingService.RegisterDestroyedSlot(finalPosition)
+	remotes.BuildingDismantled:FireAllClients(dismantledPart.Name, finalPosition)
+
+	if ratModel ~= nil then
+		fleeAndDespawnRat(ratModel)
+	end
+end
+
+function EnemyService.KillRat(ratModel: Model): boolean
+	if ratModel.Parent == nil or ratModel.Name ~= "ScrapRat" then
+		return false
+	end
+
+	local root = ratModel.PrimaryPart
+	local atPosition = if root ~= nil then root.Position else ratModel:GetPivot().Position
+
+	despawnRat(ratModel)
+
+	spawnScrapBundle(atPosition)
+	EconomyService.AddScrap(Constants.COMBAT.RatKillScrapReward)
+	remotes.EnemyKilled:FireAllClients(atPosition)
+	return true
 end
 
 function EnemyService.SpawnScrapRat(targetBuilding: BasePart?): Model?
@@ -99,9 +278,10 @@ function EnemyService.SpawnScrapRat(targetBuilding: BasePart?): Model?
 		return nil
 	end
 
-	local spawnPosition = targetBuilding.Position + Vector3.new(math.random(-15, 15), 3, math.random(-15, 15))
+	local radius = Constants.WAVES.SpawnRadius
+	local spawnPosition = targetBuilding.Position + Vector3.new(math.random(-radius, radius), 3, math.random(-radius, radius))
 	local ratModel = createScrapRatModel(spawnPosition)
-	table.insert(activeRats, ratModel)
+	activeRats[ratModel] = true
 
 	local humanoid = ratModel:FindFirstChildOfClass("Humanoid")
 	local root = ratModel.PrimaryPart
@@ -118,19 +298,34 @@ function EnemyService.SpawnScrapRat(targetBuilding: BasePart?): Model?
 
 	if ok and path.Status == Enum.PathStatus.Success then
 		for _, waypoint in path:GetWaypoints() do
-			if humanoid.Health <= 0 or targetBuilding.Parent == nil then
+			if humanoid.Health <= 0 or targetBuilding.Parent == nil or activeRats[ratModel] == nil then
+				if targetBuilding.Parent == nil then
+					despawnRat(ratModel)
+				end
 				return ratModel
 			end
-			humanoid:MoveTo(waypoint.Position)
-			humanoid.MoveToFinished:Wait()
+			moveToWithShortTimeout(humanoid, waypoint.Position, 0.9)
 		end
 	else
-		humanoid:MoveTo(targetBuilding.Position)
-		humanoid.MoveToFinished:Wait()
+		moveToWithShortTimeout(humanoid, targetBuilding.Position, 1.2)
 	end
 
-	if ratModel.Parent ~= nil and targetBuilding.Parent ~= nil then
+	if activeRats[ratModel] ~= nil and ratModel.Parent ~= nil and targetBuilding.Parent ~= nil then
 		EnemyService.StartDismantle(targetBuilding, ratModel)
+		task.spawn(function()
+			while activeRats[ratModel] ~= nil and targetBuilding.Parent ~= nil do
+				task.wait(0.2)
+				local progressAttr = targetBuilding:GetAttribute("DismantleProgress")
+				if typeof(progressAttr) == "number" and (progressAttr :: number) >= 100 then
+					dismantleAndDestroyBuilding(targetBuilding, ratModel)
+					return
+				end
+			end
+
+			if activeRats[ratModel] ~= nil and targetBuilding.Parent == nil then
+				despawnRat(ratModel)
+			end
+		end)
 	end
 
 	return ratModel
@@ -140,17 +335,20 @@ function EnemyService.SpawnWave(waveNumber: number): ()
 	currentWave = waveNumber
 	remotes.WaveStarted:FireAllClients(currentWave)
 
-	local baseCount = Constants.SCALING.OptimalPlayers
-	local enemyCount = math.max(1, math.floor(baseCount * EnemyService.GetDifficultyMultiplier()))
+	local enemyCount = Constants.WAVES.BaseEnemyCount + (currentWave * Constants.WAVES.EnemiesPerWave)
 
 	for _ = 1, enemyCount do
-		local targetBuilding = getTargetBuilding()
+		local targetBuilding = getMostExpensiveBuilding()
 		if targetBuilding ~= nil then
 			task.spawn(function()
 				EnemyService.SpawnScrapRat(targetBuilding)
 			end)
 		end
 	end
+end
+
+function EnemyService.GetCurrentWave(): number
+	return currentWave
 end
 
 function EnemyService.Init(): ()
@@ -160,19 +358,44 @@ function EnemyService.Init(): ()
 		task.defer(updatePeakPlayerCount)
 	end)
 
-	TheftComponent.ConnectCompleted(function(dismantledPart: BasePart, ratModel: Model?)
-		local finalPosition = dismantledPart.Position
-
-		if dismantledPart.Parent ~= nil then
-			dismantledPart.Parent = nil
+	remotes.HitEnemy.OnServerEvent:Connect(function(player: Player, ratModelOrPart: Instance)
+		local ratModel: Model? = nil
+		if ratModelOrPart:IsA("Model") then
+			ratModel = ratModelOrPart
+		elseif ratModelOrPart:IsA("BasePart") then
+			local ancestor = ratModelOrPart:FindFirstAncestorOfClass("Model")
+			if ancestor ~= nil then
+				ratModel = ancestor
+			end
 		end
 
-		spawnScrapBundle(finalPosition)
-		EconomyService.AddScrap(Constants.SCRAP_BUNDLE_VALUE)
-		remotes.BuildingDismantled:FireAllClients(dismantledPart.Name, finalPosition)
+		if ratModel == nil or ratModel.Name ~= "ScrapRat" then
+			return
+		end
 
-		if ratModel ~= nil and ratModel.Parent ~= nil then
-			ratModel:Destroy()
+		local root = ratModel.PrimaryPart
+		local char = player.Character
+		local playerRoot = if char then char:FindFirstChild("HumanoidRootPart") else nil
+		if root == nil or playerRoot == nil or not playerRoot:IsA("BasePart") then
+			return
+		end
+
+		if (playerRoot.Position - root.Position).Magnitude > Constants.COMBAT.ShotgunRange then
+			return
+		end
+
+		EnemyService.KillRat(ratModel)
+	end)
+
+	TheftComponent.ConnectCompleted(function(dismantledPart: BasePart, ratModel: Model?)
+		dismantleAndDestroyBuilding(dismantledPart, ratModel)
+	end)
+
+	task.spawn(function()
+		while true do
+			task.wait(Constants.WAVES.IntervalSeconds)
+			local nextWave = currentWave + 1
+			EnemyService.SpawnWave(nextWave)
 		end
 	end)
 end

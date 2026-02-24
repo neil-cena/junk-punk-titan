@@ -1,5 +1,6 @@
 --!strict
 
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
@@ -14,6 +15,7 @@ local EconomyService = {}
 EconomyService.__index = EconomyService
 
 local teamScrap = 0
+local stormSteel = 0
 local remotes = RemotesModule.Get()
 
 function EconomyService.GetCost(baseCost: number, count: number): number
@@ -30,6 +32,16 @@ end
 
 function EconomyService.GetScrap(): number
 	return teamScrap
+end
+
+function EconomyService.AddStormSteel(amount: number): number
+	stormSteel += amount
+	remotes.StormSteelUpdated:FireAllClients(stormSteel)
+	return stormSteel
+end
+
+function EconomyService.GetStormSteel(): number
+	return stormSteel
 end
 
 local function getBaseCost(buildingType: BuildingType): number?
@@ -83,8 +95,27 @@ function EconomyService.Init(initialScrap: number?): ()
 	remotes.RequestPurchase.OnServerInvoke = function(_player: Player, buildingType: BuildingType, currentCount: number)
 		return EconomyService.TryPurchase(buildingType, currentCount)
 	end
+	remotes.RequestEconomyState.OnServerInvoke = function(_player: Player)
+		return {
+			scrap = teamScrap,
+			stormSteel = stormSteel,
+		}
+	end
 
 	remotes.ScrapUpdated:FireAllClients(teamScrap)
+	remotes.StormSteelUpdated:FireAllClients(stormSteel)
+
+	for _, player in Players:GetPlayers() do
+		remotes.ScrapUpdated:FireClient(player, teamScrap)
+		remotes.StormSteelUpdated:FireClient(player, stormSteel)
+	end
+
+	Players.PlayerAdded:Connect(function(player)
+		task.defer(function()
+			remotes.ScrapUpdated:FireClient(player, teamScrap)
+			remotes.StormSteelUpdated:FireClient(player, stormSteel)
+		end)
+	end)
 end
 
 return EconomyService

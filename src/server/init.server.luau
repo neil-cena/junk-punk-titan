@@ -8,9 +8,13 @@ local EconomyService = require(script:WaitForChild("Services"):WaitForChild("Eco
 local BuildingService = require(script:WaitForChild("Services"):WaitForChild("BuildingService"))
 local EnemyService = require(script:WaitForChild("Services"):WaitForChild("EnemyService"))
 local RoleService = require(script:WaitForChild("Services"):WaitForChild("RoleService"))
+local StormService = require(script:WaitForChild("Services"):WaitForChild("StormService"))
+local DebugService = require(script:WaitForChild("Services"):WaitForChild("DebugService"))
 
 Remotes.Get()
 EconomyService.Init(100)
 BuildingService.Init()
 RoleService.Init()
 EnemyService.Init()
+StormService.Init()
+DebugService.Init()

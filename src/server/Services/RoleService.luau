@@ -16,6 +16,7 @@ RoleService.__index = RoleService
 local remotes = RemotesModule.Get()
 local playerRoles: { [number]: RoleName } = {}
 local peakPlayerCount = 0
+local SHOTGUN_TOOL_NAME = "RustyShotgun"
 local legacyBuff = {
 	scrapGatherMult = 1,
 	reloadSpeedMult = 1,
@@ -35,6 +36,85 @@ local function updateLegacyBuff()
 			scrapGatherMult = 1,
 			reloadSpeedMult = 1,
 		}
+	end
+end
+
+local function createRustyShotgunTool(): Tool
+	local tool = Instance.new("Tool")
+	tool.Name = SHOTGUN_TOOL_NAME
+	tool.RequiresHandle = true
+	tool.CanBeDropped = false
+
+	local handle = Instance.new("Part")
+	handle.Name = "Handle"
+	handle.Size = Vector3.new(1.6, 0.35, 0.35)
+	handle.Color = Color3.fromRGB(87, 65, 47)
+	handle.Material = Enum.Material.Wood
+	handle.CanCollide = false
+	handle.Parent = tool
+
+	local barrel = Instance.new("Part")
+	barrel.Name = "Barrel"
+	barrel.Size = Vector3.new(1.2, 0.2, 0.2)
+	barrel.Color = Color3.fromRGB(120, 120, 120)
+	barrel.Material = Enum.Material.Metal
+	barrel.CanCollide = false
+	barrel.Massless = true
+	barrel.Parent = tool
+
+	local weld = Instance.new("WeldConstraint")
+	weld.Part0 = handle
+	weld.Part1 = barrel
+	weld.Parent = handle
+
+	barrel.CFrame = handle.CFrame * CFrame.new(1, 0, 0)
+	return tool
+end
+
+local function removeShotgun(player: Player)
+	local backpack = player:FindFirstChild("Backpack")
+	if backpack ~= nil then
+		local existing = backpack:FindFirstChild(SHOTGUN_TOOL_NAME)
+		if existing ~= nil then
+			existing:Destroy()
+		end
+	end
+
+	local starterGear = player:FindFirstChild("StarterGear")
+	if starterGear ~= nil then
+		local existing = starterGear:FindFirstChild(SHOTGUN_TOOL_NAME)
+		if existing ~= nil then
+			existing:Destroy()
+		end
+	end
+
+	local character = player.Character
+	if character ~= nil then
+		local equipped = character:FindFirstChild(SHOTGUN_TOOL_NAME)
+		if equipped ~= nil then
+			equipped:Destroy()
+		end
+	end
+end
+
+local function ensureShotgunForRole(player: Player, roleName: RoleName)
+	if roleName ~= "Enforcer" then
+		removeShotgun(player)
+		return
+	end
+
+	local backpack = player:FindFirstChild("Backpack") or player:WaitForChild("Backpack")
+	local starterGear = player:FindFirstChild("StarterGear") or player:WaitForChild("StarterGear")
+
+	local character = player.Character
+	local hasEquipped = character ~= nil and character:FindFirstChild(SHOTGUN_TOOL_NAME) ~= nil
+
+	if backpack:FindFirstChild(SHOTGUN_TOOL_NAME) == nil and not hasEquipped then
+		createRustyShotgunTool().Parent = backpack
+	end
+
+	if starterGear:FindFirstChild(SHOTGUN_TOOL_NAME) == nil then
+		createRustyShotgunTool().Parent = starterGear
 	end
 end
 
@@ -60,6 +140,8 @@ local function applyRoleAttributes(player: Player, roleName: RoleName)
 		character:SetAttribute("LegacyScrapGatherMult", legacyBuff.scrapGatherMult)
 		character:SetAttribute("LegacyReloadSpeedMult", legacyBuff.reloadSpeedMult)
 	end
+
+	ensureShotgunForRole(player, roleName)
 end
 
 function RoleService.AssignRole(player: Player, roleName: string): boolean

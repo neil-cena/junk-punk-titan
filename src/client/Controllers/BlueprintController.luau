@@ -161,6 +161,10 @@ function BlueprintController.FinishBlueprint(blueprintId: string)
 	return response
 end
 
+function BlueprintController.IsPlacing(): boolean
+	return mode == "Placing"
+end
+
 local function getNearestBlueprint(range: number): BasePart?
 	local character = LocalPlayer.Character
 	local root = if character then character:FindFirstChild("HumanoidRootPart") else nil

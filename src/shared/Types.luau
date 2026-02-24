@@ -35,4 +35,6 @@ export type BlueprintData = {
 	isFinished: boolean,
 }
 
+export type ResourceType = "Scrap" | "StormHardenedSteel"
+
 return {}

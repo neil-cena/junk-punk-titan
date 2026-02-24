@@ -36,6 +36,7 @@ local Constants = {
 		GridSize = 4,
 		GhostTransparency = 0.6,
 		PlacementMaxDistance = 50,
+		RebuildCooldownSeconds = 15,
 		Sizes = {
 			Turret = Vector3.new(4, 4, 4),
 			Drill = Vector3.new(4, 6, 4),
@@ -54,6 +55,30 @@ local Constants = {
 		SwarmMultiplierPerPlayer = 1.5,
 		LegacyScrapGatherBuff = 0.25,
 		LegacyReloadSpeedBuff = 0.15,
+	},
+
+	WAVES = {
+		IntervalSeconds = 120,
+		BaseEnemyCount = 5,
+		EnemiesPerWave = 2,
+		SpawnRadius = 60,
+	},
+
+	COMBAT = {
+		ShotgunDamage = 100,
+		ShotgunRange = 80,
+		ShotgunCooldown = 0.8,
+		RatKillScrapReward = 15,
+	},
+
+	STORM = {
+		IntervalSeconds = 600,
+		DurationSeconds = 60,
+		WindDamagePerSecond = 2,
+		TetherPadRadius = 6,
+		TetherPadsRequired = 3,
+		TetherPadsReducedOnLeave = 2,
+		StormSteelDropCount = 3,
 	},
 
 	SCRAP_BUNDLE_VALUE = 20,

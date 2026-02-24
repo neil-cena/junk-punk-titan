@@ -21,9 +21,14 @@ local MainHUD = {}
 local remotes = Remotes.Get()
 local isInitialized = false
 local currentScrap = 0
+local currentStormSteel = 0
 local scrapLabel: TextLabel? = nil
+local stormSteelLabel: TextLabel? = nil
 local dismantleBars: { [BasePart]: BillboardGui } = {}
 local roleScreen: ScreenGui? = nil
+local threatLabel: TextLabel? = nil
+local stormBannerLabel: TextLabel? = nil
+local tetherStatusLabel: TextLabel? = nil
 
 local function getCostPreview(buildingType: BuildingType): number
 	local base = Constants.BASE_COSTS[buildingType]
@@ -87,6 +92,16 @@ local function updateScrap(newScrap: number)
 	end
 end
 
+local function updateStormSteel(newStormSteel: number)
+	currentStormSteel = newStormSteel
+	if stormSteelLabel == nil then
+		return
+	end
+
+	stormSteelLabel.Text = ("Storm Steel: %d"):format(currentStormSteel)
+	stormSteelLabel.Visible = currentStormSteel > 0
+end
+
 local function ensureBar(part: BasePart): BillboardGui
 	local existing = dismantleBars[part]
 	if existing ~= nil then
@@ -148,7 +163,8 @@ local function updateDismantleBars()
 					fill.Size = UDim2.fromScale(progress / 100, 1)
 				end
 				if text and text:IsA("TextLabel") then
-					text.Text = ("%d%%"):format(math.floor(progress + 0.5))
+					local displayProgress = if progress >= 100 then 100 else math.floor(progress)
+					text.Text = ("%d%%"):format(displayProgress)
 				end
 
 				if isFixer then
@@ -276,6 +292,55 @@ local function createToolbar(parent: Instance)
 	end
 end
 
+local function createDebugPanel(parent: Instance)
+	if not RunService:IsStudio() then
+		return
+	end
+
+	local panel = Instance.new("Frame")
+	panel.Name = "DebugPanel"
+	panel.AnchorPoint = Vector2.new(0, 1)
+	panel.Position = UDim2.new(0, 10, 1, -10)
+	panel.Size = UDim2.fromOffset(230, 140)
+	panel.BackgroundColor3 = Color3.fromRGB(25, 25, 32)
+	panel.BackgroundTransparency = 0.15
+	panel.Parent = parent
+
+	local title = Instance.new("TextLabel")
+	title.Name = "Title"
+	title.BackgroundTransparency = 1
+	title.Size = UDim2.fromOffset(220, 26)
+	title.Position = UDim2.fromOffset(6, 4)
+	title.Font = Enum.Font.GothamBold
+	title.TextColor3 = Color3.fromRGB(255, 255, 255)
+	title.TextScaled = true
+	title.Text = "Debug Controls"
+	title.Parent = panel
+
+	local function addButton(label: string, y: number, callback: () -> ())
+		local button = Instance.new("TextButton")
+		button.Size = UDim2.fromOffset(210, 30)
+		button.Position = UDim2.fromOffset(10, y)
+		button.BackgroundColor3 = Color3.fromRGB(48, 48, 60)
+		button.TextColor3 = Color3.fromRGB(255, 255, 255)
+		button.Font = Enum.Font.GothamSemibold
+		button.TextScaled = true
+		button.Text = label
+		button.Parent = panel
+		button.MouseButton1Click:Connect(callback)
+	end
+
+	addButton("Spawn Next Wave", 34, function()
+		remotes.DebugCommand:FireServer("SpawnWave")
+	end)
+	addButton("Start Storm Now", 70, function()
+		remotes.DebugCommand:FireServer("StartStorm")
+	end)
+	addButton("Add +100 Scrap", 106, function()
+		remotes.DebugCommand:FireServer("AddScrap", 100)
+	end)
+end
+
 local function createMainHUD()
 	local gui = Instance.new("ScreenGui")
 	gui.Name = "MainHUDGui"
@@ -304,7 +369,127 @@ local function createMainHUD()
 	label.Parent = scrapFrame
 	scrapLabel = label
 
+	local steelLabel = Instance.new("TextLabel")
+	steelLabel.Name = "StormSteelLabel"
+	steelLabel.AnchorPoint = Vector2.new(1, 0)
+	steelLabel.Position = UDim2.new(1, -8, 0, 56)
+	steelLabel.Size = UDim2.fromOffset(200, 34)
+	steelLabel.BackgroundTransparency = 1
+	steelLabel.TextColor3 = Color3.fromRGB(110, 190, 255)
+	steelLabel.Font = Enum.Font.GothamBold
+	steelLabel.TextScaled = true
+	steelLabel.Text = "Storm Steel: 0"
+	steelLabel.Visible = false
+	steelLabel.Parent = scrapFrame
+	stormSteelLabel = steelLabel
+
+	local threat = Instance.new("TextLabel")
+	threat.Name = "ThreatBanner"
+	threat.AnchorPoint = Vector2.new(0.5, 0)
+	threat.Position = UDim2.new(0.5, 0, 0.1, 0)
+	threat.Size = UDim2.fromOffset(520, 46)
+	threat.BackgroundColor3 = Color3.fromRGB(172, 35, 35)
+	threat.BackgroundTransparency = 1
+	threat.TextTransparency = 1
+	threat.TextColor3 = Color3.fromRGB(255, 255, 255)
+	threat.TextScaled = true
+	threat.Font = Enum.Font.GothamBlack
+	threat.Text = ""
+	threat.Parent = gui
+	threatLabel = threat
+
+	local stormBanner = Instance.new("TextLabel")
+	stormBanner.Name = "StormBanner"
+	stormBanner.AnchorPoint = Vector2.new(0.5, 0)
+	stormBanner.Position = UDim2.new(0.5, 0, 0.17, 0)
+	stormBanner.Size = UDim2.fromOffset(560, 44)
+	stormBanner.BackgroundColor3 = Color3.fromRGB(120, 80, 40)
+	stormBanner.BackgroundTransparency = 1
+	stormBanner.TextTransparency = 1
+	stormBanner.TextColor3 = Color3.fromRGB(255, 230, 190)
+	stormBanner.Font = Enum.Font.GothamBlack
+	stormBanner.TextScaled = true
+	stormBanner.Text = "SCRAP STORM INCOMING"
+	stormBanner.Parent = gui
+	stormBannerLabel = stormBanner
+
+	local tetherLabel = Instance.new("TextLabel")
+	tetherLabel.Name = "TetherStatus"
+	tetherLabel.AnchorPoint = Vector2.new(0.5, 0)
+	tetherLabel.Position = UDim2.new(0.5, 0, 0.23, 0)
+	tetherLabel.Size = UDim2.fromOffset(360, 34)
+	tetherLabel.BackgroundTransparency = 1
+	tetherLabel.TextColor3 = Color3.fromRGB(255, 230, 180)
+	tetherLabel.TextTransparency = 1
+	tetherLabel.Font = Enum.Font.GothamBold
+	tetherLabel.TextScaled = true
+	tetherLabel.Text = "Tethers: 0/0 ACTIVE"
+	tetherLabel.Parent = gui
+	tetherStatusLabel = tetherLabel
+
 	createToolbar(gui)
+	createDebugPanel(gui)
+end
+
+local function showThreatBanner(buildingName: string)
+	if threatLabel == nil then
+		return
+	end
+
+	threatLabel.Text = ("THREAT DETECTED - %s"):format(buildingName)
+	local fadeIn = TweenService:Create(threatLabel, TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		BackgroundTransparency = 0.2,
+		TextTransparency = 0,
+	})
+	fadeIn:Play()
+
+	task.delay(2, function()
+		if threatLabel == nil then
+			return
+		end
+		local fadeOut = TweenService:Create(threatLabel, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+			BackgroundTransparency = 1,
+			TextTransparency = 1,
+		})
+		fadeOut:Play()
+	end)
+end
+
+local function showStormBanner()
+	if stormBannerLabel == nil then
+		return
+	end
+
+	TweenService:Create(stormBannerLabel, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		BackgroundTransparency = 0.2,
+		TextTransparency = 0,
+	}):Play()
+end
+
+local function hideStormBanner()
+	if stormBannerLabel == nil then
+		return
+	end
+
+	TweenService:Create(stormBannerLabel, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+		BackgroundTransparency = 1,
+		TextTransparency = 1,
+	}):Play()
+end
+
+local function updateTetherStatus(activePads: number, requiredPads: number)
+	if tetherStatusLabel == nil then
+		return
+	end
+
+	if requiredPads <= 0 then
+		tetherStatusLabel.Text = ""
+		TweenService:Create(tetherStatusLabel, TweenInfo.new(0.15, Enum.EasingStyle.Quad), { TextTransparency = 1 }):Play()
+		return
+	end
+
+	tetherStatusLabel.Text = ("Tethers: %d/%d ACTIVE"):format(activePads, requiredPads)
+	TweenService:Create(tetherStatusLabel, TweenInfo.new(0.15, Enum.EasingStyle.Quad), { TextTransparency = 0 }):Play()
 end
 
 function MainHUD.Init()
@@ -319,6 +504,37 @@ function MainHUD.Init()
 	remotes.ScrapUpdated.OnClientEvent:Connect(function(newScrap: number)
 		updateScrap(newScrap)
 	end)
+	remotes.StormSteelUpdated.OnClientEvent:Connect(function(newStormSteel: number)
+		updateStormSteel(newStormSteel)
+	end)
+	remotes.ThreatDetected.OnClientEvent:Connect(function(buildingName: string, _position: Vector3)
+		showThreatBanner(buildingName)
+	end)
+	remotes.StormStarted.OnClientEvent:Connect(function()
+		showStormBanner()
+	end)
+	remotes.StormEnded.OnClientEvent:Connect(function()
+		hideStormBanner()
+		updateTetherStatus(0, 0)
+	end)
+	remotes.TetherStatus.OnClientEvent:Connect(function(activePads: number, requiredPads: number)
+		updateTetherStatus(activePads, requiredPads)
+	end)
+
+	local ok, snapshot = pcall(function()
+		return remotes.RequestEconomyState:InvokeServer()
+	end)
+	if ok and type(snapshot) == "table" then
+		local scrapValue = snapshot.scrap
+		if type(scrapValue) == "number" then
+			updateScrap(scrapValue)
+		end
+
+		local stormSteelValue = snapshot.stormSteel
+		if type(stormSteelValue) == "number" then
+			updateStormSteel(stormSteelValue)
+		end
+	end
 
 	RunService.Heartbeat:Connect(updateDismantleBars)
 end
