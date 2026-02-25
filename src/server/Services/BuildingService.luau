@@ -67,14 +67,15 @@ local function isPositionValid(player: Player, requestedPosition: Vector3): (boo
 	return true, snapped
 end
 
-local function isOverlapping(position: Vector3, buildingType: BuildingType): boolean
+local function isOverlapping(position: Vector3, buildingType: BuildingType, rotation: number): boolean
 	local size = Constants.BUILDING.Sizes[buildingType]
 	local center = position + Vector3.new(0, size.Y * 0.5, 0)
 	local overlapParams = OverlapParams.new()
 	overlapParams.FilterType = Enum.RaycastFilterType.Exclude
 	overlapParams.FilterDescendantsInstances = {}
 
-	local overlaps = Workspace:GetPartBoundsInBox(CFrame.new(center), size, overlapParams)
+	local rotatedCF = CFrame.new(center) * CFrame.Angles(0, math.rad(rotation), 0)
+	local overlaps = Workspace:GetPartBoundsInBox(rotatedCF, size, overlapParams)
 	for _, overlap in overlaps do
 		if overlap:IsA("BasePart") and overlap.Name ~= "Baseplate" then
 			if CollectionService:HasTag(overlap, DISMANTLABLE_TAG)
@@ -88,7 +89,7 @@ local function isOverlapping(position: Vector3, buildingType: BuildingType): boo
 	return false
 end
 
-local function createBlueprintGhost(buildingType: BuildingType, position: Vector3): BasePart
+local function createBlueprintGhost(buildingType: BuildingType, position: Vector3, rotation: number): BasePart
 	local ghost = Instance.new("Part")
 	ghost.Name = string.format("%sBlueprintGhost", buildingType)
 	ghost.Size = Constants.BUILDING.Sizes[buildingType]
@@ -97,13 +98,13 @@ local function createBlueprintGhost(buildingType: BuildingType, position: Vector
 	ghost.Transparency = Constants.BUILDING.GhostTransparency
 	ghost.Anchored = true
 	ghost.CanCollide = false
-	ghost.CFrame = CFrame.new(position + Vector3.new(0, ghost.Size.Y * 0.5, 0))
+	ghost.CFrame = CFrame.new(position + Vector3.new(0, ghost.Size.Y * 0.5, 0)) * CFrame.Angles(0, math.rad(rotation), 0)
 	ghost.Parent = Workspace
 	CollectionService:AddTag(ghost, BLUEPRINT_TAG)
 	return ghost
 end
 
-local function createFinalBuilding(buildingType: BuildingType, position: Vector3): BasePart
+local function createFinalBuilding(buildingType: BuildingType, position: Vector3, rotation: number): BasePart
 	local part = Instance.new("Part")
 	part.Name = string.format("%sBuilding", buildingType)
 	part.Size = Constants.BUILDING.Sizes[buildingType]
@@ -112,7 +113,7 @@ local function createFinalBuilding(buildingType: BuildingType, position: Vector3
 	part.Transparency = 0
 	part.Anchored = true
 	part.CanCollide = true
-	part.CFrame = CFrame.new(position + Vector3.new(0, part.Size.Y * 0.5, 0))
+	part.CFrame = CFrame.new(position + Vector3.new(0, part.Size.Y * 0.5, 0)) * CFrame.Angles(0, math.rad(rotation), 0)
 	part:SetAttribute("BuildingType", buildingType)
 	part:SetAttribute("BuildingHP", Constants.BUILDING.DefaultHP)
 	part.Parent = Workspace
@@ -258,13 +259,23 @@ local function getRemainingSlotCooldown(position: Vector3): number
 	return remaining
 end
 
-local function placeBlueprint(player: Player, buildingType: BuildingType, requestedPosition: Vector3): ()
+local VALID_ROTATIONS = { [0] = true, [90] = true, [180] = true, [270] = true }
+
+local function placeBlueprint(player: Player, buildingType: BuildingType, requestedPosition: Vector3, requestedRotation: number?): ()
 	if Constants.BUILDING.Sizes[buildingType] == nil then
 		return
 	end
 
 	if typeof(requestedPosition) ~= "Vector3" then
 		return
+	end
+
+	local rotation = 0
+	if typeof(requestedRotation) == "number" then
+		rotation = math.floor(requestedRotation :: number) % 360
+		if not VALID_ROTATIONS[rotation] then
+			rotation = 0
+		end
 	end
 
 	local ok, snappedPos = isPositionValid(player, requestedPosition)
@@ -276,12 +287,12 @@ local function placeBlueprint(player: Player, buildingType: BuildingType, reques
 		return
 	end
 
-	if isOverlapping(snappedPos, buildingType) then
+	if isOverlapping(snappedPos, buildingType, rotation) then
 		return
 	end
 
 	local blueprintId = HttpService:GenerateGUID(false)
-	local ghost = createBlueprintGhost(buildingType, snappedPos)
+	local ghost = createBlueprintGhost(buildingType, snappedPos, rotation)
 	ghost:SetAttribute("BlueprintId", blueprintId)
 	ghost:SetAttribute("BlueprintBuildingType", buildingType)
 
@@ -289,6 +300,7 @@ local function placeBlueprint(player: Player, buildingType: BuildingType, reques
 		id = blueprintId,
 		buildingType = buildingType,
 		position = snappedPos,
+		rotation = rotation,
 		ownerUserId = player.UserId,
 		isFinished = false,
 		ghostPart = ghost,
@@ -332,7 +344,7 @@ local function finishBlueprint(_player: Player, blueprintId: string): PurchaseRe
 		blueprint.ghostPart:Destroy()
 	end
 
-	local builtPart = createFinalBuilding(blueprint.buildingType, blueprint.position)
+	local builtPart = createFinalBuilding(blueprint.buildingType, blueprint.position, blueprint.rotation or 0)
 	activateBuildingBehavior(builtPart, blueprint.buildingType)
 	builtCounts[blueprint.buildingType] = countForType + 1
 	blueprints[blueprintId] = nil
@@ -378,11 +390,11 @@ function BuildingService.Init(): ()
 	RemoteGuard.Register("PlaceBlueprint", 5, 1)
 	RemoteGuard.Register("FinishBlueprint", 3, 1)
 
-	remotes.PlaceBlueprint.OnServerEvent:Connect(function(player: Player, buildingType: BuildingType, position: Vector3)
+	remotes.PlaceBlueprint.OnServerEvent:Connect(function(player: Player, buildingType: BuildingType, position: Vector3, rotation: number?)
 		if not RemoteGuard.Check("PlaceBlueprint", player) then
 			return
 		end
-		placeBlueprint(player, buildingType, position)
+		placeBlueprint(player, buildingType, position, rotation)
 	end)
 
 	remotes.FinishBlueprint.OnServerInvoke = function(player: Player, blueprintId: string)

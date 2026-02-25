@@ -28,6 +28,7 @@ local currentGhost: Part? = nil
 local renderConn: RBXScriptConnection? = nil
 local placementPosition: Vector3? = nil
 local placementValid = false
+local currentRotation: number = 0
 
 local function clearGhost()
 	if renderConn ~= nil then
@@ -43,6 +44,7 @@ local function clearGhost()
 	placementPosition = nil
 	placementValid = false
 	currentType = nil
+	currentRotation = 0
 	mode = "Idle"
 end
 
@@ -84,7 +86,8 @@ local function getPlacementResult(): (boolean, Vector3?)
 	overlapParams.FilterType = Enum.RaycastFilterType.Exclude
 	overlapParams.FilterDescendantsInstances = { LocalPlayer.Character, currentGhost }
 	local center = snapped + Vector3.new(0, size.Y * 0.5, 0)
-	local overlaps = Workspace:GetPartBoundsInBox(CFrame.new(center), size, overlapParams)
+	local rotatedCF = CFrame.new(center) * CFrame.Angles(0, math.rad(currentRotation), 0)
+	local overlaps = Workspace:GetPartBoundsInBox(rotatedCF, size, overlapParams)
 	for _, overlap in overlaps do
 		if overlap:IsA("BasePart") and not CollectionService:HasTag(overlap, "Blueprint") and overlap.Name ~= "Baseplate" then
 			return false, nil
@@ -105,7 +108,7 @@ local function updateGhostVisual()
 
 	if pos ~= nil then
 		local y = currentGhost.Size.Y * 0.5
-		currentGhost.CFrame = CFrame.new(pos + Vector3.new(0, y, 0))
+		currentGhost.CFrame = CFrame.new(pos + Vector3.new(0, y, 0)) * CFrame.Angles(0, math.rad(currentRotation), 0)
 	end
 
 	if valid then
@@ -140,7 +143,7 @@ local function placeCurrentBlueprint()
 		return
 	end
 
-	remotes.PlaceBlueprint:FireServer(currentType, placementPosition)
+	remotes.PlaceBlueprint:FireServer(currentType, placementPosition, currentRotation)
 	clearGhost()
 end
 
@@ -195,6 +198,11 @@ local function onInputBegan(input: InputObject, processed: boolean)
 
 	if input.KeyCode == Enum.KeyCode.Escape and mode == "Placing" then
 		clearGhost()
+		return
+	end
+
+	if input.KeyCode == Enum.KeyCode.R and mode == "Placing" then
+		currentRotation = (currentRotation + 90) % 360
 		return
 	end
 

@@ -31,6 +31,7 @@ export type BlueprintData = {
 	id: string,
 	buildingType: BuildingType,
 	position: Vector3,
+	rotation: number,
 	ownerUserId: number,
 	isFinished: boolean,
 }

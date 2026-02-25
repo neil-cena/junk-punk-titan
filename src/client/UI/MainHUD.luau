@@ -18,6 +18,8 @@ local Constants = require(Shared:WaitForChild("Constants"))
 local AudioManifest = require(Shared:WaitForChild("AudioManifest"))
 local Remotes = require(Shared:WaitForChild("Remotes"))
 local BlueprintController = require(script.Parent.Parent:WaitForChild("Controllers"):WaitForChild("BlueprintController"))
+local RepairMinigameUI = require(script.Parent:WaitForChild("RepairMinigameUI"))
+local EndScreenUI = require(script.Parent:WaitForChild("EndScreenUI"))
 
 type BuildingType = "Turret" | "Drill" | "Wall"
 
@@ -37,19 +39,14 @@ local roleScreen: ScreenGui? = nil
 local threatLabel: TextLabel? = nil
 local stormBannerLabel: TextLabel? = nil
 local tetherStatusLabel: TextLabel? = nil
-local activeRepairMinigame: Frame? = nil
-local repairRenderConnection: RBXScriptConnection? = nil
-local repairInputConnection: RBXScriptConnection? = nil
 local wavePulseTween: Tween? = nil
 local wavePulseBackTween: Tween? = nil
 local waveTimerSignal = Instance.new("BindableEvent")
-local gameOverGui: Frame? = nil
-local victoryGui: Frame? = nil
 local titanStageLabel: TextLabel? = nil
 local titanIntegrityFill: Frame? = nil
 local titanIntegrityBar: Frame? = nil
 local titanRequirementLabel: TextLabel? = nil
-local finalStandBanner: TextLabel? = nil
+local titanDistanceLabel: TextLabel? = nil
 
 local function playUISound(soundId: string, volume: number?)
 	local sound = Instance.new("Sound")
@@ -184,53 +181,11 @@ local function updateWaveTimer(secondsRemaining: number)
 end
 
 local function showGameOver()
-	if gameOverGui ~= nil then
-		return
-	end
-
 	local rootGui = PlayerGui:FindFirstChild("MainHUDGui")
 	if rootGui == nil or not rootGui:IsA("ScreenGui") then
 		return
 	end
-
-	local overlay = Instance.new("Frame")
-	overlay.Name = "GameOverOverlay"
-	overlay.Size = UDim2.fromScale(1, 1)
-	overlay.BackgroundColor3 = Color3.fromRGB(10, 5, 5)
-	overlay.BackgroundTransparency = 0.2
-	overlay.Parent = rootGui
-	gameOverGui = overlay
-
-	local title = Instance.new("TextLabel")
-	title.Size = UDim2.fromScale(1, 0.2)
-	title.Position = UDim2.new(0, 0, 0.35, 0)
-	title.BackgroundTransparency = 1
-	title.Font = Enum.Font.GothamBlack
-	title.TextScaled = true
-	title.TextColor3 = Color3.fromRGB(255, 70, 70)
-	title.TextStrokeTransparency = 0.4
-	title.Text = "THE TITAN HAS COLLAPSED"
-	title.Parent = overlay
-
-	local statsLabel = Instance.new("TextLabel")
-	statsLabel.Size = UDim2.new(0.5, 0, 0.25, 0)
-	statsLabel.Position = UDim2.new(0.25, 0, 0.5, 0)
-	statsLabel.BackgroundTransparency = 1
-	statsLabel.Font = Enum.Font.GothamSemibold
-	statsLabel.TextColor3 = Color3.fromRGB(220, 200, 200)
-	statsLabel.TextScaled = true
-	statsLabel.TextWrapped = true
-	statsLabel.Text = buildStatsText()
-	statsLabel.Parent = overlay
-
-	task.delay(5, function()
-		local ok = pcall(function()
-			TeleportService:Teleport(game.PlaceId, LocalPlayer)
-		end)
-		if not ok then
-			LocalPlayer:Kick("Titan collapsed. Session reset.")
-		end
-	end)
+	EndScreenUI.ShowGameOver(rootGui, remotes)
 end
 
 local function ensureBar(part: BasePart): BillboardGui
@@ -298,12 +253,17 @@ local function updateDismantleBars()
 					text.Text = ("%d%%"):format(displayProgress)
 				end
 
-				if isFixer then
-					bg.BorderSizePixel = 2
-					bg.BorderColor3 = Color3.fromRGB(255, 215, 85)
-				else
-					bg.BorderSizePixel = 0
-				end
+			if isFixer and progress > 0 then
+				bg.BorderSizePixel = 2
+				local pulse = (math.sin(os.clock() * 6) + 1) * 0.5
+				bg.BorderColor3 = Color3.fromRGB(
+					math.floor(255 * pulse + 180 * (1 - pulse)),
+					math.floor(215 * pulse + 100 * (1 - pulse)),
+					math.floor(85 * pulse + 30 * (1 - pulse))
+				)
+			else
+				bg.BorderSizePixel = 0
+			end
 			end
 
 			bar.Enabled = progress > 0
@@ -318,25 +278,82 @@ local function updateDismantleBars()
 	end
 end
 
+local ROLE_DESCRIPTIONS = {
+	Scrapper = "Fastest runner. Collects scrap piles\nacross the map to fuel the team.",
+	Fixer = "Repair specialist. Uses the wrench to\nkeep drills running and buildings alive.",
+	Enforcer = "Combat expert. The only role that\ncan use the shotgun to fight rats.",
+}
+
+local ROLE_COLORS = {
+	Scrapper = Color3.fromRGB(255, 200, 60),
+	Fixer = Color3.fromRGB(100, 200, 255),
+	Enforcer = Color3.fromRGB(255, 100, 80),
+}
+
 local function makeRoleButton(parent: Instance, roleName: string, xScale: number)
 	local roleDef = Constants.ROLE_DEFINITIONS[roleName]
 
+	local card = Instance.new("Frame")
+	card.Name = roleName .. "Card"
+	card.Size = UDim2.new(0.25, 0, 0.5, 0)
+	card.Position = UDim2.new(xScale, 0, 0.25, 0)
+	card.BackgroundColor3 = Color3.fromRGB(30, 30, 38)
+	card.BackgroundTransparency = 0.1
+	card.Parent = parent
+
+	local cardCorner = Instance.new("UICorner")
+	cardCorner.CornerRadius = UDim.new(0, 8)
+	cardCorner.Parent = card
+
+	local nameLabel = Instance.new("TextLabel")
+	nameLabel.Name = "RoleName"
+	nameLabel.Size = UDim2.new(1, 0, 0, 36)
+	nameLabel.Position = UDim2.fromOffset(0, 8)
+	nameLabel.BackgroundTransparency = 1
+	nameLabel.Font = Enum.Font.GothamBlack
+	nameLabel.TextScaled = true
+	nameLabel.TextColor3 = ROLE_COLORS[roleName] or Color3.fromRGB(255, 255, 255)
+	nameLabel.Text = string.upper(roleName)
+	nameLabel.Parent = card
+
+	local descLabel = Instance.new("TextLabel")
+	descLabel.Name = "Description"
+	descLabel.Size = UDim2.new(1, -16, 0, 50)
+	descLabel.Position = UDim2.new(0, 8, 0, 48)
+	descLabel.BackgroundTransparency = 1
+	descLabel.Font = Enum.Font.Gotham
+	descLabel.TextScaled = true
+	descLabel.TextWrapped = true
+	descLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+	descLabel.Text = ROLE_DESCRIPTIONS[roleName] or ""
+	descLabel.Parent = card
+
+	local statsLabel = Instance.new("TextLabel")
+	statsLabel.Name = "Stats"
+	statsLabel.Size = UDim2.new(1, -16, 0, 40)
+	statsLabel.Position = UDim2.new(0, 8, 0, 102)
+	statsLabel.BackgroundTransparency = 1
+	statsLabel.Font = Enum.Font.GothamSemibold
+	statsLabel.TextScaled = true
+	statsLabel.TextColor3 = Color3.fromRGB(160, 160, 160)
+	statsLabel.Text = string.format("SPD x%.1f  RPR x%.1f  DMG x%.1f", roleDef.speedMult, roleDef.repairMult, roleDef.damageMult)
+	statsLabel.Parent = card
+
 	local button = Instance.new("TextButton")
 	button.Name = roleName .. "Button"
-	button.Size = UDim2.new(0.25, 0, 0.42, 0)
-	button.Position = UDim2.new(xScale, 0, 0.3, 0)
-	button.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
-	button.TextColor3 = Color3.fromRGB(255, 255, 255)
+	button.Size = UDim2.new(0.8, 0, 0, 36)
+	button.AnchorPoint = Vector2.new(0.5, 0)
+	button.Position = UDim2.new(0.5, 0, 1, -48)
+	button.BackgroundColor3 = ROLE_COLORS[roleName] or Color3.fromRGB(80, 80, 90)
+	button.TextColor3 = Color3.fromRGB(20, 20, 20)
 	button.TextScaled = true
 	button.Font = Enum.Font.GothamBold
-	button.Text = string.format(
-		"%s\nSPD x%.1f\nRPR x%.1f\nDMG x%.1f",
-		roleName,
-		roleDef.speedMult,
-		roleDef.repairMult,
-		roleDef.damageMult
-	)
-	button.Parent = parent
+	button.Text = "SELECT"
+	button.Parent = card
+
+	local btnCorner = Instance.new("UICorner")
+	btnCorner.CornerRadius = UDim.new(0, 6)
+	btnCorner.Parent = button
 
 	button.MouseButton1Click:Connect(function()
 		playUISound(AudioManifest.UIClick, 0.4)
@@ -377,9 +394,21 @@ local function createRoleSelection()
 	overlay.BackgroundTransparency = 0.2
 	overlay.Parent = screen
 
-	makeRoleButton(overlay, "Scrapper", 0.08)
-	makeRoleButton(overlay, "Fixer", 0.375)
-	makeRoleButton(overlay, "Enforcer", 0.67)
+	local chooseTitle = Instance.new("TextLabel")
+	chooseTitle.Name = "ChooseTitle"
+	chooseTitle.Size = UDim2.new(1, 0, 0.12, 0)
+	chooseTitle.Position = UDim2.new(0, 0, 0.08, 0)
+	chooseTitle.BackgroundTransparency = 1
+	chooseTitle.Font = Enum.Font.GothamBlack
+	chooseTitle.TextScaled = true
+	chooseTitle.TextColor3 = Color3.fromRGB(255, 230, 140)
+	chooseTitle.TextStrokeTransparency = 0.5
+	chooseTitle.Text = "CHOOSE YOUR ROLE"
+	chooseTitle.Parent = overlay
+
+	makeRoleButton(overlay, "Scrapper", 0.04)
+	makeRoleButton(overlay, "Fixer", 0.36)
+	makeRoleButton(overlay, "Enforcer", 0.68)
 end
 
 local function createToolbar(parent: Instance)
@@ -387,10 +416,21 @@ local function createToolbar(parent: Instance)
 	frame.Name = "BuildToolbar"
 	frame.AnchorPoint = Vector2.new(0.5, 1)
 	frame.Position = UDim2.new(0.5, 0, 0.97, 0)
-	frame.Size = UDim2.fromOffset(460, 88)
+	frame.Size = UDim2.new(0.3, 0, 0, 88)
 	frame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 	frame.BackgroundTransparency = 0.2
 	frame.Parent = parent
+
+	local toolbarCorner = Instance.new("UICorner")
+	toolbarCorner.CornerRadius = UDim.new(0, 6)
+	toolbarCorner.Parent = frame
+
+	local layout = Instance.new("UIListLayout")
+	layout.FillDirection = Enum.FillDirection.Horizontal
+	layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	layout.VerticalAlignment = Enum.VerticalAlignment.Center
+	layout.Padding = UDim.new(0, 6)
+	layout.Parent = frame
 
 	local slots: { { name: BuildingType, key: string } } = {
 		{ name = "Turret", key = "1" },
@@ -398,11 +438,10 @@ local function createToolbar(parent: Instance)
 		{ name = "Wall", key = "3" },
 	}
 
-	for index, info in slots do
+	for _, info in slots do
 		local slot = Instance.new("TextButton")
 		slot.Name = info.name .. "Slot"
-		slot.Size = UDim2.new(0, 140, 0, 72)
-		slot.Position = UDim2.new(0, 10 + (index - 1) * 150, 0, 8)
+		slot.Size = UDim2.new(0.3, 0, 0, 72)
 		slot.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
 		slot.TextColor3 = Color3.fromRGB(255, 255, 255)
 		slot.TextScaled = true
@@ -411,10 +450,14 @@ local function createToolbar(parent: Instance)
 		slot.Parent = frame
 		buildCostButtons[info.name] = slot
 
+		local slotCorner = Instance.new("UICorner")
+		slotCorner.CornerRadius = UDim.new(0, 4)
+		slotCorner.Parent = slot
+
 		local colorSwatch = Instance.new("Frame")
 		colorSwatch.Name = "Swatch"
-		colorSwatch.Size = UDim2.fromOffset(16, 16)
-		colorSwatch.Position = UDim2.fromOffset(6, 6)
+		colorSwatch.Size = UDim2.fromOffset(12, 12)
+		colorSwatch.Position = UDim2.fromOffset(4, 4)
 		colorSwatch.BackgroundColor3 = Constants.BUILDING.Colors[info.name]
 		colorSwatch.BorderSizePixel = 0
 		colorSwatch.Parent = slot
@@ -424,6 +467,18 @@ local function createToolbar(parent: Instance)
 			BlueprintController.StartPlacing(info.name)
 		end)
 	end
+
+	local hintLabel = Instance.new("TextLabel")
+	hintLabel.Name = "RotateHint"
+	hintLabel.AnchorPoint = Vector2.new(0.5, 0)
+	hintLabel.Position = UDim2.new(0.5, 0, 1, 2)
+	hintLabel.Size = UDim2.new(0.6, 0, 0, 16)
+	hintLabel.BackgroundTransparency = 1
+	hintLabel.Font = Enum.Font.Gotham
+	hintLabel.TextScaled = true
+	hintLabel.TextColor3 = Color3.fromRGB(160, 160, 160)
+	hintLabel.Text = "[R] Rotate  |  [RMB/Esc] Cancel"
+	hintLabel.Parent = frame
 end
 
 local function refreshBuildCosts()
@@ -463,6 +518,136 @@ local function refreshBuildCosts()
 			end
 		end
 	end
+end
+
+local function createSettingsPanel(parent: Instance)
+	local toggleBtn = Instance.new("TextButton")
+	toggleBtn.Name = "SettingsToggle"
+	toggleBtn.AnchorPoint = Vector2.new(1, 1)
+	toggleBtn.Position = UDim2.new(1, -10, 1, -10)
+	toggleBtn.Size = UDim2.fromOffset(36, 36)
+	toggleBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+	toggleBtn.Font = Enum.Font.GothamBold
+	toggleBtn.TextScaled = true
+	toggleBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
+	toggleBtn.Text = "S"
+	toggleBtn.Parent = parent
+
+	local toggleCorner = Instance.new("UICorner")
+	toggleCorner.CornerRadius = UDim.new(0, 6)
+	toggleCorner.Parent = toggleBtn
+
+	local panel = Instance.new("Frame")
+	panel.Name = "SettingsPanel"
+	panel.AnchorPoint = Vector2.new(1, 1)
+	panel.Position = UDim2.new(1, -10, 1, -52)
+	panel.Size = UDim2.new(0.16, 0, 0, 140)
+	panel.BackgroundColor3 = Color3.fromRGB(25, 25, 32)
+	panel.BackgroundTransparency = 0.1
+	panel.Visible = false
+	panel.Parent = parent
+
+	local panelCorner = Instance.new("UICorner")
+	panelCorner.CornerRadius = UDim.new(0, 8)
+	panelCorner.Parent = panel
+
+	local panelTitle = Instance.new("TextLabel")
+	panelTitle.Size = UDim2.new(1, -10, 0, 24)
+	panelTitle.Position = UDim2.fromOffset(5, 4)
+	panelTitle.BackgroundTransparency = 1
+	panelTitle.Font = Enum.Font.GothamBold
+	panelTitle.TextScaled = true
+	panelTitle.TextColor3 = Color3.fromRGB(220, 220, 220)
+	panelTitle.Text = "Settings"
+	panelTitle.Parent = panel
+
+	local function createSlider(label: string, yPos: number, initial: number, onChange: (number) -> ())
+		local sliderLabel = Instance.new("TextLabel")
+		sliderLabel.Size = UDim2.new(1, -16, 0, 16)
+		sliderLabel.Position = UDim2.new(0, 8, 0, yPos)
+		sliderLabel.BackgroundTransparency = 1
+		sliderLabel.Font = Enum.Font.Gotham
+		sliderLabel.TextScaled = true
+		sliderLabel.TextXAlignment = Enum.TextXAlignment.Left
+		sliderLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
+		sliderLabel.Text = label
+		sliderLabel.Parent = panel
+
+		local track = Instance.new("Frame")
+		track.Size = UDim2.new(1, -16, 0, 8)
+		track.Position = UDim2.new(0, 8, 0, yPos + 18)
+		track.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
+		track.BorderSizePixel = 0
+		track.Parent = panel
+
+		local trackCorner = Instance.new("UICorner")
+		trackCorner.CornerRadius = UDim.new(0.5, 0)
+		trackCorner.Parent = track
+
+		local fill = Instance.new("Frame")
+		fill.Name = "Fill"
+		fill.Size = UDim2.new(initial, 0, 1, 0)
+		fill.BackgroundColor3 = Color3.fromRGB(255, 200, 80)
+		fill.BorderSizePixel = 0
+		fill.Parent = track
+
+		local fillCorner = Instance.new("UICorner")
+		fillCorner.CornerRadius = UDim.new(0.5, 0)
+		fillCorner.Parent = fill
+
+		local clickArea = Instance.new("TextButton")
+		clickArea.Size = UDim2.fromScale(1, 1)
+		clickArea.BackgroundTransparency = 1
+		clickArea.Text = ""
+		clickArea.Parent = track
+
+		local dragging = false
+		local function updateFromInput(x: number)
+			local abs = track.AbsolutePosition.X
+			local width = track.AbsoluteSize.X
+			if width <= 0 then return end
+			local pct = math.clamp((x - abs) / width, 0, 1)
+			fill.Size = UDim2.new(pct, 0, 1, 0)
+			onChange(pct)
+		end
+
+		clickArea.MouseButton1Down:Connect(function()
+			dragging = true
+		end)
+		clickArea.InputChanged:Connect(function(input: InputObject)
+			if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+				updateFromInput(input.Position.X)
+			end
+		end)
+		UserInputService.InputEnded:Connect(function(input: InputObject)
+			if input.UserInputType == Enum.UserInputType.MouseButton1 then
+				if dragging then
+					dragging = false
+					updateFromInput(input.Position.X)
+				end
+			end
+		end)
+		clickArea.MouseButton1Click:Connect(function()
+			local mouse = LocalPlayer:GetMouse()
+			updateFromInput(mouse.X)
+		end)
+	end
+
+	createSlider("Master Volume", 32, 0.5, function(pct)
+		SoundService.Volume = pct
+	end)
+
+	createSlider("Music Volume", 72, 0.5, function(pct)
+		local music = SoundService:FindFirstChild("AmbientMusic")
+		if music and music:IsA("Sound") then
+			music.Volume = pct * 0.2
+		end
+	end)
+
+	toggleBtn.MouseButton1Click:Connect(function()
+		playUISound(AudioManifest.UIClick)
+		panel.Visible = not panel.Visible
+	end)
 end
 
 local function createDebugPanel(parent: Instance)
@@ -519,7 +704,7 @@ local function createTitanProgressPanel(parent: Instance)
 	frame.Name = "TitanProgress"
 	frame.AnchorPoint = Vector2.new(1, 0)
 	frame.Position = UDim2.new(1, -10, 0, 10)
-	frame.Size = UDim2.fromOffset(210, 110)
+	frame.Size = UDim2.new(0.14, 0, 0, 110)
 	frame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
 	frame.BackgroundTransparency = 0.15
 	frame.Parent = parent
@@ -580,6 +765,18 @@ local function createTitanProgressPanel(parent: Instance)
 	reqLabel.Text = "Next: 200 Scrap"
 	reqLabel.Parent = frame
 	titanRequirementLabel = reqLabel
+
+	local distLabel = Instance.new("TextLabel")
+	distLabel.Name = "Distance"
+	distLabel.Size = UDim2.new(1, -10, 0, 16)
+	distLabel.Position = UDim2.new(0, 5, 0, 96)
+	distLabel.BackgroundTransparency = 1
+	distLabel.Font = Enum.Font.Gotham
+	distLabel.TextScaled = true
+	distLabel.TextColor3 = Color3.fromRGB(150, 150, 170)
+	distLabel.Text = ""
+	distLabel.Parent = frame
+	titanDistanceLabel = distLabel
 end
 
 local function updateTitanProgress(titanModelInstance: Model)
@@ -650,126 +847,15 @@ local function showFinalStandBanner()
 	if rootGui == nil or not rootGui:IsA("ScreenGui") then
 		return
 	end
-
-	if finalStandBanner ~= nil then
-		return
-	end
-
-	local banner = Instance.new("TextLabel")
-	banner.Name = "FinalStandBanner"
-	banner.AnchorPoint = Vector2.new(0.5, 0)
-	banner.Position = UDim2.new(0.5, 0, 0.13, 0)
-	banner.Size = UDim2.fromOffset(480, 40)
-	banner.BackgroundColor3 = Color3.fromRGB(160, 40, 40)
-	banner.BackgroundTransparency = 0.15
-	banner.Font = Enum.Font.GothamBlack
-	banner.TextColor3 = Color3.fromRGB(255, 230, 100)
-	banner.TextScaled = true
-	banner.Text = "FINAL STAND - DEFEND THE TITAN"
-	banner.Parent = rootGui
-	finalStandBanner = banner
-
-	task.spawn(function()
-		while finalStandBanner ~= nil and finalStandBanner.Parent ~= nil do
-			TweenService:Create(finalStandBanner, TweenInfo.new(0.6, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
-				TextColor3 = Color3.fromRGB(255, 100, 100),
-			}):Play()
-			task.wait(0.6)
-			if finalStandBanner == nil then
-				break
-			end
-			TweenService:Create(finalStandBanner, TweenInfo.new(0.6, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
-				TextColor3 = Color3.fromRGB(255, 230, 100),
-			}):Play()
-			task.wait(0.6)
-		end
-	end)
-end
-
-local function buildStatsText(): string
-	local ok, stats = pcall(function()
-		return remotes.RequestSessionStats:InvokeServer()
-	end)
-	if not ok or type(stats) ~= "table" then
-		return ""
-	end
-
-	local elapsed = stats.timeElapsed or 0
-	local mins = math.floor(elapsed / 60)
-	local secs = math.floor(elapsed % 60)
-	return string.format(
-		"Scrap Gathered: %d\nRats Eliminated: %d\nBuildings Lost: %d\nWaves Survived: %d\nTime: %02d:%02d",
-		stats.scrapGathered or 0,
-		stats.ratsKilled or 0,
-		stats.buildingsLost or 0,
-		stats.wavesCompleted or 0,
-		mins, secs
-	)
+	EndScreenUI.ShowFinalStandBanner(rootGui)
 end
 
 local function showVictory()
-	if victoryGui ~= nil then
-		return
-	end
-
 	local rootGui = PlayerGui:FindFirstChild("MainHUDGui")
 	if rootGui == nil or not rootGui:IsA("ScreenGui") then
 		return
 	end
-
-	if finalStandBanner ~= nil then
-		finalStandBanner:Destroy()
-		finalStandBanner = nil
-	end
-
-	local overlay = Instance.new("Frame")
-	overlay.Name = "VictoryOverlay"
-	overlay.Size = UDim2.fromScale(1, 1)
-	overlay.BackgroundColor3 = Color3.fromRGB(5, 5, 15)
-	overlay.BackgroundTransparency = 0.15
-	overlay.Parent = rootGui
-	victoryGui = overlay
-
-	local title = Instance.new("TextLabel")
-	title.Size = UDim2.fromScale(0.8, 0.15)
-	title.Position = UDim2.new(0.1, 0, 0.18, 0)
-	title.BackgroundTransparency = 1
-	title.Font = Enum.Font.GothamBlack
-	title.TextScaled = true
-	title.TextColor3 = Color3.fromRGB(255, 230, 80)
-	title.TextStrokeTransparency = 0.3
-	title.Text = "VICTORY"
-	title.Parent = overlay
-
-	local subtitle = Instance.new("TextLabel")
-	subtitle.Size = UDim2.fromScale(0.6, 0.06)
-	subtitle.Position = UDim2.new(0.2, 0, 0.34, 0)
-	subtitle.BackgroundTransparency = 1
-	subtitle.Font = Enum.Font.GothamBold
-	subtitle.TextScaled = true
-	subtitle.TextColor3 = Color3.fromRGB(200, 220, 180)
-	subtitle.Text = "The Titan stands."
-	subtitle.Parent = overlay
-
-	local statsLabel = Instance.new("TextLabel")
-	statsLabel.Size = UDim2.new(0.5, 0, 0.3, 0)
-	statsLabel.Position = UDim2.new(0.25, 0, 0.44, 0)
-	statsLabel.BackgroundTransparency = 1
-	statsLabel.Font = Enum.Font.GothamSemibold
-	statsLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
-	statsLabel.TextScaled = true
-	statsLabel.TextWrapped = true
-	statsLabel.Text = buildStatsText()
-	statsLabel.Parent = overlay
-
-	task.delay(6, function()
-		local teleOk = pcall(function()
-			TeleportService:Teleport(game.PlaceId, LocalPlayer)
-		end)
-		if not teleOk then
-			LocalPlayer:Kick("Victory! Session complete.")
-		end
-	end)
+	EndScreenUI.ShowVictory(rootGui, remotes)
 end
 
 local function createMainHUD()
@@ -783,10 +869,14 @@ local function createMainHUD()
 	scrapFrame.Name = "ScrapFrame"
 	scrapFrame.AnchorPoint = Vector2.new(0.5, 0)
 	scrapFrame.Position = UDim2.new(0.5, 0, 0.02, 0)
-	scrapFrame.Size = UDim2.fromOffset(240, 52)
+	scrapFrame.Size = UDim2.new(0.14, 0, 0, 48)
 	scrapFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
 	scrapFrame.BackgroundTransparency = 0.15
 	scrapFrame.Parent = gui
+
+	local scrapCorner = Instance.new("UICorner")
+	scrapCorner.CornerRadius = UDim.new(0, 6)
+	scrapCorner.Parent = scrapFrame
 
 	local label = Instance.new("TextLabel")
 	label.Name = "ScrapLabel"
@@ -874,6 +964,7 @@ local function createMainHUD()
 
 	createToolbar(gui)
 	createTitanProgressPanel(gui)
+	createSettingsPanel(gui)
 	createDebugPanel(gui)
 end
 
@@ -938,21 +1029,6 @@ local function updateTetherStatus(activePads: number, requiredPads: number)
 	TweenService:Create(tetherStatusLabel, TweenInfo.new(0.15, Enum.EasingStyle.Quad), { TextTransparency = 0 }):Play()
 end
 
-local function clearRepairMinigame()
-	if repairRenderConnection ~= nil then
-		repairRenderConnection:Disconnect()
-		repairRenderConnection = nil
-	end
-	if repairInputConnection ~= nil then
-		repairInputConnection:Disconnect()
-		repairInputConnection = nil
-	end
-	if activeRepairMinigame ~= nil then
-		activeRepairMinigame:Destroy()
-		activeRepairMinigame = nil
-	end
-end
-
 function MainHUD.ShowRepairMinigame(drillPart: BasePart)
 	if not isInitialized then
 		return
@@ -963,149 +1039,7 @@ function MainHUD.ShowRepairMinigame(drillPart: BasePart)
 		return
 	end
 
-	clearRepairMinigame()
-
-	local frame = Instance.new("Frame")
-	frame.Name = "RepairMinigame"
-	frame.AnchorPoint = Vector2.new(0.5, 1)
-	frame.Position = UDim2.new(0.5, 0, 0.86, 0)
-	frame.Size = UDim2.fromOffset(360, 92)
-	frame.BackgroundColor3 = Color3.fromRGB(24, 24, 28)
-	frame.BackgroundTransparency = 0.15
-	frame.Parent = rootGui
-	activeRepairMinigame = frame
-
-	local title = Instance.new("TextLabel")
-	title.Name = "Title"
-	title.Size = UDim2.new(1, -10, 0, 28)
-	title.Position = UDim2.fromOffset(5, 6)
-	title.BackgroundTransparency = 1
-	title.Font = Enum.Font.GothamBold
-	title.TextColor3 = Color3.fromRGB(220, 240, 255)
-	title.TextScaled = true
-	title.Text = "Pressure Hiss - Click / Press E"
-	title.Parent = frame
-
-	local barBg = Instance.new("Frame")
-	barBg.Name = "BarBackground"
-	barBg.AnchorPoint = Vector2.new(0.5, 0)
-	barBg.Position = UDim2.new(0.5, 0, 0, 42)
-	barBg.Size = UDim2.fromOffset(320, 28)
-	barBg.BackgroundColor3 = Color3.fromRGB(70, 70, 75)
-	barBg.BorderSizePixel = 0
-	barBg.Parent = frame
-
-	local successWidth = math.clamp(Constants.MAINTENANCE.MinigameSuccessZoneWidth, 0.08, 0.45)
-	local successStart = math.random() * (1 - successWidth)
-
-	local successZone = Instance.new("Frame")
-	successZone.Name = "SuccessZone"
-	successZone.Size = UDim2.new(successWidth, 0, 1, 0)
-	successZone.Position = UDim2.new(successStart, 0, 0, 0)
-	successZone.BackgroundColor3 = Color3.fromRGB(90, 205, 115)
-	successZone.BorderSizePixel = 0
-	successZone.Parent = barBg
-
-	local needleWidth = 0.02
-	local needle = Instance.new("Frame")
-	needle.Name = "Needle"
-	needle.AnchorPoint = Vector2.new(0.5, 0)
-	needle.Size = UDim2.new(needleWidth, 0, 1, 0)
-	needle.Position = UDim2.new(0, 0, 0, 0)
-	needle.BackgroundColor3 = Color3.fromRGB(255, 210, 70)
-	needle.BorderSizePixel = 0
-	needle.Parent = barBg
-
-	local feedback = Instance.new("TextLabel")
-	feedback.Name = "Feedback"
-	feedback.Size = UDim2.new(1, -10, 0, 22)
-	feedback.Position = UDim2.new(0, 5, 1, -25)
-	feedback.BackgroundTransparency = 1
-	feedback.Font = Enum.Font.GothamBold
-	feedback.TextScaled = true
-	feedback.Text = ""
-	feedback.Parent = frame
-
-	local progress = 0
-	local resolved = false
-	local minigameSpeed = math.max(0.5, Constants.MAINTENANCE.MinigameBarSpeed)
-	local successEnd = successStart + successWidth
-
-	local function finish(success: boolean)
-		if resolved then
-			return
-		end
-		resolved = true
-
-		if repairRenderConnection ~= nil then
-			repairRenderConnection:Disconnect()
-			repairRenderConnection = nil
-		end
-		if repairInputConnection ~= nil then
-			repairInputConnection:Disconnect()
-			repairInputConnection = nil
-		end
-
-		remotes.RepairMinigameResult:FireServer(drillPart, success)
-		if success then
-			feedback.Text = ("+%d Stability!"):format(Constants.MAINTENANCE.WrenchSuccessRestore)
-			feedback.TextColor3 = Color3.fromRGB(120, 245, 120)
-			playUISound(AudioManifest.MinigameSuccess, 0.4)
-		else
-			feedback.Text = "CLOGGED!"
-			feedback.TextColor3 = Color3.fromRGB(255, 110, 110)
-			playUISound(AudioManifest.MinigameFail, 0.35)
-		end
-
-		local fadeTween = TweenService:Create(frame, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-			BackgroundTransparency = 1,
-		})
-		local titleTween = TweenService:Create(title, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-			TextTransparency = 1,
-		})
-		local feedbackTween = TweenService:Create(feedback, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-			TextTransparency = 1,
-		})
-		fadeTween:Play()
-		titleTween:Play()
-		feedbackTween:Play()
-		task.delay(0.5, function()
-			if activeRepairMinigame == frame then
-				clearRepairMinigame()
-			end
-		end)
-	end
-
-	local function submitAttempt()
-		local hitPoint = progress
-		if hitPoint >= successStart and hitPoint <= successEnd then
-			finish(true)
-		else
-			finish(false)
-		end
-	end
-
-	repairInputConnection = UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: boolean)
-		if gameProcessed or resolved then
-			return
-		end
-		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.KeyCode == Enum.KeyCode.E then
-			submitAttempt()
-		end
-	end)
-
-	repairRenderConnection = RunService.RenderStepped:Connect(function(dt: number)
-		if resolved then
-			return
-		end
-
-		progress += dt * minigameSpeed
-		needle.Position = UDim2.new(math.clamp(progress, 0, 1), 0, 0, 0)
-
-		if progress >= 1 then
-			finish(false)
-		end
-	end)
+	RepairMinigameUI.Show(drillPart, rootGui, remotes)
 end
 
 function MainHUD.Init()
@@ -1181,15 +1115,91 @@ function MainHUD.Init()
 
 	refreshBuildCosts()
 
+	task.delay(2, function()
+		local rootGui = PlayerGui:FindFirstChild("MainHUDGui")
+		if rootGui == nil or not rootGui:IsA("ScreenGui") then
+			return
+		end
+		local hints = {
+			{ delay = 0, text = "Press [1] [2] [3] to select buildings, click to place" },
+			{ delay = 5, text = "Press [R] to rotate buildings before placing" },
+			{ delay = 10, text = "Walk to the Titan Core and hold [E] to deposit resources" },
+		}
+		for _, hint in hints do
+			task.delay(hint.delay, function()
+				local hintLabel = Instance.new("TextLabel")
+				hintLabel.Name = "TutorialHint"
+				hintLabel.AnchorPoint = Vector2.new(0.5, 1)
+				hintLabel.Position = UDim2.new(0.5, 0, 0.92, 0)
+				hintLabel.Size = UDim2.new(0.35, 0, 0, 28)
+				hintLabel.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
+				hintLabel.BackgroundTransparency = 0.2
+				hintLabel.Font = Enum.Font.GothamSemibold
+				hintLabel.TextScaled = true
+				hintLabel.TextColor3 = Color3.fromRGB(220, 220, 200)
+				hintLabel.Text = hint.text
+				hintLabel.Parent = rootGui
+
+				local hintCorner = Instance.new("UICorner")
+				hintCorner.CornerRadius = UDim.new(0, 4)
+				hintCorner.Parent = hintLabel
+
+				task.delay(4, function()
+					if hintLabel.Parent ~= nil then
+						local fade = TweenService:Create(hintLabel, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+							TextTransparency = 1,
+							BackgroundTransparency = 1,
+						})
+						fade:Play()
+						fade.Completed:Connect(function()
+							hintLabel:Destroy()
+						end)
+					end
+				end)
+			end)
+		end
+	end)
+
 	local nextWaveTimeAttr = remotes.Folder:GetAttribute("NextWaveTime")
 	if typeof(nextWaveTimeAttr) == "number" then
 		local remaining = math.max(0, (nextWaveTimeAttr :: number) - os.time())
 		updateWaveTimer(remaining)
 	end
 
-	RunService.Heartbeat:Connect(updateDismantleBars)
+	local dismantleBarAccum = 0
+	RunService.Heartbeat:Connect(function(dt: number)
+		dismantleBarAccum += dt
+		if dismantleBarAccum >= 0.1 then
+			dismantleBarAccum = 0
+			updateDismantleBars()
+		end
+	end)
 
 	task.spawn(watchTitanAttributes)
+
+	task.spawn(function()
+		local titanCore: BasePart? = nil
+		for _, tagged in CollectionService:GetTagged("TitanObjective") do
+			if tagged:IsA("BasePart") then
+				titanCore = tagged
+				break
+			end
+		end
+		while true do
+			task.wait(0.5)
+			if titanDistanceLabel == nil then
+				continue
+			end
+			local character = LocalPlayer.Character
+			local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
+			if root == nil or not root:IsA("BasePart") or titanCore == nil then
+				titanDistanceLabel.Text = ""
+				continue
+			end
+			local dist = math.floor((root.Position - titanCore.Position).Magnitude + 0.5)
+			titanDistanceLabel.Text = ("%dm to Core"):format(dist)
+		end
+	end)
 end
 
 function MainHUD.ConnectWaveTimerZero(callback: () -> ()): RBXScriptConnection
