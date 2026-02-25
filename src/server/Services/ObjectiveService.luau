@@ -5,24 +5,38 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Constants = require(Shared:WaitForChild("Constants"))
 local RemotesModule = require(Shared:WaitForChild("Remotes"))
 local TheftComponent = require(Shared:WaitForChild("TheftComponent"))
+local EconomyService = require(script.Parent:WaitForChild("EconomyService"))
 
 local ObjectiveService = {}
-ObjectiveService.__index = ObjectiveService
 
 local TITAN_TAG = "TitanObjective"
 local TITAN_MODEL_NAME = "TitanChassis"
 local TITAN_CORE_NAME = "TitanCore"
 local ATTR_INTEGRITY = "TitanIntegrity"
 local ATTR_STAGE = "TitanStage"
+local ATTR_GAME_STATE = "GameState"
 
 local remotes = RemotesModule.Get()
+local gameStateSignal = Instance.new("BindableEvent")
+
 local titanModel: Model? = nil
 local titanCore: BasePart? = nil
+local depositPrompt: ProximityPrompt? = nil
 local integrity = 100
-local completedStages: { [number]: true } = {}
-local isGameOver = false
+local currentStage = 0
+local gameState = "playing"
+local sessionStartTime = 0
+
+local STAGE_VISUALS = {
+	[0] = { color = Color3.fromRGB(100, 110, 125), material = Enum.Material.DiamondPlate },
+	[1] = { color = Color3.fromRGB(120, 135, 160), material = Enum.Material.DiamondPlate },
+	[2] = { color = Color3.fromRGB(150, 170, 200), material = Enum.Material.Metal },
+	[3] = { color = Color3.fromRGB(185, 200, 230), material = Enum.Material.SmoothPlastic },
+	[4] = { color = Color3.fromRGB(220, 230, 255), material = Enum.Material.Neon },
+}
 
 local function resolveMapCenterY(): number
 	local rayResult = Workspace:Raycast(Vector3.new(0, 200, 0), Vector3.new(0, -500, 0))
@@ -32,11 +46,141 @@ local function resolveMapCenterY(): number
 	return 0
 end
 
+local function setGameState(newState: string)
+	gameState = newState
+	if titanModel ~= nil then
+		titanModel:SetAttribute(ATTR_GAME_STATE, gameState)
+	end
+	gameStateSignal:Fire(newState)
+end
+
 local function setIntegrity(value: number)
 	integrity = math.clamp(value, 0, 100)
 	if titanModel ~= nil then
 		titanModel:SetAttribute(ATTR_INTEGRITY, integrity)
 	end
+end
+
+local function updateTitanVisuals(stage: number)
+	local core = titanCore
+	if core == nil then
+		return
+	end
+
+	local visuals = STAGE_VISUALS[stage]
+	if visuals then
+		core.Color = visuals.color
+		core.Material = visuals.material
+	end
+
+	local light = core:FindFirstChild("TitanGlow") :: PointLight?
+	if stage >= 1 and light == nil then
+		local newLight = Instance.new("PointLight")
+		newLight.Name = "TitanGlow"
+		newLight.Color = Color3.fromRGB(200, 220, 255)
+		newLight.Parent = core
+		light = newLight
+	end
+	if light ~= nil then
+		light.Brightness = stage * 1.5
+		light.Range = 15 + stage * 5
+	end
+end
+
+local function updatePromptText()
+	if depositPrompt == nil then
+		return
+	end
+
+	local nextStage = currentStage + 1
+	if nextStage > 4 then
+		depositPrompt.Enabled = false
+		return
+	end
+
+	local req = Constants.TITAN.Stages[nextStage]
+	if req.steel > 0 then
+		depositPrompt.ActionText = ("Stage %d: %d Scrap + %d Steel"):format(nextStage, req.scrap, req.steel)
+	else
+		depositPrompt.ActionText = ("Stage %d: %d Scrap"):format(nextStage, req.scrap)
+	end
+end
+
+local function triggerGameOver()
+	if gameState == "defeat" or gameState == "victory" then
+		return
+	end
+	setGameState("defeat")
+	remotes.GlobalGameOver:FireAllClients()
+end
+
+local function triggerVictory()
+	if gameState ~= "final_stand" then
+		return
+	end
+	setGameState("victory")
+	remotes.GlobalVictory:FireAllClients()
+end
+
+local function startFinalStand()
+	setGameState("final_stand")
+	remotes.FinalStandStarted:FireAllClients()
+
+	task.delay(Constants.TITAN.FinalStandDurationSeconds, function()
+		if gameState == "final_stand" and integrity > 0 then
+			triggerVictory()
+		end
+	end)
+end
+
+function ObjectiveService.CompleteStage(stageNumber: number): boolean
+	if stageNumber < 1 or stageNumber > 4 then
+		return false
+	end
+	if stageNumber ~= currentStage + 1 then
+		return false
+	end
+
+	local req = Constants.TITAN.Stages[stageNumber]
+	if EconomyService.GetScrap() < req.scrap then
+		return false
+	end
+	if req.steel > 0 and EconomyService.GetStormSteel() < req.steel then
+		return false
+	end
+
+	if not EconomyService.DeductScrap(req.scrap) then
+		return false
+	end
+	if req.steel > 0 then
+		if not EconomyService.DeductStormSteel(req.steel) then
+			EconomyService.AddScrap(req.scrap)
+			return false
+		end
+	end
+
+	currentStage = stageNumber
+	if titanModel ~= nil then
+		titanModel:SetAttribute(ATTR_STAGE, currentStage)
+	end
+
+	setIntegrity(math.min(100, integrity + Constants.TITAN.IntegrityRepairPerStage))
+	updateTitanVisuals(currentStage)
+	updatePromptText()
+	remotes.TitanStageCompleted:FireAllClients(currentStage)
+
+	if currentStage >= 4 then
+		task.defer(startFinalStand)
+	end
+
+	return true
+end
+
+local function onDepositTriggered(_player: Player)
+	if gameState ~= "playing" then
+		return
+	end
+	ObjectiveService.CompleteStage(currentStage + 1)
 end
 
 local function createTitan(): (Model, BasePart)
@@ -65,10 +209,22 @@ local function createTitan(): (Model, BasePart)
 	core.Position = Vector3.new(0, centerY + 6, 0)
 	core.Parent = model
 
+	local prompt = Instance.new("ProximityPrompt")
+	prompt.ObjectText = "Titan Core"
+	prompt.ActionText = "Stage 1: 200 Scrap"
+	prompt.HoldDuration = 1.5
+	prompt.MaxActivationDistance = Constants.TITAN.DepositRange
+	prompt.RequiresLineOfSight = false
+	prompt.Parent = core
+	depositPrompt = prompt
+
+	prompt.Triggered:Connect(onDepositTriggered)
+
 	model.PrimaryPart = core
 	model.Parent = Workspace
 	model:SetAttribute(ATTR_INTEGRITY, integrity)
 	model:SetAttribute(ATTR_STAGE, 0)
+	model:SetAttribute(ATTR_GAME_STATE, "playing")
 
 	CollectionService:AddTag(model, TITAN_TAG)
 	CollectionService:AddTag(core, TITAN_TAG)
@@ -79,21 +235,13 @@ local function createTitan(): (Model, BasePart)
 	return model, core
 end
 
-local function triggerGameOver()
-	if isGameOver then
-		return
-	end
-	isGameOver = true
-	remotes.GlobalGameOver:FireAllClients()
-end
-
 local function startIntegrityDrainLoop()
 	task.spawn(function()
 		local lastTick = os.clock()
 		while true do
 			task.wait(0.2)
-			if isGameOver then
-				continue
+			if gameState == "defeat" or gameState == "victory" then
+				break
 			end
 			local core = titanCore
 			if core == nil or core.Parent == nil then
@@ -119,35 +267,49 @@ function ObjectiveService.GetTitanCore(): BasePart?
 	return titanCore
 end
 
+function ObjectiveService.GetTitanModel(): Model?
+	return titanModel
+end
+
 function ObjectiveService.GetIntegrity(): number
 	return integrity
 end
 
-function ObjectiveService.CompleteStage(stageNumber: number): boolean
-	if stageNumber < 1 or stageNumber > 4 then
-		return false
-	end
-	if completedStages[stageNumber] then
-		return false
-	end
+function ObjectiveService.GetCurrentStage(): number
+	return currentStage
+end
 
-	completedStages[stageNumber] = true
-	local model = titanModel
-	if model ~= nil then
-		model:SetAttribute(ATTR_STAGE, stageNumber)
-	end
+function ObjectiveService.GetGameState(): string
+	return gameState
+end
 
-	-- Titan repairs only on stage completion.
-	setIntegrity(integrity + 25)
-	return true
+function ObjectiveService.ConnectGameStateChanged(callback: (string) -> ()): RBXScriptConnection
+	return gameStateSignal.Event:Connect(callback)
 end
 
 function ObjectiveService.Init(): ()
+	sessionStartTime = os.clock()
+
 	local model, core = createTitan()
 	titanModel = model
 	titanCore = core
 	setIntegrity(100)
+	updateTitanVisuals(0)
+	updatePromptText()
 	startIntegrityDrainLoop()
+
+	remotes.RequestSessionStats.OnServerInvoke = function(_player: Player)
+		local EnemyService = require(script.Parent:WaitForChild("EnemyService"))
+		local BuildingService = require(script.Parent:WaitForChild("BuildingService"))
+		return {
+			scrapGathered = EconomyService.GetTotalScrapGathered(),
+			ratsKilled = EnemyService.GetTotalKills(),
+			buildingsLost = BuildingService.GetBuildingsLost(),
+			stagesCompleted = currentStage,
+			wavesCompleted = EnemyService.GetCurrentWave(),
+			timeElapsed = os.clock() - sessionStartTime,
+		}
+	end
 end
 
 return ObjectiveService

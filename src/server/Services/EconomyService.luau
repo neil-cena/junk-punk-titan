@@ -16,6 +16,7 @@ EconomyService.__index = EconomyService
 
 local teamScrap = 0
 local stormSteel = 0
+local totalScrapGathered = 0
 local remotes = RemotesModule.Get()
 local deathPenaltyCooldowns: { [number]: number } = {}
 
@@ -62,6 +63,7 @@ function EconomyService.AddScrap(amount: number): number
 		return teamScrap
 	end
 	teamScrap += amount
+	totalScrapGathered += amount
 	remotes.ScrapUpdated:FireAllClients(teamScrap)
 	return teamScrap
 end
@@ -81,6 +83,28 @@ end
 
 function EconomyService.GetStormSteel(): number
 	return stormSteel
+end
+
+function EconomyService.GetTotalScrapGathered(): number
+	return totalScrapGathered
+end
+
+function EconomyService.DeductScrap(amount: number): boolean
+	if amount <= 0 or teamScrap < amount then
+		return false
+	end
+	teamScrap -= amount
+	remotes.ScrapUpdated:FireAllClients(teamScrap)
+	return true
+end
+
+function EconomyService.DeductStormSteel(amount: number): boolean
+	if amount <= 0 or stormSteel < amount then
+		return false
+	end
+	stormSteel -= amount
+	remotes.StormSteelUpdated:FireAllClients(stormSteel)
+	return true
 end
 
 local function getBaseCost(buildingType: BuildingType): number?

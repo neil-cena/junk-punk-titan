@@ -521,6 +521,41 @@ function VFXController.Init()
 	remotes.DrillRepaired.OnClientEvent:Connect(function(position: Vector3)
 		playRepairSuccessFx(position)
 	end)
+	remotes.GlobalVictory.OnClientEvent:Connect(function()
+		local titanCore: BasePart? = nil
+		for _, tagged in CollectionService:GetTagged("TitanObjective") do
+			if tagged:IsA("BasePart") then
+				titanCore = tagged
+				break
+			end
+		end
+		if titanCore == nil then
+			return
+		end
+
+		local sphere = Instance.new("Part")
+		sphere.Name = "VictoryShockwave"
+		sphere.Shape = Enum.PartType.Ball
+		sphere.Material = Enum.Material.Neon
+		sphere.Color = Color3.fromRGB(255, 230, 100)
+		sphere.Anchored = true
+		sphere.CanCollide = false
+		sphere.Size = Vector3.new(4, 4, 4)
+		sphere.Position = titanCore.Position
+		sphere.Transparency = 0.3
+		sphere.Parent = Workspace
+
+		TweenService:Create(sphere, TweenInfo.new(2.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			Size = Vector3.new(500, 500, 500),
+			Transparency = 1,
+		}):Play()
+
+		task.delay(2.6, function()
+			if sphere.Parent ~= nil then
+				sphere:Destroy()
+			end
+		end)
+	end)
 	MainHUD.ConnectWaveTimerZero(function()
 		playWaveHorn()
 	end)

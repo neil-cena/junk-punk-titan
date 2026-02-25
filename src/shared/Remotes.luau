@@ -27,6 +27,10 @@ local RemoteNames = {
 	WaveStarted = "WaveStarted",
 	UpdateWaveTimer = "UpdateWaveTimer",
 	GlobalGameOver = "GlobalGameOver",
+	GlobalVictory = "GlobalVictory",
+	TitanStageCompleted = "TitanStageCompleted",
+	FinalStandStarted = "FinalStandStarted",
+	RequestSessionStats = "RequestSessionStats",
 	RepairMinigameResult = "RepairMinigameResult",
 	DrillRepaired = "DrillRepaired",
 }
@@ -110,6 +114,10 @@ function Remotes.Get()
 			WaveStarted = getOrCreateRemoteEvent(folder, RemoteNames.WaveStarted),
 			UpdateWaveTimer = getOrCreateRemoteEvent(folder, RemoteNames.UpdateWaveTimer),
 			GlobalGameOver = getOrCreateRemoteEvent(folder, RemoteNames.GlobalGameOver),
+			GlobalVictory = getOrCreateRemoteEvent(folder, RemoteNames.GlobalVictory),
+			TitanStageCompleted = getOrCreateRemoteEvent(folder, RemoteNames.TitanStageCompleted),
+			FinalStandStarted = getOrCreateRemoteEvent(folder, RemoteNames.FinalStandStarted),
+			RequestSessionStats = getOrCreateRemoteFunction(folder, RemoteNames.RequestSessionStats),
 			RepairMinigameResult = getOrCreateRemoteEvent(folder, RemoteNames.RepairMinigameResult),
 			DrillRepaired = getOrCreateRemoteEvent(folder, RemoteNames.DrillRepaired),
 		}
@@ -140,6 +148,10 @@ function Remotes.Get()
 		WaveStarted = waitForRemoteEvent(folder, RemoteNames.WaveStarted),
 		UpdateWaveTimer = waitForRemoteEvent(folder, RemoteNames.UpdateWaveTimer),
 		GlobalGameOver = waitForRemoteEvent(folder, RemoteNames.GlobalGameOver),
+		GlobalVictory = waitForRemoteEvent(folder, RemoteNames.GlobalVictory),
+		TitanStageCompleted = waitForRemoteEvent(folder, RemoteNames.TitanStageCompleted),
+		FinalStandStarted = waitForRemoteEvent(folder, RemoteNames.FinalStandStarted),
+		RequestSessionStats = waitForRemoteFunction(folder, RemoteNames.RequestSessionStats),
 		RepairMinigameResult = waitForRemoteEvent(folder, RemoteNames.RepairMinigameResult),
 		DrillRepaired = waitForRemoteEvent(folder, RemoteNames.DrillRepaired),
 	}

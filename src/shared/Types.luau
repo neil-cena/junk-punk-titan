@@ -37,4 +37,13 @@ export type BlueprintData = {
 
 export type ResourceType = "Scrap" | "StormHardenedSteel"
 
+export type SessionStats = {
+	scrapGathered: number,
+	ratsKilled: number,
+	buildingsLost: number,
+	stagesCompleted: number,
+	wavesCompleted: number,
+	timeElapsed: number,
+}
+
 return {}

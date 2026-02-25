@@ -12,11 +12,14 @@ local RemotesModule = require(Shared:WaitForChild("Remotes"))
 local EconomyService = require(script.Parent:WaitForChild("EconomyService"))
 local BuildingService = require(script.Parent:WaitForChild("BuildingService"))
 local PlayerTrackingService = require(script.Parent:WaitForChild("PlayerTrackingService"))
+local ObjectiveService = require(script.Parent:WaitForChild("ObjectiveService"))
 
 local StormService = {}
 
 local remotes = RemotesModule.Get()
 local activeStorm = false
+local permanentStorm = false
+local gameActive = true
 local tetherPads: { BasePart } = {}
 local activeStormSteel: { BasePart } = {}
 
@@ -160,7 +163,9 @@ local function runStorm()
 	spawnStormSteelDuringStorm()
 
 	local elapsed = 0
-	while activeStorm and elapsed < Constants.STORM.DurationSeconds do
+	local duration = if permanentStorm then math.huge else Constants.STORM.DurationSeconds
+
+	while activeStorm and elapsed < duration and gameActive do
 		task.wait(1)
 		elapsed += 1
 
@@ -170,6 +175,10 @@ local function runStorm()
 
 		if occupiedPads < neededPads then
 			applyStormWindDamage()
+		end
+
+		if permanentStorm and elapsed % 30 == 0 then
+			spawnStormSteelDuringStorm()
 		end
 	end
 
@@ -189,11 +198,36 @@ function StormService.TriggerStormNow(): boolean
 	return true
 end
 
+function StormService.StartPermanentStorm(): ()
+	permanentStorm = true
+	if activeStorm then
+		return
+	end
+	task.spawn(runStorm)
+end
+
+function StormService.StopStorm(): ()
+	gameActive = false
+	activeStorm = false
+	permanentStorm = false
+	clearTetherPads()
+	clearStormSteel()
+end
+
 function StormService.Init(): ()
+	ObjectiveService.ConnectGameStateChanged(function(state: string)
+		if state == "final_stand" then
+			StormService.StartPermanentStorm()
+		elseif state == "victory" then
+			StormService.StopStorm()
+			remotes.StormEnded:FireAllClients()
+		end
+	end)
+
 	task.spawn(function()
-		while true do
+		while gameActive do
 			task.wait(Constants.STORM.IntervalSeconds)
-			if not activeStorm then
+			if not activeStorm and gameActive then
 				StormService.TriggerStormNow()
 			end
 		end

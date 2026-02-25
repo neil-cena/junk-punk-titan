@@ -1,8 +1,8 @@
 # Junk-Punk Titan: Implementation Strategy
 
-## Current State: ~55-60% Complete
+## Current State: ~75% Complete
 
-Phases 1-2 are done. Security patched, architecture cleaned up, and all core combat/economy/enemy mechanics now match the GDD. The game loop is playable end-to-end except for the win condition (Titan stages) and polish layers. This document tracks our phased plan to bring the game to full spec.
+Phases 1-3 are done. Security patched, architecture cleaned up, core mechanics match GDD, and the game is now completable end-to-end (4-stage Titan upgrade → Final Stand → Victory/Defeat). Remaining: audio/VFX polish (Phase 4) and UI/UX refactoring (Phase 5).
 
 ---
 
@@ -123,14 +123,69 @@ The game loop is fundamentally incomplete without these.
 
 Without this, the game cannot be completed.
 
-- [ ] **3.1** Design stage cost table — define Scrap + Steel costs for stages 1-4 in `Constants.luau`
-- [ ] **3.2** Create Titan deposit interaction — proximity prompt at Titan Core, hold E to deposit resources
-- [ ] **3.3** Wire up `ObjectiveService.CompleteStage` — trigger when deposit thresholds are met
-- [ ] **3.4** Add Titan visual updates — change Titan appearance on each stage completion
-- [ ] **3.5** Add Titan progress UI — top-right HUD showing integrity bar + stage requirements
-- [ ] **3.6** Implement the 99% Final Stand — permanent storm, infinite elite swarm, hidden 3-5 min timer
-- [ ] **3.7** Implement Victory state — shockwave VFX, all enemies vaporized, VICTORY screen
-- [ ] **3.8** Add session statistics tracking — scrap gathered, rats killed, buildings lost, display on victory/defeat
+- [x] **3.1** Design stage cost table — define Scrap + Steel costs for stages 1-4 in `Constants.luau`
+- [x] **3.2** Create Titan deposit interaction — proximity prompt at Titan Core, hold E to deposit resources
+- [x] **3.3** Wire up `ObjectiveService.CompleteStage` — trigger when deposit thresholds are met
+- [x] **3.4** Add Titan visual updates — change Titan appearance on each stage completion
+- [x] **3.5** Add Titan progress UI — top-right HUD showing integrity bar + stage requirements
+- [x] **3.6** Implement the 99% Final Stand — permanent storm, infinite elite swarm, hidden 3-5 min timer
+- [x] **3.7** Implement Victory state — shockwave VFX, all enemies vaporized, VICTORY screen
+- [x] **3.8** Add session statistics tracking — scrap gathered, rats killed, buildings lost, display on victory/defeat
+
+### Phase 3 Changelog
+
+**New remotes added** (`Remotes.luau`):
+- `GlobalVictory` (RemoteEvent), `TitanStageCompleted` (RemoteEvent), `FinalStandStarted` (RemoteEvent), `RequestSessionStats` (RemoteFunction).
+
+**New type** (`Types.luau`):
+- `SessionStats` — scrapGathered, ratsKilled, buildingsLost, stagesCompleted, wavesCompleted, timeElapsed.
+
+**Modified files:**
+
+- `src/shared/Constants.luau` — Added `TITAN` section:
+  - Stage costs: Stage 1 (200 Scrap), Stage 2 (400 Scrap + 2 Steel), Stage 3 (600 Scrap + 5 Steel), Stage 4 (800 Scrap + 10 Steel).
+  - `IntegrityRepairPerStage = 25`, `DepositRange = 12`, `FinalStandDurationSeconds = 240`, `EliteRatHealthMult = 2.0`, `EliteRatSpeedMult = 1.3`, `EliteSpawnIntervalSeconds = 3`.
+
+- `src/server/Services/ObjectiveService.luau` — Complete rewrite:
+  - **ProximityPrompt deposit**: 1.5s hold on Titan Core, shows next stage requirements. Validates scrap/steel, deducts via `EconomyService.DeductScrap/DeductStormSteel`.
+  - **Stage progression**: `CompleteStage` enforces sequential order (must complete 1→2→3→4). Each stage repairs +25 integrity, updates Titan visual appearance (color, material, PointLight brightness/range per stage).
+  - **Final Stand**: Stage 4 completion fires `FinalStandStarted`, sets `GameState = "final_stand"` attribute on Titan model, starts 240s hidden timer. If integrity > 0 when timer expires → `triggerVictory()`.
+  - **Victory**: Sets `GameState = "victory"`, fires `GlobalVictory` to all clients. EnemyService and StormService react via BindableEvent signal → destroy all enemies, stop storm.
+  - **BindableEvent**: `ConnectGameStateChanged(callback)` API for cross-service signaling without circular dependencies.
+  - **Session stats**: `RequestSessionStats` handler uses lazy `require` at runtime to query `EnemyService.GetTotalKills()`, `BuildingService.GetBuildingsLost()`, `EconomyService.GetTotalScrapGathered()`, plus own `currentStage` and `sessionStartTime`.
+
+- `src/server/Services/EnemyService.luau` — Final Stand + stats:
+  - **Kill counter**: `totalKills` incremented in `handleRatDeath`. Exposed via `GetTotalKills()`.
+  - **Elite rats**: `createScrapRatModel(pos, isElite)` — elite rats have 2x HP (200), 1.3x speed, larger red-tinted body.
+  - **Final Stand spawning**: `startFinalStandSpawning()` — spawns one elite rat every 3 seconds toward Titan/buildings, runs until victory/defeat.
+  - **Game state listener**: Connects to `ObjectiveService.ConnectGameStateChanged`. On "final_stand" → start elite spawning. On "victory"/"defeat" → `StopAll()` destroys all active rats and halts wave loop.
+  - **`gameActive` flag**: Wave loop and HitEnemy handler gate on this flag.
+  - Refactored `SpawnScrapRat` to use shared `spawnRatToward` internal function.
+
+- `src/server/Services/StormService.luau` — Permanent storm + stop:
+  - **Requires ObjectiveService**: Connects to game state changes.
+  - **`StartPermanentStorm()`**: Sets `permanentStorm = true`, storm runs indefinitely (duration = `math.huge`). Respawns steel every 30 seconds.
+  - **`StopStorm()`**: Immediately clears pads, steel, sets `activeStorm = false`.
+  - **Game state listener**: On "final_stand" → permanent storm. On "victory" → stop storm + fire `StormEnded`.
+  - **`gameActive` flag**: Storm interval loop gates on this.
+
+- `src/server/Services/EconomyService.luau` — Stats + deduct methods:
+  - **`totalScrapGathered`**: Running total incremented in `AddScrap`. Exposed via `GetTotalScrapGathered()`.
+  - **`DeductScrap(amount)`**: Subtracts from team pool, fires update. Returns false if insufficient.
+  - **`DeductStormSteel(amount)`**: Same for steel. Used by `ObjectiveService.CompleteStage`.
+
+- `src/server/Services/BuildingService.luau` — Stats:
+  - **`buildingsLostCount`**: Incremented in `RegisterDestroyedSlot`. Exposed via `GetBuildingsLost()`.
+
+- `src/client/UI/MainHUD.luau` — Titan UI + end screens:
+  - **Titan progress panel** (top-right): Shows "STAGE X/4", integrity bar (color-coded green/yellow/red), next stage requirements. Updates via `GetAttributeChangedSignal` on Titan model — no Heartbeat polling.
+  - **Final Stand banner**: Pulsing "FINAL STAND — DEFEND THE TITAN" banner with alternating gold/red text animation.
+  - **Victory screen**: Full overlay with gold "VICTORY" title, session stats, 6s auto-teleport.
+  - **Game over enhanced**: Now displays session stats before teleport.
+  - **Stage completion flash**: Titan stage label flashes yellow on `TitanStageCompleted`.
+
+- `src/client/Controllers/VFXController.luau` — Victory shockwave:
+  - On `GlobalVictory`: spawns expanding golden Neon sphere at Titan Core position (4→500 studs over 2.5s, fading to transparent).
 
 ---
 

@@ -20,6 +20,9 @@ local EnemyService = {}
 
 local remotes = RemotesModule.Get()
 local currentWave = 0
+local totalKills = 0
+local gameActive = true
+local finalStandActive = false
 local activeRats: { [Model]: true } = {}
 local burrowPositions = {
 	Vector3.new(-220, 0.2, -220),
@@ -103,6 +106,8 @@ local function handleRatDeath(ratModel: Model)
 		return
 	end
 
+	totalKills += 1
+
 	local root = ratModel.PrimaryPart
 	local atPosition = if root ~= nil then root.Position else ratModel:GetPivot().Position
 
@@ -129,22 +134,37 @@ local function handleRatDeath(ratModel: Model)
 	end)
 end
 
-local function createScrapRatModel(spawnPosition: Vector3): Model
+local function createScrapRatModel(spawnPosition: Vector3, isElite: boolean?): Model
+	local hp = Constants.COMBAT.RatBaseHealth
+	local speed = 12
+
+	if isElite then
+		hp = math.floor(hp * Constants.TITAN.EliteRatHealthMult)
+		speed = speed * Constants.TITAN.EliteRatSpeedMult
+	end
+
 	local rat = Instance.new("Model")
 	rat.Name = "ScrapRat"
 
 	local root = Instance.new("Part")
 	root.Name = "HumanoidRootPart"
-	root.Size = Vector3.new(2, 2, 2)
 	root.Anchored = false
 	root.CanCollide = true
 	root.Position = spawnPosition
 	root.Parent = rat
 
+	if isElite then
+		root.Size = Vector3.new(2.5, 2.5, 2.5)
+		root.Color = Color3.fromRGB(180, 50, 50)
+		root.Material = Enum.Material.Metal
+	else
+		root.Size = Vector3.new(2, 2, 2)
+	end
+
 	local humanoid = Instance.new("Humanoid")
-	humanoid.MaxHealth = Constants.COMBAT.RatBaseHealth
-	humanoid.Health = Constants.COMBAT.RatBaseHealth
-	humanoid.WalkSpeed = 12
+	humanoid.MaxHealth = hp
+	humanoid.Health = hp
+	humanoid.WalkSpeed = speed
 	humanoid.Parent = rat
 
 	rat.PrimaryPart = root
@@ -361,21 +381,37 @@ function EnemyService.KillRat(ratModel: Model): boolean
 	return true
 end
 
-function EnemyService.SpawnScrapRat(targetBuilding: BasePart?): Model?
-	if targetBuilding == nil then
-		return nil
-	end
+function EnemyService.GetTotalKills(): number
+	return totalKills
+end
 
+function EnemyService.StopAll(): ()
+	gameActive = false
+	finalStandActive = false
+	for rat in activeRats do
+		if rat.Parent ~= nil then
+			local state = ratStates[rat]
+			if state ~= nil then
+				state.despawning = true
+			end
+			rat:Destroy()
+		end
+	end
+	activeRats = {}
+	ratStates = {}
+end
+
+local function spawnRatToward(targetBuilding: BasePart, isElite: boolean?)
 	local radius = Constants.WAVES.SpawnRadius
 	local spawnPosition = targetBuilding.Position + Vector3.new(math.random(-radius, radius), 3, math.random(-radius, radius))
-	local ratModel = createScrapRatModel(spawnPosition)
+	local ratModel = createScrapRatModel(spawnPosition, isElite)
 	activeRats[ratModel] = true
 
 	local humanoid = ratModel:FindFirstChildOfClass("Humanoid")
 	local root = ratModel.PrimaryPart
 
 	if humanoid == nil or root == nil then
-		return ratModel
+		return
 	end
 
 	local path = PathfindingService:CreatePath()
@@ -389,7 +425,7 @@ function EnemyService.SpawnScrapRat(targetBuilding: BasePart?): Model?
 				if targetBuilding.Parent == nil and activeRats[ratModel] ~= nil then
 					despawnRat(ratModel)
 				end
-				return ratModel
+				return
 			end
 			moveToWithShortTimeout(humanoid, waypoint.Position, 0.9)
 		end
@@ -398,7 +434,7 @@ function EnemyService.SpawnScrapRat(targetBuilding: BasePart?): Model?
 	end
 
 	if humanoid.Health <= 0 or activeRats[ratModel] == nil or ratModel.Parent == nil then
-		return ratModel
+		return
 	end
 
 	if targetBuilding.Parent ~= nil then
@@ -421,8 +457,15 @@ function EnemyService.SpawnScrapRat(targetBuilding: BasePart?): Model?
 			end
 		end)
 	end
+end
 
-	return ratModel
+function EnemyService.SpawnScrapRat(targetBuilding: BasePart?, isElite: boolean?): ()
+	if targetBuilding == nil then
+		return
+	end
+	task.spawn(function()
+		spawnRatToward(targetBuilding, isElite)
+	end)
 end
 
 function EnemyService.SpawnWave(waveNumber: number): ()
@@ -440,9 +483,7 @@ function EnemyService.SpawnWave(waveNumber: number): ()
 			targetBuilding = ObjectiveService.GetTitanCore()
 		end
 		if targetBuilding ~= nil then
-			task.spawn(function()
-				EnemyService.SpawnScrapRat(targetBuilding)
-			end)
+			EnemyService.SpawnScrapRat(targetBuilding)
 		end
 	end
 end
@@ -451,10 +492,26 @@ function EnemyService.GetCurrentWave(): number
 	return currentWave
 end
 
+local function startFinalStandSpawning()
+	finalStandActive = true
+	task.spawn(function()
+		while finalStandActive and gameActive do
+			local target = getTargetBuilding() or ObjectiveService.GetTitanCore()
+			if target ~= nil then
+				EnemyService.SpawnScrapRat(target, true)
+			end
+			task.wait(Constants.TITAN.EliteSpawnIntervalSeconds)
+		end
+	end)
+end
+
 function EnemyService.Init(): ()
 	RemoteGuard.Register("HitEnemy", 5, 1)
 
 	remotes.HitEnemy.OnServerEvent:Connect(function(player: Player, ratModelOrPart: Instance)
+		if not gameActive then
+			return
+		end
 		if not RemoteGuard.Check("HitEnemy", player) then
 			return
 		end
@@ -503,13 +560,24 @@ function EnemyService.Init(): ()
 		dismantleAndDestroyBuilding(dismantledPart, ratModel)
 	end)
 
+	ObjectiveService.ConnectGameStateChanged(function(state: string)
+		if state == "final_stand" then
+			startFinalStandSpawning()
+		elseif state == "victory" or state == "defeat" then
+			EnemyService.StopAll()
+		end
+	end)
+
 	task.spawn(function()
-		while true do
+		while gameActive do
 			local remaining = Constants.WAVES.IntervalSeconds
-			while remaining > 0 do
+			while remaining > 0 and gameActive do
 				publishNextWaveTimer(remaining)
 				task.wait(1)
 				remaining -= 1
+			end
+			if not gameActive then
+				break
 			end
 			publishNextWaveTimer(0)
 			local nextWave = currentWave + 1

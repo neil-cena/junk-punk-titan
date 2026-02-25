@@ -38,6 +38,7 @@ local builtCounts: { [BuildingType]: number } = {
 	Drill = 0,
 	Wall = 0,
 }
+local buildingsLostCount = 0
 
 local function isPositionValid(player: Player, requestedPosition: Vector3): (boolean, Vector3?)
 	local character = player.Character
@@ -362,10 +363,15 @@ end
 function BuildingService.RegisterDestroyedSlot(position: Vector3, buildingType: string?)
 	local key = positionSlotKey(position)
 	blockedSlots[key] = os.clock() + Constants.BUILDING.RebuildCooldownSeconds
+	buildingsLostCount += 1
 
 	if buildingType ~= nil and builtCounts[buildingType] ~= nil then
 		builtCounts[buildingType] = math.max(0, builtCounts[buildingType] - 1)
 	end
+end
+
+function BuildingService.GetBuildingsLost(): number
+	return buildingsLostCount
 end
 
 function BuildingService.Init(): ()

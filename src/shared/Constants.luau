@@ -119,6 +119,21 @@ local Constants = {
 		SpawnRadius = 180,
 		DespawnSeconds = 45,
 	},
+
+	TITAN = {
+		Stages = {
+			[1] = { scrap = 200, steel = 0 },
+			[2] = { scrap = 400, steel = 2 },
+			[3] = { scrap = 600, steel = 5 },
+			[4] = { scrap = 800, steel = 10 },
+		},
+		IntegrityRepairPerStage = 25,
+		DepositRange = 12,
+		FinalStandDurationSeconds = 240,
+		EliteRatHealthMult = 2.0,
+		EliteRatSpeedMult = 1.3,
+		EliteSpawnIntervalSeconds = 3,
+	},
 }
 
 return Constants

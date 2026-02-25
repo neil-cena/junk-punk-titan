@@ -1,0 +1,74 @@
+PROJECT: Junk-Punk Titan | Roblox Luau | Rojo-managed
+REPO: c:\Users\neila\OneDrive\Desktop\job-exams\junk-punk-titan
+COMPLETION: ~75% | Phases 1-3 DONE | Phases 4-5 TODO
+GDD_PATH: Junk-Punk Titan_ Complete Game Design Document.pdf (in Cursor workspace storage)
+QA_PATH: Junk-Punk Titan_ Comprehensive QA Test Plan.pdf (in Cursor workspace storage)
+STRATEGY: STRATEGY.md (root) — master task tracker, changelogs per phase
+
+=== FILE MAP ===
+src/shared/Constants.luau — all tuning values. Sections: BASE_COSTS, ROLE_DEFINITIONS, THEFT_SETTINGS, BUILDING, SCALING, MAINTENANCE, WAVES, COMBAT, ECONOMY, STORM, SCRAP_SPAWNS, TITAN
+src/shared/Types.luau — Luau types: RoleName, BuildingType, RoleDefinition, TheftData, LegacyBuff, PurchaseResponse, BlueprintData, ResourceType, SessionStats
+src/shared/Remotes.luau — remote registry. Server creates, client waits. Names map at top. Remotes.Get() returns typed table.
+src/shared/TheftComponent.luau — reusable dismantle progress tracker. Attach(part), StartDismantle(part, rat), ConnectCompleted(cb)
+src/shared/Utils.luau — SnapToGrid(pos,gridSize), RemoveToolByName(player,name)
+src/server/init.server.luau — bootstrap. Init order: PlayerTracking→Economy→Building→Resource→Objective→Role→Enemy→Storm→ScrapSpawn→Debug. All pcall-wrapped.
+src/server/RemoteGuard.luau — rate limiter. Register(name,maxCalls,windowSec), Check(name,player)→bool. Auto-cleanup on PlayerRemoving.
+src/server/Services/PlayerTrackingService.luau — peak/current player count, legacy buff multipliers
+src/server/Services/EconomyService.luau — team scrap pool, storm steel, exponential cost (GROWTH_RATE^count), death penalty (15%, 10s cooldown per player), DeductScrap/DeductStormSteel, GetTotalScrapGathered
+src/server/Services/BuildingService.luau — blueprint placement→ghost→final building. Turrets deal TurretDamage via Humanoid:TakeDamage. Drills rotate+emit. Overlap validation. builtCounts tracks/decrements. BuildingHP attr. GetBuildingsLost counter.
+src/server/Services/ResourceService.luau — drill stability degradation, wrench repair minigame (server validates), pending repair timeout 10s
+src/server/Services/ObjectiveService.luau — Titan core (center map), integrity drain when dismantled. ProximityPrompt deposit. Stage 1-4 costs from Constants.TITAN.Stages. CompleteStage deducts scrap+steel, repairs +25 integrity, updates visuals (color/material/PointLight). Stage 4→startFinalStand (GameState="final_stand", hidden 240s timer). Victory if integrity>0 at timer end. BindableEvent: ConnectGameStateChanged(cb). RequestSessionStats lazy-requires Enemy/Building for stats.
+src/server/Services/RoleService.luau — role lock after first selection. Scrapper/Fixer/Enforcer. Sets player attrs: Role, SpeedMult, RepairMult, DamageMult. Legacy buff from PlayerTrackingService.
+src/server/Services/EnemyService.luau — wave spawning (BaseCount + wave*EnemiesPerWave * difficultyMult). Rats: HP-based (100hp standard, 200hp elite), state machine (approaching→dismantling→fleeing). Distributed targeting (top 3 buildings random). Standard kill: 2-5 scrap. Thief kill: 2-5 + 50% refund bundle. Turrets deal damage via Humanoid:TakeDamage in BuildingService. HitEnemy: server-authoritative damage (ShotgunBaseDamage*DamageMult), Enforcer-only. Final Stand: elite rats every 3s (2x HP, 1.3x speed, red-tinted). gameActive flag gates wave loop. StopAll destroys all rats. GetTotalKills counter.
+src/server/Services/StormService.luau — storm every 600s, 60s duration. Tether pads (3 needed, 2 if player left). Wind damage uses BuildingHP attr (not DismantleProgress). Steel spawns during storm, despawns after. PermanentStorm mode for Final Stand. StopStorm for victory. Listens ConnectGameStateChanged.
+src/server/Services/ScrapSpawnService.luau — loose scrap piles every 15s, 3 per batch, 5 scrap each, 45s despawn, raycast-placed, .Touched pickup
+src/server/Services/DebugService.luau — studio-only commands: SpawnWave, StartStorm, AddScrap
+src/client/init.client.luau — bootstrap. MainHUD→ToolController→BlueprintController→VFXController. All pcall-wrapped.
+src/client/UI/MainHUD.luau — god module (~1000 lines). Scrap display, storm steel, wave timer, role selection, build toolbar, dismantle bars, repair minigame, threat/storm/tether banners, debug panel, Titan progress panel (top-right, attr-watched), Final Stand pulsing banner, victory screen (stats), game over screen (stats). TODO Phase 5: split into focused modules.
+src/client/Controllers/BlueprintController.luau — client ghost preview. Uses Utils.SnapToGrid. StartPlacing/StopPlacing/IsPlacing API.
+src/client/Controllers/ToolController.luau — shotgun (Enforcer-only client check, server-authoritative damage) + wrench (Fixer-only). Role checks on both tools.
+src/client/Controllers/VFXController.luau — object pool for loot fountain gears. Dismantle smoke. Storm lighting/fog. Build flash. Repair sparks. Wave horn. Victory shockwave (expanding golden sphere at Titan).
+
+=== KEY CONSTANTS (current) ===
+BASE_COSTS: Turret=100, Drill=250, Wall=30
+COMBAT: ShotgunBaseDamage=40, ShotgunRange=30, ShotgunCooldown=0.8, RatBaseHealth=100, RatFleeSpeedMult=1.2, StandardKillMin/Max=2/5, ThiefRefund=50%, BundleDespawn=30s
+BUILDING: TurretRange=45, TurretFireInterval=1.5, TurretDamage=15, DefaultHP=100, GridSize=4
+ECONOMY: InitialScrap=100, DeathPenalty=15%, DeathCooldown=10s
+TITAN: Stages=[200/0, 400/2, 600/5, 800/10], IntegrityRepair=25, FinalStand=240s, EliteHP=2x, EliteSpeed=1.3x, EliteInterval=3s
+WAVES: Interval=120s, Base=5, PerWave=2, SpawnRadius=60
+STORM: Interval=600s, Duration=60s, WindDmg=2/s, SteelDrops=5
+
+=== GAME STATE FLOW ===
+"playing" → player deposits enough → "final_stand" (stage 4 complete) → survive 240s → "victory" OR integrity=0 → "defeat"
+GameState attr on TitanChassis model. BindableEvent in ObjectiveService signals EnemyService+StormService.
+
+=== REMOTES ===
+Functions: RequestEconomyState, RequestBuildCosts, UseWrench, FinishBlueprint, RequestSessionStats
+Events: DebugCommand, PlaceBlueprint, BlueprintPlaced, BlueprintFinished, BuildingDismantled, HitEnemy, EnemyKilled, ThreatDetected, ScrapUpdated, StormSteelUpdated, StormStarted, StormEnded, TetherStatus, RoleSelected, WaveStarted, UpdateWaveTimer, GlobalGameOver, GlobalVictory, TitanStageCompleted, FinalStandStarted, RepairMinigameResult, DrillRepaired
+
+=== DEPENDENCY GRAPH (server) ===
+init.server → all services (requires at top, inits sequentially)
+ObjectiveService → Constants, Remotes, TheftComponent, EconomyService
+EnemyService → Constants, Remotes, TheftComponent, EconomyService, BuildingService, ObjectiveService, PlayerTrackingService, RemoteGuard
+StormService → Constants, Remotes, EconomyService, BuildingService, PlayerTrackingService, ObjectiveService
+BuildingService → Constants, Remotes, Types, TheftComponent, Utils, EconomyService, RemoteGuard
+ResourceService → Constants, Remotes, EconomyService, PlayerTrackingService, RemoteGuard
+RoleService → Constants, Remotes, Utils, PlayerTrackingService, RemoteGuard
+ScrapSpawnService → Constants, EconomyService
+No circular deps. ObjectiveService uses lazy require for EnemyService/BuildingService inside RequestSessionStats handler.
+
+=== PHASE STATUS ===
+Phase 1: DONE (12/12) — security, architecture, critical bugs
+Phase 2: DONE (12/12) — combat, economy, enemies, core mechanics
+Phase 3: DONE (8/8) — win condition, Titan stages, Final Stand, victory/defeat, stats
+Phase 4: TODO (10 items) — audio, VFX polish
+Phase 5: TODO (10 items) — UI refactor, responsive layout, settings, tutorial
+
+=== KNOWN REMAINING ISSUES ===
+- MainHUD is ~1000 lines (god module) — split in Phase 5
+- UI uses fromOffset (fixed pixel) — convert to responsive in Phase 5
+- No audio at all — Phase 4
+- No persistence/save system
+- No tutorial/onboarding
+- Heartbeat-driven dismantle bar updates (throttle in Phase 5)
+- Camera shake tweens CurrentCamera.CFrame directly (fix in Phase 4)

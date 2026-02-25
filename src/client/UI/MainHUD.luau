@@ -41,6 +41,12 @@ local wavePulseTween: Tween? = nil
 local wavePulseBackTween: Tween? = nil
 local waveTimerSignal = Instance.new("BindableEvent")
 local gameOverGui: Frame? = nil
+local victoryGui: Frame? = nil
+local titanStageLabel: TextLabel? = nil
+local titanIntegrityFill: Frame? = nil
+local titanIntegrityBar: Frame? = nil
+local titanRequirementLabel: TextLabel? = nil
+local finalStandBanner: TextLabel? = nil
 
 local function animateScrapPop(label: TextLabel)
 	local grow = TweenService:Create(label, TweenInfo.new(0.08, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
@@ -190,17 +196,18 @@ local function showGameOver()
 	title.Text = "THE TITAN HAS COLLAPSED"
 	title.Parent = overlay
 
-	local subtitle = Instance.new("TextLabel")
-	subtitle.Size = UDim2.fromScale(1, 0.08)
-	subtitle.Position = UDim2.new(0, 0, 0.56, 0)
-	subtitle.BackgroundTransparency = 1
-	subtitle.Font = Enum.Font.GothamBold
-	subtitle.TextScaled = true
-	subtitle.TextColor3 = Color3.fromRGB(255, 210, 210)
-	subtitle.Text = "Resetting Session..."
-	subtitle.Parent = overlay
+	local statsLabel = Instance.new("TextLabel")
+	statsLabel.Size = UDim2.new(0.5, 0, 0.25, 0)
+	statsLabel.Position = UDim2.new(0.25, 0, 0.5, 0)
+	statsLabel.BackgroundTransparency = 1
+	statsLabel.Font = Enum.Font.GothamSemibold
+	statsLabel.TextColor3 = Color3.fromRGB(220, 200, 200)
+	statsLabel.TextScaled = true
+	statsLabel.TextWrapped = true
+	statsLabel.Text = buildStatsText()
+	statsLabel.Parent = overlay
 
-	task.delay(3, function()
+	task.delay(5, function()
 		local ok = pcall(function()
 			TeleportService:Teleport(game.PlaceId, LocalPlayer)
 		end)
@@ -489,6 +496,264 @@ local function createDebugPanel(parent: Instance)
 	end)
 end
 
+local function createTitanProgressPanel(parent: Instance)
+	local frame = Instance.new("Frame")
+	frame.Name = "TitanProgress"
+	frame.AnchorPoint = Vector2.new(1, 0)
+	frame.Position = UDim2.new(1, -10, 0, 10)
+	frame.Size = UDim2.fromOffset(210, 110)
+	frame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+	frame.BackgroundTransparency = 0.15
+	frame.Parent = parent
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 6)
+	corner.Parent = frame
+
+	local titleLabel = Instance.new("TextLabel")
+	titleLabel.Name = "Title"
+	titleLabel.Size = UDim2.new(1, -10, 0, 22)
+	titleLabel.Position = UDim2.fromOffset(5, 4)
+	titleLabel.BackgroundTransparency = 1
+	titleLabel.Font = Enum.Font.GothamBlack
+	titleLabel.TextColor3 = Color3.fromRGB(200, 210, 230)
+	titleLabel.TextScaled = true
+	titleLabel.Text = "TITAN - STAGE 0/4"
+	titleLabel.Parent = frame
+	titanStageLabel = titleLabel
+
+	local barBg = Instance.new("Frame")
+	barBg.Name = "IntegrityBarBg"
+	barBg.Size = UDim2.new(1, -20, 0, 16)
+	barBg.Position = UDim2.new(0, 10, 0, 30)
+	barBg.BackgroundColor3 = Color3.fromRGB(60, 20, 20)
+	barBg.BorderSizePixel = 0
+	barBg.Parent = frame
+	titanIntegrityBar = barBg
+
+	local fill = Instance.new("Frame")
+	fill.Name = "Fill"
+	fill.Size = UDim2.fromScale(1, 1)
+	fill.BackgroundColor3 = Color3.fromRGB(80, 200, 100)
+	fill.BorderSizePixel = 0
+	fill.Parent = barBg
+	titanIntegrityFill = fill
+
+	local intLabel = Instance.new("TextLabel")
+	intLabel.Name = "IntLabel"
+	intLabel.Size = UDim2.fromScale(1, 1)
+	intLabel.BackgroundTransparency = 1
+	intLabel.Font = Enum.Font.GothamBold
+	intLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+	intLabel.TextScaled = true
+	intLabel.TextStrokeTransparency = 0.3
+	intLabel.Text = "100%"
+	intLabel.Parent = barBg
+
+	local reqLabel = Instance.new("TextLabel")
+	reqLabel.Name = "Requirements"
+	reqLabel.Size = UDim2.new(1, -10, 0, 44)
+	reqLabel.Position = UDim2.new(0, 5, 0, 52)
+	reqLabel.BackgroundTransparency = 1
+	reqLabel.Font = Enum.Font.GothamSemibold
+	reqLabel.TextColor3 = Color3.fromRGB(200, 200, 180)
+	reqLabel.TextScaled = true
+	reqLabel.TextWrapped = true
+	reqLabel.Text = "Next: 200 Scrap"
+	reqLabel.Parent = frame
+	titanRequirementLabel = reqLabel
+end
+
+local function updateTitanProgress(titanModelInstance: Model)
+	local stageAttr = titanModelInstance:GetAttribute("TitanStage")
+	local integrityAttr = titanModelInstance:GetAttribute("TitanIntegrity")
+	local stage = if typeof(stageAttr) == "number" then math.floor(stageAttr :: number) else 0
+	local intVal = if typeof(integrityAttr) == "number" then (integrityAttr :: number) else 100
+
+	if titanStageLabel then
+		titanStageLabel.Text = ("TITAN - STAGE %d/4"):format(stage)
+	end
+	if titanIntegrityFill then
+		titanIntegrityFill.Size = UDim2.fromScale(math.clamp(intVal / 100, 0, 1), 1)
+		if intVal > 60 then
+			titanIntegrityFill.BackgroundColor3 = Color3.fromRGB(80, 200, 100)
+		elseif intVal > 30 then
+			titanIntegrityFill.BackgroundColor3 = Color3.fromRGB(255, 180, 50)
+		else
+			titanIntegrityFill.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
+		end
+	end
+	if titanIntegrityBar then
+		local intLabel = titanIntegrityBar:FindFirstChild("IntLabel")
+		if intLabel and intLabel:IsA("TextLabel") then
+			intLabel.Text = ("%d%%"):format(math.floor(intVal))
+		end
+	end
+	if titanRequirementLabel then
+		local nextStage = stage + 1
+		if nextStage > 4 then
+			titanRequirementLabel.Text = "All stages complete!"
+		else
+			local req = Constants.TITAN.Stages[nextStage]
+			if req.steel > 0 then
+				titanRequirementLabel.Text = ("Next: %d Scrap, %d Steel"):format(req.scrap, req.steel)
+			else
+				titanRequirementLabel.Text = ("Next: %d Scrap"):format(req.scrap)
+			end
+		end
+	end
+end
+
+local function watchTitanAttributes()
+	local titanModelInstance: Model? = nil
+	for _, tagged in CollectionService:GetTagged("TitanObjective") do
+		if tagged:IsA("Model") then
+			titanModelInstance = tagged
+			break
+		end
+	end
+	if titanModelInstance == nil then
+		task.delay(1, watchTitanAttributes)
+		return
+	end
+
+	updateTitanProgress(titanModelInstance)
+	local model = titanModelInstance :: Model
+	model:GetAttributeChangedSignal("TitanStage"):Connect(function()
+		updateTitanProgress(model)
+	end)
+	model:GetAttributeChangedSignal("TitanIntegrity"):Connect(function()
+		updateTitanProgress(model)
+	end)
+end
+
+local function showFinalStandBanner()
+	local rootGui = PlayerGui:FindFirstChild("MainHUDGui")
+	if rootGui == nil or not rootGui:IsA("ScreenGui") then
+		return
+	end
+
+	if finalStandBanner ~= nil then
+		return
+	end
+
+	local banner = Instance.new("TextLabel")
+	banner.Name = "FinalStandBanner"
+	banner.AnchorPoint = Vector2.new(0.5, 0)
+	banner.Position = UDim2.new(0.5, 0, 0.13, 0)
+	banner.Size = UDim2.fromOffset(480, 40)
+	banner.BackgroundColor3 = Color3.fromRGB(160, 40, 40)
+	banner.BackgroundTransparency = 0.15
+	banner.Font = Enum.Font.GothamBlack
+	banner.TextColor3 = Color3.fromRGB(255, 230, 100)
+	banner.TextScaled = true
+	banner.Text = "FINAL STAND - DEFEND THE TITAN"
+	banner.Parent = rootGui
+	finalStandBanner = banner
+
+	task.spawn(function()
+		while finalStandBanner ~= nil and finalStandBanner.Parent ~= nil do
+			TweenService:Create(finalStandBanner, TweenInfo.new(0.6, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
+				TextColor3 = Color3.fromRGB(255, 100, 100),
+			}):Play()
+			task.wait(0.6)
+			if finalStandBanner == nil then
+				break
+			end
+			TweenService:Create(finalStandBanner, TweenInfo.new(0.6, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
+				TextColor3 = Color3.fromRGB(255, 230, 100),
+			}):Play()
+			task.wait(0.6)
+		end
+	end)
+end
+
+local function buildStatsText(): string
+	local ok, stats = pcall(function()
+		return remotes.RequestSessionStats:InvokeServer()
+	end)
+	if not ok or type(stats) ~= "table" then
+		return ""
+	end
+
+	local elapsed = stats.timeElapsed or 0
+	local mins = math.floor(elapsed / 60)
+	local secs = math.floor(elapsed % 60)
+	return string.format(
+		"Scrap Gathered: %d\nRats Eliminated: %d\nBuildings Lost: %d\nWaves Survived: %d\nTime: %02d:%02d",
+		stats.scrapGathered or 0,
+		stats.ratsKilled or 0,
+		stats.buildingsLost or 0,
+		stats.wavesCompleted or 0,
+		mins, secs
+	)
+end
+
+local function showVictory()
+	if victoryGui ~= nil then
+		return
+	end
+
+	local rootGui = PlayerGui:FindFirstChild("MainHUDGui")
+	if rootGui == nil or not rootGui:IsA("ScreenGui") then
+		return
+	end
+
+	if finalStandBanner ~= nil then
+		finalStandBanner:Destroy()
+		finalStandBanner = nil
+	end
+
+	local overlay = Instance.new("Frame")
+	overlay.Name = "VictoryOverlay"
+	overlay.Size = UDim2.fromScale(1, 1)
+	overlay.BackgroundColor3 = Color3.fromRGB(5, 5, 15)
+	overlay.BackgroundTransparency = 0.15
+	overlay.Parent = rootGui
+	victoryGui = overlay
+
+	local title = Instance.new("TextLabel")
+	title.Size = UDim2.fromScale(0.8, 0.15)
+	title.Position = UDim2.new(0.1, 0, 0.18, 0)
+	title.BackgroundTransparency = 1
+	title.Font = Enum.Font.GothamBlack
+	title.TextScaled = true
+	title.TextColor3 = Color3.fromRGB(255, 230, 80)
+	title.TextStrokeTransparency = 0.3
+	title.Text = "VICTORY"
+	title.Parent = overlay
+
+	local subtitle = Instance.new("TextLabel")
+	subtitle.Size = UDim2.fromScale(0.6, 0.06)
+	subtitle.Position = UDim2.new(0.2, 0, 0.34, 0)
+	subtitle.BackgroundTransparency = 1
+	subtitle.Font = Enum.Font.GothamBold
+	subtitle.TextScaled = true
+	subtitle.TextColor3 = Color3.fromRGB(200, 220, 180)
+	subtitle.Text = "The Titan stands."
+	subtitle.Parent = overlay
+
+	local statsLabel = Instance.new("TextLabel")
+	statsLabel.Size = UDim2.new(0.5, 0, 0.3, 0)
+	statsLabel.Position = UDim2.new(0.25, 0, 0.44, 0)
+	statsLabel.BackgroundTransparency = 1
+	statsLabel.Font = Enum.Font.GothamSemibold
+	statsLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
+	statsLabel.TextScaled = true
+	statsLabel.TextWrapped = true
+	statsLabel.Text = buildStatsText()
+	statsLabel.Parent = overlay
+
+	task.delay(6, function()
+		local teleOk = pcall(function()
+			TeleportService:Teleport(game.PlaceId, LocalPlayer)
+		end)
+		if not teleOk then
+			LocalPlayer:Kick("Victory! Session complete.")
+		end
+	end)
+end
+
 local function createMainHUD()
 	local gui = Instance.new("ScreenGui")
 	gui.Name = "MainHUDGui"
@@ -590,6 +855,7 @@ local function createMainHUD()
 	tetherStatusLabel = tetherLabel
 
 	createToolbar(gui)
+	createTitanProgressPanel(gui)
 	createDebugPanel(gui)
 end
 
@@ -859,6 +1125,23 @@ function MainHUD.Init()
 	remotes.GlobalGameOver.OnClientEvent:Connect(function()
 		showGameOver()
 	end)
+	remotes.GlobalVictory.OnClientEvent:Connect(function()
+		showVictory()
+	end)
+	remotes.FinalStandStarted.OnClientEvent:Connect(function()
+		showFinalStandBanner()
+	end)
+	remotes.TitanStageCompleted.OnClientEvent:Connect(function(_stage: number)
+		if titanStageLabel ~= nil then
+			local original = titanStageLabel.TextColor3
+			TweenService:Create(titanStageLabel, TweenInfo.new(0.15), { TextColor3 = Color3.fromRGB(255, 255, 100) }):Play()
+			task.delay(0.3, function()
+				if titanStageLabel ~= nil then
+					TweenService:Create(titanStageLabel, TweenInfo.new(0.3), { TextColor3 = original }):Play()
+				end
+			end)
+		end
+	end)
 
 	local ok, snapshot = pcall(function()
 		return remotes.RequestEconomyState:InvokeServer()
@@ -884,6 +1167,8 @@ function MainHUD.Init()
 	end
 
 	RunService.Heartbeat:Connect(updateDismantleBars)
+
+	task.spawn(watchTitanAttributes)
 end
 
 function MainHUD.ConnectWaveTimerZero(callback: () -> ()): RBXScriptConnection
