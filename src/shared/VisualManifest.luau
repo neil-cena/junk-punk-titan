@@ -7,17 +7,17 @@ local VisualManifest = {
 		Brightness = 2.2,
 		ClockTime = 12,
 		ExposureCompensation = 0.12,
-		FogColor = Color3.fromRGB(176, 170, 160),
-		FogStart = 350,
-		FogEnd = 900,
+		FogColor = Color3.fromRGB(174, 168, 158),
+		FogStart = 120,
+		FogEnd = 430,
 	},
 
 	Atmosphere = {
 		Color = Color3.fromRGB(188, 180, 168),
 		Decay = Color3.fromRGB(150, 141, 130),
-		Density = 0.18,
+		Density = 0.24,
 		Glare = 0.08,
-		Haze = 1.2,
+		Haze = 1.85,
 	},
 
 	PostProcessing = {
@@ -149,6 +149,8 @@ local VisualManifest = {
 	Map = {
 		BoundaryColor = Color3.fromRGB(72, 61, 50),
 		BoundaryMaterial = Enum.Material.CorrodedMetal,
+		TerrainBandMaterialA = Enum.Material.Asphalt,
+		TerrainBandMaterialB = Enum.Material.Slate,
 		ScatterPropMaterialA = Enum.Material.CorrodedMetal,
 		ScatterPropMaterialB = Enum.Material.Concrete,
 		ScatterPropColorBase = Color3.fromRGB(95, 80, 65),

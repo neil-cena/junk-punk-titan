@@ -115,8 +115,8 @@ end
 
 local function sculptTerrainBand()
 	local terrain = Workspace.Terrain
-	local materialA = Enum.Material.CrackedLava
-	local materialB = Enum.Material.Ground
+	local materialA = VisualManifest.Map.TerrainBandMaterialA
+	local materialB = VisualManifest.Map.TerrainBandMaterialB
 
 	for i = 1, 22 do
 		local angle = (i / 22) * math.pi * 2
