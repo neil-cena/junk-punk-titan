@@ -11,6 +11,7 @@ local LocalPlayer = Players.LocalPlayer
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Constants = require(Shared:WaitForChild("Constants"))
+local AudioManifest = require(Shared:WaitForChild("AudioManifest"))
 local Remotes = require(Shared:WaitForChild("Remotes"))
 local BlueprintController = require(script.Parent:WaitForChild("BlueprintController"))
 local MainHUD = require(script.Parent.Parent:WaitForChild("UI"):WaitForChild("MainHUD"))
@@ -48,6 +49,8 @@ local function findRatModel(instance: Instance?): Model?
 end
 
 local function playShotEffects(rayOrigin: Vector3, rayDirection: Vector3)
+	local muzzlePos = rayOrigin + rayDirection.Unit * 2
+
 	local muzzle = Instance.new("Part")
 	muzzle.Name = "MuzzleFlash"
 	muzzle.Anchored = true
@@ -55,7 +58,7 @@ local function playShotEffects(rayOrigin: Vector3, rayDirection: Vector3)
 	muzzle.Material = Enum.Material.Neon
 	muzzle.Color = Color3.fromRGB(255, 187, 89)
 	muzzle.Size = Vector3.new(0.25, 0.25, 0.25)
-	muzzle.CFrame = CFrame.new(rayOrigin + rayDirection.Unit * 2)
+	muzzle.CFrame = CFrame.new(muzzlePos)
 	muzzle.Parent = Workspace
 
 	local fade = TweenService:Create(muzzle, TweenInfo.new(0.05, Enum.EasingStyle.Linear), {
@@ -67,19 +70,23 @@ local function playShotEffects(rayOrigin: Vector3, rayDirection: Vector3)
 		muzzle:Destroy()
 	end)
 
-	local camera = Workspace.CurrentCamera
-	if camera ~= nil then
-		local original = camera.CFrame
-		local offset = CFrame.new(math.random(-5, 5) / 300, math.random(-5, 5) / 300, 0)
-		local recoilOut = TweenService:Create(camera, TweenInfo.new(0.03, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-			CFrame = original * offset,
-		})
-		recoilOut:Play()
-		recoilOut.Completed:Connect(function()
-			local recoilBack = TweenService:Create(camera, TweenInfo.new(0.05, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
-				CFrame = original,
-			})
-			recoilBack:Play()
+	local shotSound = Instance.new("Sound")
+	shotSound.SoundId = AudioManifest.ShotgunFire
+	shotSound.Volume = 0.5
+	shotSound.PlaybackSpeed = 0.9 + math.random() * 0.2
+	shotSound.RollOffMode = Enum.RollOffMode.Linear
+	shotSound.MaxDistance = 80
+	shotSound.Parent = muzzle
+	shotSound:Play()
+
+	local character = LocalPlayer.Character
+	local humanoid = if character then character:FindFirstChildOfClass("Humanoid") else nil
+	if humanoid then
+		humanoid.CameraOffset = Vector3.new(math.random(-5, 5) / 200, math.random(-5, 5) / 200, 0)
+		task.delay(0.04, function()
+			if humanoid and humanoid.Parent then
+				humanoid.CameraOffset = Vector3.zero
+			end
 		end)
 	end
 end

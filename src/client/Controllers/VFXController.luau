@@ -12,6 +12,7 @@ local LocalPlayer = Players.LocalPlayer
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Constants = require(Shared:WaitForChild("Constants"))
+local AudioManifest = require(Shared:WaitForChild("AudioManifest"))
 local Remotes = require(Shared:WaitForChild("Remotes"))
 local MainHUD = require(script.Parent.Parent:WaitForChild("UI"):WaitForChild("MainHUD"))
 
@@ -37,6 +38,8 @@ local stormRattleSound: Sound? = nil
 local lastWaveHornAt = 0
 local baseAmbient = Lighting.Ambient
 local baseBrightness = Lighting.Brightness
+local ambientMusic: Sound? = nil
+local waveIntensityActive = false
 
 local function createGearPart(): BasePart
 	local part = Instance.new("Part")
@@ -74,11 +77,12 @@ local function playLootFountain(increaseAmount: number, sourcePosition: Vector3?
 		return
 	end
 
-	task.spawn(function()
-		local count = math.clamp(math.floor(increaseAmount / 5), 5, 8)
-		for _ = 1, count do
+	local count = math.clamp(math.floor(increaseAmount / 5), 3, 8)
+	local spawnBase = if sourcePosition ~= nil then sourcePosition else root.Position
+
+	for i = 1, count do
+		task.delay((i - 1) * 0.05, function()
 			local gear = acquireGear()
-			local spawnBase = if sourcePosition ~= nil then sourcePosition else root.Position
 			local startPos = spawnBase + Vector3.new(math.random(-3, 3), math.random(2, 5), math.random(-3, 3))
 			local apexPos = startPos + Vector3.new(math.random(-2, 2), math.random(3, 6), math.random(-2, 2))
 
@@ -102,8 +106,8 @@ local function playLootFountain(increaseAmount: number, sourcePosition: Vector3?
 			end
 
 			releaseGear(gear)
-		end
-	end)
+		end)
+	end
 end
 
 local function createSparkEmitter(part: BasePart): ParticleEmitter
@@ -180,13 +184,67 @@ local function refreshDismantleState(part: BasePart)
 	end
 end
 
+local function playBuildingDestroyFx(position: Vector3)
+	local marker = Instance.new("Part")
+	marker.Name = "BuildDestroyMarker"
+	marker.Anchored = true
+	marker.CanCollide = false
+	marker.Transparency = 1
+	marker.Size = Vector3.new(0.2, 0.2, 0.2)
+	marker.Position = position + Vector3.new(0, 2, 0)
+	marker.Parent = Workspace
+
+	local attachment = Instance.new("Attachment")
+	attachment.Parent = marker
+
+	local dust = Instance.new("ParticleEmitter")
+	dust.Texture = "rbxasset://textures/particles/smoke_main.dds"
+	dust.Color = ColorSequence.new(Color3.fromRGB(150, 130, 100))
+	dust.Lifetime = NumberRange.new(0.8, 1.5)
+	dust.Speed = NumberRange.new(3, 8)
+	dust.SpreadAngle = Vector2.new(90, 90)
+	dust.Rate = 0
+	dust.Size = NumberSequence.new(1.5, 3.0)
+	dust.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.3),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	dust.Parent = attachment
+	dust:Emit(15)
+
+	local debris = Instance.new("ParticleEmitter")
+	debris.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+	debris.Color = ColorSequence.new(Color3.fromRGB(120, 100, 70), Color3.fromRGB(80, 70, 50))
+	debris.Lifetime = NumberRange.new(0.3, 0.6)
+	debris.Speed = NumberRange.new(8, 16)
+	debris.SpreadAngle = Vector2.new(120, 120)
+	debris.Rate = 0
+	debris.Size = NumberSequence.new(0.2, 0.05)
+	debris.Parent = attachment
+	debris:Emit(12)
+
+	local destroySound = Instance.new("Sound")
+	destroySound.SoundId = AudioManifest.BuildDestroy
+	destroySound.Volume = 0.4
+	destroySound.Parent = marker
+	destroySound:Play()
+
+	task.delay(2, function()
+		if marker.Parent ~= nil then
+			marker:Destroy()
+		end
+	end)
+end
+
 local function bindDismantlable(part: BasePart)
+	local lastPosition = part.Position
 	part:GetAttributeChangedSignal("IsBeingDismantled"):Connect(function()
 		refreshDismantleState(part)
 	end)
 	part.AncestryChanged:Connect(function(_, parent)
 		if parent == nil then
 			stopDismantleEffect(part)
+			playBuildingDestroyFx(lastPosition)
 		end
 	end)
 	refreshDismantleState(part)
@@ -280,21 +338,27 @@ local function playBuildFlash(position: Vector3)
 		ring:Destroy()
 	end)
 
-	local camera = Workspace.CurrentCamera
-	if camera ~= nil then
-		local original = camera.CFrame
-		local offset = CFrame.new(math.random(-10, 10) / 120, math.random(-10, 10) / 120, 0)
-		local shakeOut = TweenService:Create(camera, TweenInfo.new(0.06, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-			CFrame = original * offset,
-		})
-		shakeOut:Play()
-		shakeOut.Completed:Connect(function()
-			local shakeBack = TweenService:Create(camera, TweenInfo.new(0.08, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
-				CFrame = original,
-			})
-			shakeBack:Play()
+	local character = LocalPlayer.Character
+	local humanoid = if character then character:FindFirstChildOfClass("Humanoid") else nil
+	if humanoid then
+		humanoid.CameraOffset = Vector3.new(math.random(-10, 10) / 100, math.random(-10, 10) / 100, 0)
+		task.delay(0.08, function()
+			if humanoid and humanoid.Parent then
+				humanoid.CameraOffset = Vector3.zero
+			end
 		end)
 	end
+
+	local buildSound = Instance.new("Sound")
+	buildSound.SoundId = AudioManifest.BuildPlace
+	buildSound.Volume = 0.35
+	buildSound.Parent = Workspace
+	buildSound:Play()
+	buildSound.Ended:Connect(function()
+		if buildSound.Parent ~= nil then
+			buildSound:Destroy()
+		end
+	end)
 end
 
 local function startStormFx()
@@ -327,7 +391,7 @@ local function startStormFx()
 	if stormWindSound == nil then
 		stormWindSound = Instance.new("Sound")
 		stormWindSound.Name = "StormWind"
-		stormWindSound.SoundId = "rbxassetid://9125347736"
+		stormWindSound.SoundId = AudioManifest.StormWind
 		stormWindSound.Looped = true
 		stormWindSound.Volume = 0.3
 		stormWindSound.Parent = SoundService
@@ -337,7 +401,7 @@ local function startStormFx()
 	if stormRattleSound == nil then
 		stormRattleSound = Instance.new("Sound")
 		stormRattleSound.Name = "StormRattle"
-		stormRattleSound.SoundId = "rbxassetid://130797915"
+		stormRattleSound.SoundId = AudioManifest.StormRattle
 		stormRattleSound.Looped = true
 		stormRattleSound.Volume = 0.15
 		stormRattleSound.Parent = SoundService
@@ -416,14 +480,14 @@ local function playRepairSuccessFx(position: Vector3)
 
 	local hiss = Instance.new("Sound")
 	hiss.Name = "RepairSteamHiss"
-	hiss.SoundId = "rbxassetid://9118823107"
+	hiss.SoundId = AudioManifest.RepairHiss
 	hiss.Volume = 0.25
 	hiss.Parent = SoundService
 	hiss:Play()
 
 	local clank = Instance.new("Sound")
 	clank.Name = "RepairClank"
-	clank.SoundId = "rbxassetid://12222253"
+	clank.SoundId = AudioManifest.RepairClank
 	clank.Volume = 0.3
 	clank.Parent = SoundService
 	clank:Play()
@@ -441,6 +505,43 @@ local function playRepairSuccessFx(position: Vector3)
 	end)
 end
 
+local function playEnemyDeathFx(position: Vector3)
+	local marker = Instance.new("Part")
+	marker.Name = "EnemyDeathMarker"
+	marker.Anchored = true
+	marker.CanCollide = false
+	marker.Transparency = 1
+	marker.Size = Vector3.new(0.2, 0.2, 0.2)
+	marker.Position = position + Vector3.new(0, 1, 0)
+	marker.Parent = Workspace
+
+	local attachment = Instance.new("Attachment")
+	attachment.Parent = marker
+
+	local burst = Instance.new("ParticleEmitter")
+	burst.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+	burst.Color = ColorSequence.new(Color3.fromRGB(255, 100, 60), Color3.fromRGB(200, 200, 200))
+	burst.Lifetime = NumberRange.new(0.15, 0.4)
+	burst.Speed = NumberRange.new(5, 12)
+	burst.SpreadAngle = Vector2.new(180, 180)
+	burst.Rate = 0
+	burst.Size = NumberSequence.new(0.15, 0.03)
+	burst.Parent = attachment
+	burst:Emit(20)
+
+	local deathSound = Instance.new("Sound")
+	deathSound.SoundId = AudioManifest.EnemyDeath
+	deathSound.Volume = 0.35
+	deathSound.Parent = marker
+	deathSound:Play()
+
+	task.delay(0.6, function()
+		if marker.Parent ~= nil then
+			marker:Destroy()
+		end
+	end)
+end
+
 local function playWaveHorn()
 	local now = os.clock()
 	if now - lastWaveHornAt < 1 then
@@ -450,7 +551,7 @@ local function playWaveHorn()
 
 	local horn = Instance.new("Sound")
 	horn.Name = "WaveHorn"
-	horn.SoundId = "rbxassetid://9114243152"
+	horn.SoundId = AudioManifest.WaveHorn
 	horn.Volume = 0.45
 	horn.PlaybackSpeed = 0.85
 	horn.RollOffMode = Enum.RollOffMode.Linear
@@ -507,6 +608,7 @@ function VFXController.Init()
 	end)
 	remotes.EnemyKilled.OnClientEvent:Connect(function(position: Vector3)
 		playLootFountain(Constants.COMBAT.StandardKillMaxReward, position)
+		playEnemyDeathFx(position)
 	end)
 
 	remotes.BlueprintFinished.OnClientEvent:Connect(function(_blueprintId: string, position: Vector3)
@@ -559,6 +661,36 @@ function VFXController.Init()
 	MainHUD.ConnectWaveTimerZero(function()
 		playWaveHorn()
 	end)
+
+	remotes.WaveStarted.OnClientEvent:Connect(function()
+		waveIntensityActive = true
+		if ambientMusic and ambientMusic.Parent then
+			TweenService:Create(ambientMusic, TweenInfo.new(1.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+				Volume = 0.25,
+				PlaybackSpeed = 1.08,
+			}):Play()
+		end
+		task.delay(30, function()
+			waveIntensityActive = false
+			if ambientMusic and ambientMusic.Parent then
+				TweenService:Create(ambientMusic, TweenInfo.new(3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+					Volume = 0.1,
+					PlaybackSpeed = 1,
+				}):Play()
+			end
+		end)
+	end)
+
+	ambientMusic = Instance.new("Sound")
+	ambientMusic.Name = "AmbientMusic"
+	ambientMusic.SoundId = AudioManifest.AmbientBase
+	ambientMusic.Looped = true
+	ambientMusic.Volume = 0
+	ambientMusic.Parent = SoundService
+	ambientMusic:Play()
+	TweenService:Create(ambientMusic, TweenInfo.new(4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		Volume = 0.1,
+	}):Play()
 end
 
 return VFXController

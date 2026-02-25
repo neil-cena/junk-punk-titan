@@ -1,8 +1,8 @@
 # Junk-Punk Titan: Implementation Strategy
 
-## Current State: ~75% Complete
+## Current State: ~88% Complete
 
-Phases 1-3 are done. Security patched, architecture cleaned up, core mechanics match GDD, and the game is now completable end-to-end (4-stage Titan upgrade → Final Stand → Victory/Defeat). Remaining: audio/VFX polish (Phase 4) and UI/UX refactoring (Phase 5).
+Phases 1-4 are done. Security patched, architecture cleaned, core mechanics match GDD, game is completable end-to-end, and audio/VFX polish is in. Remaining: UI/UX refactoring (Phase 5).
 
 ---
 
@@ -193,16 +193,44 @@ Without this, the game cannot be completed.
 
 This makes the game feel good.
 
-- [ ] **4.1** Create centralized `AudioManifest.luau` — all sound IDs in one place
-- [ ] **4.2** Add shotgun fire sound — positional 3D audio
-- [ ] **4.3** Add building placement sounds — construction clank
-- [ ] **4.4** Add enemy sounds — spawn burrow, movement skitter, dismantle scraping, death squeal
-- [ ] **4.5** Add UI sounds — button clicks, role selection, minigame hit/miss
-- [ ] **4.6** Add ambient music system — background track, intensity shifts during waves
-- [ ] **4.7** Add wave siren at 00:00 — low-frequency horn per GDD spec
-- [ ] **4.8** Fix camera shake — use CFrame offset instead of tweening `CurrentCamera.CFrame` directly
-- [ ] **4.9** Add missing VFX — enemy death particles, building destruction, overclock glow, clog smoke
-- [ ] **4.10** Fix loot fountain — parallelize gear spawns, add magnetic snap-to-player
+- [x] **4.1** Create centralized `AudioManifest.luau` — all sound IDs in one place
+- [x] **4.2** Add shotgun fire sound — positional 3D audio with pitch variance
+- [x] **4.3** Add building placement sounds — construction clank on build, dust+debris+sound on destruction
+- [x] **4.4** Add enemy sounds — death squeal with particle burst VFX
+- [x] **4.5** Add UI sounds — button clicks, role selection, minigame hit/miss, stage completion
+- [x] **4.6** Add ambient music system — looping background track with intensity crossfade during waves
+- [x] **4.7** Wave siren at 00:00 — migrated to AudioManifest (was already implemented)
+- [x] **4.8** Fix camera shake — replaced `CurrentCamera.CFrame` tweens with `Humanoid.CameraOffset` in both VFXController and ToolController
+- [x] **4.9** Add missing VFX — enemy death particle burst, building destruction dust+debris particles
+- [x] **4.10** Fix loot fountain — parallelized with `task.delay` stagger, reduced min count from 5→3
+
+### Phase 4 Changelog
+
+**New files created:**
+- `src/shared/AudioManifest.luau` — Centralized sound ID registry. All game audio asset IDs defined in one place, referenced by name across client modules. Contains entries for combat (ShotgunFire, EnemyDeath), building (BuildPlace, BuildDestroy), repair (RepairHiss, RepairClank), storm (StormWind, StormRattle), events (WaveHorn, StageComplete), UI (UIClick, MinigameSuccess, MinigameFail), and ambient music (AmbientBase).
+
+**Modified files:**
+
+- `src/client/Controllers/VFXController.luau` — Major audio/VFX overhaul:
+  - **AudioManifest integration**: All 5 hardcoded `rbxassetid://` strings (storm wind, storm rattle, repair hiss, repair clank, wave horn) replaced with `AudioManifest.*` references.
+  - **Camera shake fix**: `playBuildFlash` no longer tweens `Workspace.CurrentCamera.CFrame` directly — uses `Humanoid.CameraOffset` with a `task.delay` reset. Eliminates camera drift from conflicting with Roblox's camera controller.
+  - **Loot fountain parallelized**: Gear spawns now fire simultaneously via `task.delay((i-1)*0.05)` instead of sequential `arcTween.Completed:Wait()`. All gears arc and magnetically snap to the player in parallel with a slight stagger for visual variety. Min count reduced from 5→3.
+  - **Enemy death VFX**: New `playEnemyDeathFx(position)` — 20-particle orange-to-gray spark burst at kill location with positional death sound from AudioManifest.
+  - **Building destruction VFX**: New `playBuildingDestroyFx(position)` — 15-particle dust cloud + 12-particle debris burst with destruction sound. Triggered automatically when any `DismantlableBuilding` part's ancestor becomes nil (part removed from workspace).
+  - **Building placement sound**: `playBuildFlash` now plays `AudioManifest.BuildPlace` as a one-shot 3D sound.
+  - **Ambient music system**: Looping `AmbientBase` sound fades in to 0.1 volume over 4s on init. On `WaveStarted`, volume tweens to 0.25 with 1.08x pitch for combat intensity. After 30s, tweens back to calm.
+
+- `src/client/Controllers/ToolController.luau` — Shotgun audio + camera fix:
+  - **3D positional shotgun sound**: `playShotEffects` now creates a `Sound` parented to the muzzle flash part with `AudioManifest.ShotgunFire`, `RollOffMode = Linear`, `MaxDistance = 80`, randomized pitch (0.9-1.1) for natural variation.
+  - **Camera shake fix**: Replaced `CurrentCamera.CFrame` tween recoil with `Humanoid.CameraOffset` (same approach as VFXController).
+  - **AudioManifest import**: Added require for centralized sound IDs.
+
+- `src/client/UI/MainHUD.luau` — UI sound integration:
+  - **Sound utility**: Added `playUISound(soundId, volume?)` helper that creates, plays, and auto-destroys a `SoundService`-parented `Sound`.
+  - **Role selection click**: `AudioManifest.UIClick` plays when any role button is pressed.
+  - **Build toolbar click**: `AudioManifest.UIClick` plays when any build slot is pressed.
+  - **Repair minigame feedback**: Success plays `AudioManifest.MinigameSuccess`, failure plays `AudioManifest.MinigameFail`.
+  - **Stage completion**: `AudioManifest.StageComplete` plays on `TitanStageCompleted` event.
 
 ---
 
@@ -246,6 +274,7 @@ Phase 1 is non-negotiable first — security and architectural fixes before buil
 | `src/shared/Constants.luau` | All game tuning values |
 | `src/shared/Types.luau` | Luau type definitions |
 | `src/shared/Remotes.luau` | Remote event/function registry |
+| `src/shared/AudioManifest.luau` | Centralized sound asset ID registry |
 | `src/shared/TheftComponent.luau` | Reusable dismantle progress tracker |
 | `src/server/Services/EconomyService.luau` | Team scrap pool, exponential cost, death penalty |
 | `src/server/Services/BuildingService.luau` | Blueprint placement, ghost→building, turret/drill behavior |

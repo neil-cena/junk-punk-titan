@@ -11,8 +11,11 @@ local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui") :: PlayerGui
 
+local SoundService = game:GetService("SoundService")
+
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Constants = require(Shared:WaitForChild("Constants"))
+local AudioManifest = require(Shared:WaitForChild("AudioManifest"))
 local Remotes = require(Shared:WaitForChild("Remotes"))
 local BlueprintController = require(script.Parent.Parent:WaitForChild("Controllers"):WaitForChild("BlueprintController"))
 
@@ -47,6 +50,19 @@ local titanIntegrityFill: Frame? = nil
 local titanIntegrityBar: Frame? = nil
 local titanRequirementLabel: TextLabel? = nil
 local finalStandBanner: TextLabel? = nil
+
+local function playUISound(soundId: string, volume: number?)
+	local sound = Instance.new("Sound")
+	sound.SoundId = soundId
+	sound.Volume = volume or 0.3
+	sound.Parent = SoundService
+	sound:Play()
+	sound.Ended:Connect(function()
+		if sound.Parent ~= nil then
+			sound:Destroy()
+		end
+	end)
+end
 
 local function animateScrapPop(label: TextLabel)
 	local grow = TweenService:Create(label, TweenInfo.new(0.08, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
@@ -323,6 +339,7 @@ local function makeRoleButton(parent: Instance, roleName: string, xScale: number
 	button.Parent = parent
 
 	button.MouseButton1Click:Connect(function()
+		playUISound(AudioManifest.UIClick, 0.4)
 		remotes.RoleSelected:FireServer(roleName)
 		if roleScreen ~= nil then
 			local overlay = roleScreen:FindFirstChild("Overlay")
@@ -403,6 +420,7 @@ local function createToolbar(parent: Instance)
 		colorSwatch.Parent = slot
 
 		slot.MouseButton1Click:Connect(function()
+			playUISound(AudioManifest.UIClick)
 			BlueprintController.StartPlacing(info.name)
 		end)
 	end
@@ -1032,9 +1050,11 @@ function MainHUD.ShowRepairMinigame(drillPart: BasePart)
 		if success then
 			feedback.Text = ("+%d Stability!"):format(Constants.MAINTENANCE.WrenchSuccessRestore)
 			feedback.TextColor3 = Color3.fromRGB(120, 245, 120)
+			playUISound(AudioManifest.MinigameSuccess, 0.4)
 		else
 			feedback.Text = "CLOGGED!"
 			feedback.TextColor3 = Color3.fromRGB(255, 110, 110)
+			playUISound(AudioManifest.MinigameFail, 0.35)
 		end
 
 		local fadeTween = TweenService:Create(frame, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
@@ -1132,6 +1152,7 @@ function MainHUD.Init()
 		showFinalStandBanner()
 	end)
 	remotes.TitanStageCompleted.OnClientEvent:Connect(function(_stage: number)
+		playUISound(AudioManifest.StageComplete, 0.5)
 		if titanStageLabel ~= nil then
 			local original = titanStageLabel.TextColor3
 			TweenService:Create(titanStageLabel, TweenInfo.new(0.15), { TextColor3 = Color3.fromRGB(255, 255, 100) }):Play()

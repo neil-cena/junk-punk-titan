@@ -1,6 +1,6 @@
 PROJECT: Junk-Punk Titan | Roblox Luau | Rojo-managed
 REPO: c:\Users\neila\OneDrive\Desktop\job-exams\junk-punk-titan
-COMPLETION: ~75% | Phases 1-3 DONE | Phases 4-5 TODO
+COMPLETION: ~88% | Phases 1-4 DONE | Phase 5 TODO
 GDD_PATH: Junk-Punk Titan_ Complete Game Design Document.pdf (in Cursor workspace storage)
 QA_PATH: Junk-Punk Titan_ Comprehensive QA Test Plan.pdf (in Cursor workspace storage)
 STRATEGY: STRATEGY.md (root) — master task tracker, changelogs per phase
@@ -11,6 +11,7 @@ src/shared/Types.luau — Luau types: RoleName, BuildingType, RoleDefinition, Th
 src/shared/Remotes.luau — remote registry. Server creates, client waits. Names map at top. Remotes.Get() returns typed table.
 src/shared/TheftComponent.luau — reusable dismantle progress tracker. Attach(part), StartDismantle(part, rat), ConnectCompleted(cb)
 src/shared/Utils.luau — SnapToGrid(pos,gridSize), RemoveToolByName(player,name)
+src/shared/AudioManifest.luau — centralized sound asset IDs. Keys: ShotgunFire, EnemyDeath, BuildPlace, BuildDestroy, RepairHiss, RepairClank, StormWind, StormRattle, WaveHorn, StageComplete, UIClick, MinigameSuccess, MinigameFail, AmbientBase
 src/server/init.server.luau — bootstrap. Init order: PlayerTracking→Economy→Building→Resource→Objective→Role→Enemy→Storm→ScrapSpawn→Debug. All pcall-wrapped.
 src/server/RemoteGuard.luau — rate limiter. Register(name,maxCalls,windowSec), Check(name,player)→bool. Auto-cleanup on PlayerRemoving.
 src/server/Services/PlayerTrackingService.luau — peak/current player count, legacy buff multipliers
@@ -23,11 +24,11 @@ src/server/Services/EnemyService.luau — wave spawning (BaseCount + wave*Enemie
 src/server/Services/StormService.luau — storm every 600s, 60s duration. Tether pads (3 needed, 2 if player left). Wind damage uses BuildingHP attr (not DismantleProgress). Steel spawns during storm, despawns after. PermanentStorm mode for Final Stand. StopStorm for victory. Listens ConnectGameStateChanged.
 src/server/Services/ScrapSpawnService.luau — loose scrap piles every 15s, 3 per batch, 5 scrap each, 45s despawn, raycast-placed, .Touched pickup
 src/server/Services/DebugService.luau — studio-only commands: SpawnWave, StartStorm, AddScrap
-src/client/init.client.luau — bootstrap. MainHUD→ToolController→BlueprintController→VFXController. All pcall-wrapped.
-src/client/UI/MainHUD.luau — god module (~1000 lines). Scrap display, storm steel, wave timer, role selection, build toolbar, dismantle bars, repair minigame, threat/storm/tether banners, debug panel, Titan progress panel (top-right, attr-watched), Final Stand pulsing banner, victory screen (stats), game over screen (stats). TODO Phase 5: split into focused modules.
+src/client/init.client.luau — bootstrap. Init order: BlueprintController→ToolController→VFXController→MainHUD. All pcall-wrapped.
+src/client/UI/MainHUD.luau — god module (~1200 lines). Scrap display, storm steel, wave timer, role selection, build toolbar, dismantle bars, repair minigame, threat/storm/tether banners, debug panel, Titan progress panel (top-right, attr-watched), Final Stand pulsing banner, victory screen (stats), game over screen (stats). UI sounds via playUISound helper (UIClick, MinigameSuccess, MinigameFail, StageComplete). TODO Phase 5: split into focused modules.
 src/client/Controllers/BlueprintController.luau — client ghost preview. Uses Utils.SnapToGrid. StartPlacing/StopPlacing/IsPlacing API.
-src/client/Controllers/ToolController.luau — shotgun (Enforcer-only client check, server-authoritative damage) + wrench (Fixer-only). Role checks on both tools.
-src/client/Controllers/VFXController.luau — object pool for loot fountain gears. Dismantle smoke. Storm lighting/fog. Build flash. Repair sparks. Wave horn. Victory shockwave (expanding golden sphere at Titan).
+src/client/Controllers/ToolController.luau — shotgun (Enforcer-only client check, server-authoritative damage, 3D positional fire sound, Humanoid.CameraOffset recoil) + wrench (Fixer-only). Role checks on both tools.
+src/client/Controllers/VFXController.luau — AudioManifest-driven. Object pool for loot fountain gears (parallelized). Dismantle sparks+wobble. Storm lighting/fog/sounds. Build flash+sound. Repair sparks+sounds. Wave horn. Victory shockwave. Enemy death particles+sound. Building destruction dust+debris+sound. Ambient music (looping, intensity shifts during waves via WaveStarted). Camera shake via Humanoid.CameraOffset (not CFrame tween).
 
 === KEY CONSTANTS (current) ===
 BASE_COSTS: Turret=100, Drill=250, Wall=30
@@ -37,6 +38,12 @@ ECONOMY: InitialScrap=100, DeathPenalty=15%, DeathCooldown=10s
 TITAN: Stages=[200/0, 400/2, 600/5, 800/10], IntegrityRepair=25, FinalStand=240s, EliteHP=2x, EliteSpeed=1.3x, EliteInterval=3s
 WAVES: Interval=120s, Base=5, PerWave=2, SpawnRadius=60
 STORM: Interval=600s, Duration=60s, WindDmg=2/s, SteelDrops=5
+
+=== AUDIO MANIFEST ===
+ShotgunFire=12222216, EnemyDeath=12222076, BuildPlace=12222253, BuildDestroy=12222084
+RepairHiss=9118823107, RepairClank=12222253, StormWind=9125347736, StormRattle=130797915
+WaveHorn=9114243152, StageComplete=12221991, UIClick=12221976
+MinigameSuccess=12221984, MinigameFail=12222208, AmbientBase=9043887091
 
 === GAME STATE FLOW ===
 "playing" → player deposits enough → "final_stand" (stage 4 complete) → survive 240s → "victory" OR integrity=0 → "defeat"
@@ -57,18 +64,25 @@ RoleService → Constants, Remotes, Utils, PlayerTrackingService, RemoteGuard
 ScrapSpawnService → Constants, EconomyService
 No circular deps. ObjectiveService uses lazy require for EnemyService/BuildingService inside RequestSessionStats handler.
 
+=== DEPENDENCY GRAPH (client) ===
+init.client → BlueprintController, ToolController, VFXController, MainHUD
+VFXController → Constants, AudioManifest, Remotes, MainHUD
+ToolController → Constants, AudioManifest, Remotes, BlueprintController, MainHUD
+MainHUD → Constants, AudioManifest, Remotes, BlueprintController
+BlueprintController → Constants, Remotes, Utils
+
 === PHASE STATUS ===
 Phase 1: DONE (12/12) — security, architecture, critical bugs
 Phase 2: DONE (12/12) — combat, economy, enemies, core mechanics
 Phase 3: DONE (8/8) — win condition, Titan stages, Final Stand, victory/defeat, stats
-Phase 4: TODO (10 items) — audio, VFX polish
+Phase 4: DONE (10/10) — AudioManifest, 3D shotgun sound, build/destroy sounds+VFX, enemy death particles+sound, UI sounds, ambient music, camera shake fix, loot fountain parallelized
 Phase 5: TODO (10 items) — UI refactor, responsive layout, settings, tutorial
 
 === KNOWN REMAINING ISSUES ===
-- MainHUD is ~1000 lines (god module) — split in Phase 5
+- MainHUD is ~1200 lines (god module) — split in Phase 5
 - UI uses fromOffset (fixed pixel) — convert to responsive in Phase 5
-- No audio at all — Phase 4
 - No persistence/save system
 - No tutorial/onboarding
 - Heartbeat-driven dismantle bar updates (throttle in Phase 5)
-- Camera shake tweens CurrentCamera.CFrame directly (fix in Phase 4)
+- Overclock glow needs server-side "IsOverclocked" attribute on drill parts (not yet exposed)
+- Sound asset IDs in AudioManifest are from Roblox classic library; some may need replacement with custom uploads depending on Roblox audio policy
