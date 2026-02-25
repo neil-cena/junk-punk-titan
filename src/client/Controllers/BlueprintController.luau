@@ -82,14 +82,14 @@ local function getPlacementResult(): (boolean, Vector3?)
 	end
 
 	local size = Constants.BUILDING.Sizes[buildType]
+	local center = snapped + Vector3.new(0, size.Y * 0.5, 0)
+	local rotatedCF = CFrame.new(center) * CFrame.Angles(0, math.rad(currentRotation), 0)
 	local overlapParams = OverlapParams.new()
 	overlapParams.FilterType = Enum.RaycastFilterType.Exclude
 	overlapParams.FilterDescendantsInstances = { LocalPlayer.Character, currentGhost }
-	local center = snapped + Vector3.new(0, size.Y * 0.5, 0)
-	local rotatedCF = CFrame.new(center) * CFrame.Angles(0, math.rad(currentRotation), 0)
 	local overlaps = Workspace:GetPartBoundsInBox(rotatedCF, size, overlapParams)
 	for _, overlap in overlaps do
-		if overlap:IsA("BasePart") and not CollectionService:HasTag(overlap, "Blueprint") and overlap.Name ~= "Baseplate" then
+		if overlap:IsA("BasePart") and CollectionService:HasTag(overlap, "TitanObjective") then
 			return false, nil
 		end
 	end
@@ -182,27 +182,26 @@ local function getNearestBlueprint(range: number): BasePart?
 end
 
 local function onInputBegan(input: InputObject, processed: boolean)
+	if mode == "Placing" then
+		if input.KeyCode == Enum.KeyCode.R then
+			currentRotation = (currentRotation + 90) % 360
+			return
+		end
+		if input.UserInputType == Enum.UserInputType.MouseButton2 then
+			clearGhost()
+			return
+		end
+		if input.KeyCode == Enum.KeyCode.Escape then
+			clearGhost()
+			return
+		end
+		if input.UserInputType == Enum.UserInputType.MouseButton1 and not processed then
+			placeCurrentBlueprint()
+			return
+		end
+	end
+
 	if processed then
-		return
-	end
-
-	if input.UserInputType == Enum.UserInputType.MouseButton1 and mode == "Placing" then
-		placeCurrentBlueprint()
-		return
-	end
-
-	if input.UserInputType == Enum.UserInputType.MouseButton2 and mode == "Placing" then
-		clearGhost()
-		return
-	end
-
-	if input.KeyCode == Enum.KeyCode.Escape and mode == "Placing" then
-		clearGhost()
-		return
-	end
-
-	if input.KeyCode == Enum.KeyCode.R and mode == "Placing" then
-		currentRotation = (currentRotation + 90) % 360
 		return
 	end
 

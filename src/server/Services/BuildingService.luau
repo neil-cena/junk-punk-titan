@@ -70,19 +70,15 @@ end
 local function isOverlapping(position: Vector3, buildingType: BuildingType, rotation: number): boolean
 	local size = Constants.BUILDING.Sizes[buildingType]
 	local center = position + Vector3.new(0, size.Y * 0.5, 0)
+	local rotatedCF = CFrame.new(center) * CFrame.Angles(0, math.rad(rotation), 0)
 	local overlapParams = OverlapParams.new()
 	overlapParams.FilterType = Enum.RaycastFilterType.Exclude
 	overlapParams.FilterDescendantsInstances = {}
 
-	local rotatedCF = CFrame.new(center) * CFrame.Angles(0, math.rad(rotation), 0)
 	local overlaps = Workspace:GetPartBoundsInBox(rotatedCF, size, overlapParams)
 	for _, overlap in overlaps do
-		if overlap:IsA("BasePart") and overlap.Name ~= "Baseplate" then
-			if CollectionService:HasTag(overlap, DISMANTLABLE_TAG)
-				or CollectionService:HasTag(overlap, "TitanObjective")
-				or CollectionService:HasTag(overlap, BLUEPRINT_TAG) then
-				return true
-			end
+		if overlap:IsA("BasePart") and CollectionService:HasTag(overlap, "TitanObjective") then
+			return true
 		end
 	end
 
