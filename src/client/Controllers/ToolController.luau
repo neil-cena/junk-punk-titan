@@ -20,6 +20,7 @@ local ToolController = {}
 
 local remotes = Remotes.Get()
 local lastShotAt = 0
+local lastPunchAt = 0
 local isInitialized = false
 local SHOTGUN_TOOL_NAME = "RustyShotgun"
 local WRENCH_TOOL_NAME = "RustyWrench"
@@ -46,6 +47,74 @@ local function findRatModel(instance: Instance?): Model?
 	end
 
 	return nil
+end
+
+local function isHoldingAnyTool(): boolean
+	local character = LocalPlayer.Character
+	if character == nil then
+		return false
+	end
+	return character:FindFirstChildOfClass("Tool") ~= nil
+end
+
+local function canPunchNow(): boolean
+	return os.clock() - lastPunchAt >= Constants.COMBAT.PunchCooldown
+end
+
+local function playPunchEffects()
+	local character = LocalPlayer.Character
+	local humanoid = if character then character:FindFirstChildOfClass("Humanoid") else nil
+	if humanoid then
+		humanoid.CameraOffset = Vector3.new(0, 0, -0.3)
+		task.delay(0.08, function()
+			if humanoid and humanoid.Parent then
+				humanoid.CameraOffset = Vector3.zero
+			end
+		end)
+	end
+end
+
+local function tryPunch()
+	if isHoldingAnyTool() then
+		return
+	end
+	if BlueprintController.IsPlacing() then
+		return
+	end
+	if not canPunchNow() then
+		return
+	end
+
+	local character = LocalPlayer.Character
+	if character == nil then
+		return
+	end
+
+	local camera = Workspace.CurrentCamera
+	if camera == nil then
+		return
+	end
+
+	local mousePos = UserInputService:GetMouseLocation()
+	local unitRay = camera:ViewportPointToRay(mousePos.X, mousePos.Y)
+	local rayParams = RaycastParams.new()
+	rayParams.FilterType = Enum.RaycastFilterType.Exclude
+	rayParams.FilterDescendantsInstances = { character }
+	local result = Workspace:Raycast(unitRay.Origin, unitRay.Direction * Constants.COMBAT.PunchRange, rayParams)
+
+	lastPunchAt = os.clock()
+	playPunchEffects()
+
+	if result == nil then
+		return
+	end
+
+	local ratModel = findRatModel(result.Instance)
+	if ratModel == nil then
+		return
+	end
+
+	remotes.PunchEnemy:FireServer(ratModel)
 end
 
 local function playShotEffects(rayOrigin: Vector3, rayDirection: Vector3)
@@ -369,6 +438,15 @@ function ToolController.Init()
 	if currentCharacter ~= nil then
 		bindContainer(currentCharacter)
 	end
+
+	UserInputService.InputBegan:Connect(function(input, processed)
+		if processed then
+			return
+		end
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			tryPunch()
+		end
+	end)
 end
 
 function ToolController.GetCurrentToolName(): string?

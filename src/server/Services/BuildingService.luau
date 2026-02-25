@@ -207,6 +207,15 @@ local function activateBuildingBehavior(part: BasePart, buildingType: BuildingTy
 					if humanoid ~= nil and root ~= nil and humanoid.Health > 0 then
 						playTurretMuzzleFlash(part, root.Position)
 						humanoid:TakeDamage(Constants.BUILDING.TurretDamage)
+						local aggroVal = targetRat:FindFirstChild("AggroTarget")
+						if aggroVal == nil then
+							aggroVal = Instance.new("ObjectValue")
+							aggroVal.Name = "AggroTarget"
+							aggroVal.Parent = targetRat
+						end
+						if aggroVal:IsA("ObjectValue") then
+							(aggroVal :: ObjectValue).Value = part
+						end
 					end
 				end
 			end

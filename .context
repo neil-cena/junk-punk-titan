@@ -1,6 +1,6 @@
 PROJECT: Junk-Punk Titan | Roblox Luau | Rojo-managed
 REPO: c:\Users\neila\OneDrive\Desktop\job-exams\junk-punk-titan
-COMPLETION: Phases 1-5 DONE + Refinement Phase 1 DONE
+COMPLETION: Phases 1-5 DONE + Refinement Phases 1-3 DONE
 GDD_PATH: Junk-Punk Titan_ Complete Game Design Document.pdf (in Cursor workspace storage)
 QA_PATH: Junk-Punk Titan_ Comprehensive QA Test Plan.pdf (in Cursor workspace storage)
 STRATEGY: STRATEGY.md (root) — master task tracker, changelogs per phase
@@ -16,31 +16,31 @@ src/server/init.server.luau — bootstrap. Init order: PlayerTracking->Economy->
 src/server/RemoteGuard.luau — rate limiter. Register(name,maxCalls,windowSec), Check(name,player)->bool. Auto-cleanup on PlayerRemoving.
 src/server/Services/PlayerTrackingService.luau — peak/current player count, legacy buff multipliers
 src/server/Services/EconomyService.luau — team scrap pool, storm steel, exponential cost (GROWTH_RATE^count), death penalty (15%, 10s cooldown per player), DeductScrap/DeductStormSteel, GetTotalScrapGathered
-src/server/Services/BuildingService.luau — blueprint placement->ghost->final building with rotation support. CancelBlueprint removes unfinished ghosts (owner-validated). Turrets deal TurretDamage via Humanoid:TakeDamage. Drills rotate+emit. Overlap validation with rotated CFrame. builtCounts tracks/decrements. BuildingHP attr. GetBuildingsLost counter.
+src/server/Services/BuildingService.luau — blueprint placement->ghost->final building with rotation support. CancelBlueprint removes unfinished ghosts (owner-validated). Turrets deal TurretDamage via Humanoid:TakeDamage + set AggroTarget ObjectValue on rat for turret aggro. Drills rotate+emit. Overlap validation with rotated CFrame. builtCounts tracks/decrements. BuildingHP attr. GetBuildingsLost counter.
 src/server/Services/ResourceService.luau — drill stability degradation, wrench repair minigame (server validates), pending repair timeout 10s
 src/server/Services/ObjectiveService.luau — Titan core (center map), integrity drain when dismantled. ProximityPrompt deposit. Stage 1-4 costs from Constants.TITAN.Stages. CompleteStage deducts scrap+steel, repairs +25 integrity, updates visuals. Stage 4->startFinalStand (GameState="final_stand", hidden 240s timer). Victory if integrity>0 at timer end. BindableEvent: ConnectGameStateChanged(cb). RequestSessionStats lazy-requires Enemy/Building for stats.
 src/server/Services/RoleService.luau — role lock after first selection. Scrapper/Fixer/Enforcer. Sets player attrs: Role, SpeedMult, RepairMult, DamageMult. Legacy buff from PlayerTrackingService.
-src/server/Services/EnemyService.luau — wave spawning (BaseCount + wave*EnemiesPerWave * difficultyMult). 30s swarm timer per wave. Rats: HP-based (100hp standard, 200hp elite), state machine (approaching->dismantling->fleeing). RatState includes targetBuilding for retargeting. Cost*HP scoring for target selection. Smart retargeting: proportional flee + retargetRat(). Standard kill: 2-5 scrap. Thief kill: 2-5 + 50% refund bundle. HitEnemy: server-authoritative damage, Enforcer-only. Final Stand: elite rats every 3s. IsSwarmActive() exposed. retreatAllRats() on swarm end. First wave delay 180s. Spawn ring enforces min distance from Titan center (50 studs).
+src/server/Services/EnemyService.luau — wave spawning (BaseCount + wave*EnemiesPerWave * difficultyMult). 30s swarm timer per wave. Rats: HP-based (50hp standard, 100hp elite), state machine (approaching->dismantling->fleeing). Rats default-target Titan; turret aggro redirects via ObjectValue. Shared moveRatBehavior() with aggro checks during pathfinding+dismantle loops. RatState includes targetBuilding for retargeting. Cost*HP scoring for fallback selection. Smart retargeting: proportional flee + retargetRat(). Standard kill: 2-5 scrap. Thief kill: 2-5 + 50% refund bundle. HitEnemy: server-authoritative damage, Enforcer-only. PunchEnemy: any role, PunchDamage=10, PunchRange=8. Final Stand: elite rats every 3s. IsSwarmActive() exposed. retreatAllRats() on swarm end. First wave delay 150s. Spawn ring enforces min distance from Titan center (50 studs).
 src/server/Services/StormService.luau — storm every 450s, 20s duration. Defers if swarm active (lazy requires EnemyService). Tether pads with emergence animation (scale tween, staggered). Wind damage uses BuildingHP attr. Steel spawns during storm. PermanentStorm mode for Final Stand.
-src/server/Services/ScrapSpawnService.luau — loose scrap piles every 15s, up to 3 per batch, 5 scrap each, raycast-placed, .Touched pickup. Progressive radius: starts 30 studs near Titan, ramps to 180 over 20 cycles (~5 min). No despawn; spawning throttles by MaxActivePiles (30).
+src/server/Services/ScrapSpawnService.luau — loose scrap piles every 6s, up to 5 per batch, 5 scrap each, raycast-placed. Magnetic pickup: Heartbeat loop (0.05s) pulls piles toward players within MagnetRadius (5 studs), auto-collects at 1.5 studs. Progressive radius: starts 30 studs near Titan, ramps to 180 over 20 cycles (~2 min). No despawn; spawning throttles by MaxActivePiles (60).
 src/server/Services/DebugService.luau — studio-only commands: SpawnWave, StartStorm, AddScrap
 src/client/init.client.luau — bootstrap. Disables CoreGuiType.Backpack. Init order: BlueprintController->ToolController->VFXController->MainHUD. All pcall-wrapped.
 src/client/UI/MainHUD.luau — HUD coordinator. Scrap display, storm steel, wave timer (hidden in Final Stand), role selection (cards), build toolbar (responsive, rotation hint outside UIListLayout), build progress bar (hold-E), small right-side tool panel (mobile-safe) for visible equip/unequip toggle, dismantle bars (throttled, Fixer strobe), threat/storm/tether banners, debug panel, Titan progress panel (distance indicator), settings panel (volume sliders), tutorial hints. Delegates repair minigame to RepairMinigameUI, end screens to EndScreenUI.
 src/client/UI/RepairMinigameUI.luau — extracted module. Show(drillPart, rootGui, remotes), Clear(). Self-contained needle-and-zone minigame.
 src/client/UI/EndScreenUI.luau — extracted module. ShowGameOver, ShowVictory, ShowFinalStandBanner, ClearFinalStandBanner. Session stats builder.
 src/client/Controllers/BlueprintController.luau — client ghost preview with rotation (R key). Hold-to-build: 3s base (Fixer 0.6x), RenderStepped progress, E release cancels, distance check 14 studs. X key to cancel placed blueprints (fires CancelBlueprint). ConnectBuildProgress(cb) for MainHUD.
-src/client/Controllers/ToolController.luau — shotgun (Enforcer-only, server-authoritative damage, 3D positional sound, Humanoid.CameraOffset recoil) + wrench (Fixer-only). Exposes EquipCurrentTool/UnequipCurrentTool/GetCurrentToolName/IsCurrentToolEquipped helpers; keeps auto-equip fallback for backpack-disabled UX.
-src/client/Controllers/VFXController.luau — AudioManifest-driven. Object pool loot fountain. Dismantle sparks+wobble. Storm lighting (blur=3, soft tint). Build flash+sound. Enemy death particles+sound. Building destruction dust+debris+sound. Ambient music (intensity shifts on WaveStarted, fades on SwarmEnded). Ka-ching on scrap collection. Overclock glow (PointLight on IsOverclocked). Rat HP BillboardGui bars (green/yellow/red dynamic fill) for all ScrapRatEnemy models. Camera shake via Humanoid.CameraOffset.
+src/client/Controllers/ToolController.luau — shotgun (Enforcer-only, server-authoritative damage, 3D positional sound, Humanoid.CameraOffset recoil) + wrench (Fixer-only) + punch (any role, unarmed LMB, PunchEnemy remote, 10 dmg, 8 range, 1s cooldown, camera-nudge feedback). Exposes EquipCurrentTool/UnequipCurrentTool/GetCurrentToolName/IsCurrentToolEquipped helpers; keeps auto-equip fallback for backpack-disabled UX.
+src/client/Controllers/VFXController.luau — AudioManifest-driven. Object pool loot fountain. Dismantle sparks+wobble. Storm lighting (blur=3, soft tint). Build flash+sound. Enemy death particles+sound. Building destruction dust+debris+sound. Ambient music (intensity shifts on WaveStarted, fades on SwarmEnded). Ka-ching on scrap collection. Overclock glow (PointLight on IsOverclocked). Rat HP BillboardGui bars (studs-based 3x0.3 sizing, green/yellow/red dynamic fill, WaitForChild replication fix) for all ScrapRatEnemy models via task.spawn. Camera shake via Humanoid.CameraOffset.
 
 === KEY CONSTANTS (current) ===
 BASE_COSTS: Turret=100, Drill=250, Wall=30
-COMBAT: ShotgunBaseDamage=40, ShotgunRange=30, ShotgunCooldown=0.8, RatBaseHealth=100, RatFleeSpeedMult=1.2, StandardKillMin/Max=2/5, ThiefRefund=50%, BundleDespawn=30s
-BUILDING: TurretRange=45, TurretFireInterval=1.5, TurretDamage=15, DefaultHP=100, GridSize=4, BaseBuildTimeSeconds=3
+COMBAT: ShotgunBaseDamage=40, ShotgunRange=30, ShotgunCooldown=0.8, PunchDamage=10, PunchRange=8, PunchCooldown=1.0, RatBaseHealth=50, RatFleeSpeedMult=1.2, StandardKillMin/Max=2/5, ThiefRefund=50%, BundleDespawn=30s
+BUILDING: TurretRange=45, TurretFireInterval=1.5, TurretDamage=15, DrillScrapPerTick=8, DrillTickInterval=2, DefaultHP=100, GridSize=4, BaseBuildTimeSeconds=3
 ECONOMY: InitialScrap=200, DeathPenalty=15%, DeathCooldown=10s
 TITAN: Stages=[200/0, 400/2, 600/5, 800/10], IntegrityRepair=25, FinalStand=240s, EliteHP=2x, EliteSpeed=1.3x, EliteInterval=3s
-WAVES: Interval=150s, FirstWaveDelay=180s, SwarmDuration=30s, Base=3, PerWave=2, SpawnRadius=60, MinSpawnDistanceFromCenter=50
+WAVES: Interval=120s, FirstWaveDelay=150s, SwarmDuration=30s, Base=6, PerWave=3, SpawnRadius=60, MinSpawnDistanceFromCenter=50
 STORM: Interval=450s, Duration=20s, WindDmg=2/s, SteelDrops=5
-SCRAP_SPAWNS: MinSpawnRadius=30, MaxSpawnRadius=180, RadiusRampCycles=20, MaxActivePiles=30, Interval=15s, Count=3, Value=5
+SCRAP_SPAWNS: MinSpawnRadius=30, MaxSpawnRadius=180, RadiusRampCycles=20, MaxActivePiles=60, Interval=6s, Count=5, Value=5, MagnetRadius=5
 
 === AUDIO MANIFEST ===
 ShotgunFire=12222216, EnemyDeath=12222076, BuildPlace=12222253, BuildDestroy=12222084
@@ -55,7 +55,7 @@ Swarm cycle: wave spawns -> 30s swarm -> retreatAllRats -> SwarmEnded -> interva
 
 === REMOTES ===
 Functions: RequestEconomyState, RequestBuildCosts, UseWrench, FinishBlueprint, RequestSessionStats
-Events: DebugCommand, PlaceBlueprint, BlueprintPlaced, BlueprintFinished, BuildingDismantled, HitEnemy, EnemyKilled, ThreatDetected, ScrapUpdated, StormSteelUpdated, StormStarted, StormEnded, TetherStatus, RoleSelected, WaveStarted, UpdateWaveTimer, GlobalGameOver, GlobalVictory, TitanStageCompleted, FinalStandStarted, RepairMinigameResult, DrillRepaired, SwarmEnded, BuildProgress, CancelBlueprint
+Events: DebugCommand, PlaceBlueprint, BlueprintPlaced, BlueprintFinished, BuildingDismantled, HitEnemy, PunchEnemy, EnemyKilled, ThreatDetected, ScrapUpdated, StormSteelUpdated, StormStarted, StormEnded, TetherStatus, RoleSelected, WaveStarted, UpdateWaveTimer, GlobalGameOver, GlobalVictory, TitanStageCompleted, FinalStandStarted, RepairMinigameResult, DrillRepaired, SwarmEnded, BuildProgress, CancelBlueprint
 
 === DEPENDENCY GRAPH (server) ===
 init.server -> all services (requires at top, inits sequentially)
@@ -65,7 +65,7 @@ StormService -> Constants, Remotes, TweenService, EconomyService, BuildingServic
 BuildingService -> Constants, Remotes, Types, TheftComponent, Utils, EconomyService, RemoteGuard
 ResourceService -> Constants, Remotes, EconomyService, PlayerTrackingService, RemoteGuard
 RoleService -> Constants, Remotes, Utils, PlayerTrackingService, RemoteGuard
-ScrapSpawnService -> Constants, EconomyService
+ScrapSpawnService -> Constants, EconomyService, RunService
 No circular deps. StormService lazy-requires EnemyService for IsSwarmActive. ObjectiveService lazy-requires EnemyService/BuildingService for stats.
 
 === DEPENDENCY GRAPH (client) ===
@@ -86,6 +86,7 @@ Phase 5: DONE (11/11) — building rotation, MainHUD split, responsive layout, r
 Refinement Phase 1: DONE (13/13) — balance tuning (InitialScrap 200, BaseCount 3, FirstWaveDelay 180s), swarm timer (30s + retreatAllRats), smart retargeting (proportional flee + retargetRat), Cost*HP targeting, storm blur 3 + soft tint + 20s duration, storm/swarm exclusion, tether emergence anim, hold-to-build (3s base, Fixer 0.6x), overclock glow, ka-ching, wave timer hidden in Final Stand, rotate hint fix, backpack UI disabled
 Refinement Hotfix: DONE (3/3) — tool auto-equip fallback + visible right-side tool panel, progressive scrap spawn radius (30->180 studs over 20 cycles), blueprint removal (X key + CancelBlueprint remote, owner-validated server-side)
 Refinement Iteration 2: DONE (4/4) — rat min spawn distance ring (>=50), visible rat HP bars, persistent scraps with active-pile throttling, tool visibility panel + equip toggle for mobile-safe UX
+Refinement Iteration 3: DONE (6/6) — scale tuning (faster scraps 6s/5ct, drill output 8/2s, rat HP 50, more rats 6+3/wave, waves 120s/150s delay), rats default-target Titan with turret aggro redirect (ObjectValue on rat), melee punch for all roles (10dmg, 8 range, 1s CD), magnetic scrap pickup (5-stud pull, 1.5-stud collect via Heartbeat), HP bar replication fix (WaitForChild + task.spawn + studs-based sizing 3x0.3)
 
 === KNOWN REMAINING ISSUES ===
 - No persistence/save system (beyond scope — would need DataStoreService)

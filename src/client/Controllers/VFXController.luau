@@ -633,17 +633,36 @@ local function bindRatHealthBar(ratModel: Model)
 		return
 	end
 
-	local humanoid = ratModel:FindFirstChildOfClass("Humanoid")
-	local root = ratModel.PrimaryPart
+	local humanoid: Humanoid? = ratModel:FindFirstChildOfClass("Humanoid")
+	if humanoid == nil then
+		local found = ratModel:WaitForChild("Humanoid", 5)
+		if found and found:IsA("Humanoid") then
+			humanoid = found :: Humanoid
+		end
+	end
+
+	local root: BasePart? = ratModel.PrimaryPart
+	if root == nil then
+		local found = ratModel:WaitForChild("HumanoidRootPart", 5)
+		if found and found:IsA("BasePart") then
+			root = found :: BasePart
+		end
+	end
+
 	if humanoid == nil or root == nil then
+		return
+	end
+
+	if ratModel.Parent == nil then
 		return
 	end
 
 	local gui = Instance.new("BillboardGui")
 	gui.Name = "RatHealthBar"
-	gui.Size = UDim2.fromOffset(56, 8)
+	gui.Size = UDim2.new(3, 0, 0.3, 0)
 	gui.StudsOffset = Vector3.new(0, 2.5, 0)
 	gui.AlwaysOnTop = true
+	gui.MaxDistance = 100
 	gui.Adornee = root
 	gui.Parent = ratModel
 
@@ -720,13 +739,13 @@ function VFXController.Init()
 
 	for _, instance in CollectionService:GetTagged("ScrapRatEnemy") do
 		if instance:IsA("Model") then
-			bindRatHealthBar(instance)
+			task.spawn(bindRatHealthBar, instance)
 		end
 	end
 
 	CollectionService:GetInstanceAddedSignal("ScrapRatEnemy"):Connect(function(instance)
 		if instance:IsA("Model") then
-			bindRatHealthBar(instance)
+			task.spawn(bindRatHealthBar, instance)
 		end
 	end)
 

@@ -40,8 +40,8 @@ local Constants = {
 		TurretRange = 45,
 		TurretFireInterval = 1.5,
 		TurretDamage = 15,
-		DrillScrapPerTick = 4,
-		DrillTickInterval = 2.5,
+		DrillScrapPerTick = 8,
+		DrillTickInterval = 2,
 		DefaultHP = 100,
 		BaseBuildTimeSeconds = 3,
 		Sizes = {
@@ -78,11 +78,11 @@ local Constants = {
 	},
 
 	WAVES = {
-		IntervalSeconds = 150,
-		FirstWaveDelaySeconds = 180,
+		IntervalSeconds = 120,
+		FirstWaveDelaySeconds = 150,
 		SwarmDurationSeconds = 30,
-		BaseEnemyCount = 3,
-		EnemiesPerWave = 2,
+		BaseEnemyCount = 6,
+		EnemiesPerWave = 3,
 		MinSpawnDistanceFromCenter = 50,
 		SpawnRadius = 60,
 	},
@@ -91,7 +91,10 @@ local Constants = {
 		ShotgunBaseDamage = 40,
 		ShotgunRange = 30,
 		ShotgunCooldown = 0.8,
-		RatBaseHealth = 100,
+		PunchDamage = 10,
+		PunchRange = 8,
+		PunchCooldown = 1.0,
+		RatBaseHealth = 50,
 		RatFleeSpeedMultiplier = 1.2,
 		StandardKillMinReward = 2,
 		StandardKillMaxReward = 5,
@@ -117,13 +120,14 @@ local Constants = {
 	},
 
 	SCRAP_SPAWNS = {
-		IntervalSeconds = 15,
-		CountPerSpawn = 3,
+		IntervalSeconds = 6,
+		CountPerSpawn = 5,
 		ValuePerPile = 5,
 		MinSpawnRadius = 30,
 		MaxSpawnRadius = 180,
 		RadiusRampCycles = 20,
-		MaxActivePiles = 30,
+		MaxActivePiles = 60,
+		MagnetRadius = 5,
 	},
 
 	TITAN = {

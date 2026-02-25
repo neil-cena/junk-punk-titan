@@ -2,6 +2,7 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
@@ -11,12 +12,13 @@ local EconomyService = require(script.Parent:WaitForChild("EconomyService"))
 local ScrapSpawnService = {}
 
 local activeScrapPiles: { BasePart } = {}
+local pickedPiles: { [BasePart]: boolean } = {}
 local elapsedCycles = 0
 
 local function getActivePileCount(): number
 	local alive: { BasePart } = {}
 	for _, pile in activeScrapPiles do
-		if pile.Parent ~= nil then
+		if pile.Parent ~= nil and not pickedPiles[pile] then
 			table.insert(alive, pile)
 		end
 	end
@@ -51,27 +53,6 @@ local function spawnScrapPile()
 	pile.Position = Vector3.new(x, yPos, z)
 	pile.Parent = Workspace
 	table.insert(activeScrapPiles, pile)
-
-	local picked = false
-	pile.Touched:Connect(function(hit: BasePart)
-		if picked then
-			return
-		end
-
-		local model = hit:FindFirstAncestorOfClass("Model")
-		if model == nil then
-			return
-		end
-
-		local player = Players:GetPlayerFromCharacter(model)
-		if player == nil then
-			return
-		end
-
-		picked = true
-		EconomyService.AddScrap(Constants.SCRAP_SPAWNS.ValuePerPile)
-		pile:Destroy()
-	end)
 end
 
 function ScrapSpawnService.Init(): ()
@@ -86,6 +67,59 @@ function ScrapSpawnService.Init(): ()
 			end
 			elapsedCycles += 1
 		end
+	end)
+
+	local magnetAcc = 0
+	RunService.Heartbeat:Connect(function(dt)
+		magnetAcc += dt
+		if magnetAcc < 0.05 then
+			return
+		end
+		magnetAcc = 0
+
+		local magnetRadius = Constants.SCRAP_SPAWNS.MagnetRadius
+		local alive: { BasePart } = {}
+
+		for _, pile in activeScrapPiles do
+			if pile.Parent == nil or pickedPiles[pile] then
+				continue
+			end
+
+			local nearestRoot: BasePart? = nil
+			local nearestDist = magnetRadius + 1
+
+			for _, player in Players:GetPlayers() do
+				local character = player.Character
+				if character == nil then
+					continue
+				end
+				local root = character:FindFirstChild("HumanoidRootPart")
+				if root == nil or not root:IsA("BasePart") then
+					continue
+				end
+				local pDist = (root.Position - pile.Position).Magnitude
+				if pDist < nearestDist then
+					nearestDist = pDist
+					nearestRoot = root
+				end
+			end
+
+			if nearestRoot ~= nil and nearestDist <= magnetRadius then
+				if nearestDist <= 1.5 then
+					pickedPiles[pile] = true
+					EconomyService.AddScrap(Constants.SCRAP_SPAWNS.ValuePerPile)
+					pile:Destroy()
+				else
+					local direction = (nearestRoot.Position - pile.Position).Unit
+					pile.Position = pile.Position + direction * math.min(2, nearestDist * 0.4)
+					table.insert(alive, pile)
+				end
+			else
+				table.insert(alive, pile)
+			end
+		end
+
+		activeScrapPiles = alive
 	end)
 end
 

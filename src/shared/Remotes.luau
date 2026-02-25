@@ -36,6 +36,7 @@ local RemoteNames = {
 	SwarmEnded = "SwarmEnded",
 	BuildProgress = "BuildProgress",
 	CancelBlueprint = "CancelBlueprint",
+	PunchEnemy = "PunchEnemy",
 }
 
 local function getOrCreateRemoteFolder(): Folder

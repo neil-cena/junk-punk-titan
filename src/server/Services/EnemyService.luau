@@ -352,12 +352,123 @@ end
 
 local spawnRatToward: (BasePart, boolean?) -> ()
 
+local function getAggroTarget(ratModel: Model): BasePart?
+	local aggroVal = ratModel:FindFirstChild("AggroTarget")
+	if aggroVal ~= nil and aggroVal:IsA("ObjectValue") then
+		local target = aggroVal.Value
+		if target ~= nil and target:IsA("BasePart") and target.Parent ~= nil then
+			aggroVal:Destroy()
+			return target
+		end
+		aggroVal:Destroy()
+	end
+	return nil
+end
+
+local function pickNextTarget(): BasePart?
+	return getTargetBuilding() or ObjectiveService.GetTitanCore()
+end
+
+local function moveRatBehavior(ratModel: Model, humanoid: Humanoid, root: BasePart, initialTarget: BasePart)
+	local currentTarget = initialTarget
+	local state = ratStates[ratModel]
+
+	while currentTarget ~= nil and currentTarget.Parent ~= nil and humanoid.Health > 0 and activeRats[ratModel] ~= nil do
+		if state ~= nil then
+			state.state = "approaching"
+			state.targetBuilding = currentTarget
+		end
+
+		local path = PathfindingService:CreatePath()
+		local pathOk = pcall(function()
+			path:ComputeAsync(root.Position, currentTarget.Position)
+		end)
+
+		local redirected = false
+		if pathOk and path.Status == Enum.PathStatus.Success then
+			for _, waypoint in path:GetWaypoints() do
+				if humanoid.Health <= 0 or activeRats[ratModel] == nil then
+					return
+				end
+				local aggroTarget = getAggroTarget(ratModel)
+				if aggroTarget ~= nil and aggroTarget ~= currentTarget then
+					currentTarget = aggroTarget
+					redirected = true
+					break
+				end
+				if currentTarget.Parent == nil then
+					local next = pickNextTarget()
+					if next == nil then
+						despawnRat(ratModel)
+						return
+					end
+					currentTarget = next
+					redirected = true
+					break
+				end
+				moveToWithShortTimeout(humanoid, waypoint.Position, 0.9)
+			end
+		else
+			moveToWithShortTimeout(humanoid, currentTarget.Position, 1.2)
+		end
+
+		if redirected then
+			continue
+		end
+		if humanoid.Health <= 0 or activeRats[ratModel] == nil or ratModel.Parent == nil then
+			return
+		end
+		if currentTarget.Parent == nil then
+			local next = pickNextTarget()
+			if next == nil then
+				despawnRat(ratModel)
+				return
+			end
+			currentTarget = next
+			continue
+		end
+
+		EnemyService.StartDismantle(currentTarget, ratModel)
+		local dismantleRedirected = false
+		while activeRats[ratModel] ~= nil and currentTarget.Parent ~= nil do
+			if humanoid.Health <= 0 then
+				return
+			end
+			task.wait(0.2)
+			local aggroTarget = getAggroTarget(ratModel)
+			if aggroTarget ~= nil and aggroTarget ~= currentTarget then
+				currentTarget = aggroTarget
+				dismantleRedirected = true
+				break
+			end
+			local progressAttr = currentTarget:GetAttribute("DismantleProgress")
+			if typeof(progressAttr) == "number" and (progressAttr :: number) >= 100 then
+				dismantleAndDestroyBuilding(currentTarget, ratModel)
+				return
+			end
+		end
+
+		if dismantleRedirected then
+			continue
+		end
+		if currentTarget.Parent == nil then
+			local next = pickNextTarget()
+			if next == nil then
+				despawnRat(ratModel)
+				return
+			end
+			currentTarget = next
+			continue
+		end
+	end
+end
+
 local function retargetRat(ratModel: Model)
 	local state = ratStates[ratModel]
 	if state == nil or state.despawning then
 		return
 	end
-	local newTarget = getTargetBuilding() or ObjectiveService.GetTitanCore()
+	local newTarget = pickNextTarget()
 	if newTarget == nil then
 		despawnRat(ratModel)
 		return
@@ -370,44 +481,7 @@ local function retargetRat(ratModel: Model)
 		if humanoid == nil or root == nil or humanoid.Health <= 0 then
 			return
 		end
-		local path = PathfindingService:CreatePath()
-		local ok = pcall(function()
-			path:ComputeAsync(root.Position, newTarget.Position)
-		end)
-		if ok and path.Status == Enum.PathStatus.Success then
-			for _, waypoint in path:GetWaypoints() do
-				if humanoid.Health <= 0 or newTarget.Parent == nil or activeRats[ratModel] == nil then
-					if newTarget.Parent == nil and activeRats[ratModel] ~= nil then
-						retargetRat(ratModel)
-					end
-					return
-				end
-				moveToWithShortTimeout(humanoid, waypoint.Position, 0.9)
-			end
-		else
-			moveToWithShortTimeout(humanoid, newTarget.Position, 1.2)
-		end
-		if humanoid.Health <= 0 or activeRats[ratModel] == nil or ratModel.Parent == nil then
-			return
-		end
-		if newTarget.Parent ~= nil then
-			EnemyService.StartDismantle(newTarget, ratModel)
-			task.spawn(function()
-				while activeRats[ratModel] ~= nil and newTarget.Parent ~= nil do
-					if humanoid.Health <= 0 then
-						return
-					end
-					task.wait(0.2)
-					local progressAttr = newTarget:GetAttribute("DismantleProgress")
-					if typeof(progressAttr) == "number" and (progressAttr :: number) >= 100 then
-						return
-					end
-				end
-				if activeRats[ratModel] ~= nil and newTarget.Parent == nil then
-					retargetRat(ratModel)
-				end
-			end)
-		end
+		moveRatBehavior(ratModel, humanoid, root, newTarget)
 	end)
 end
 
@@ -515,49 +589,7 @@ spawnRatToward = function(targetBuilding: BasePart, isElite: boolean?)
 		return
 	end
 
-	local path = PathfindingService:CreatePath()
-	local ok = pcall(function()
-		path:ComputeAsync(root.Position, targetBuilding.Position)
-	end)
-
-	if ok and path.Status == Enum.PathStatus.Success then
-		for _, waypoint in path:GetWaypoints() do
-			if humanoid.Health <= 0 or targetBuilding.Parent == nil or activeRats[ratModel] == nil then
-				if targetBuilding.Parent == nil and activeRats[ratModel] ~= nil then
-					retargetRat(ratModel)
-				end
-				return
-			end
-			moveToWithShortTimeout(humanoid, waypoint.Position, 0.9)
-		end
-	else
-		moveToWithShortTimeout(humanoid, targetBuilding.Position, 1.2)
-	end
-
-	if humanoid.Health <= 0 or activeRats[ratModel] == nil or ratModel.Parent == nil then
-		return
-	end
-
-	if targetBuilding.Parent ~= nil then
-		EnemyService.StartDismantle(targetBuilding, ratModel)
-		task.spawn(function()
-			while activeRats[ratModel] ~= nil and targetBuilding.Parent ~= nil do
-				if humanoid.Health <= 0 then
-					return
-				end
-				task.wait(0.2)
-				local progressAttr = targetBuilding:GetAttribute("DismantleProgress")
-				if typeof(progressAttr) == "number" and (progressAttr :: number) >= 100 then
-					dismantleAndDestroyBuilding(targetBuilding, ratModel)
-					return
-				end
-			end
-
-			if activeRats[ratModel] ~= nil and targetBuilding.Parent == nil then
-				retargetRat(ratModel)
-			end
-		end)
-	end
+	moveRatBehavior(ratModel, humanoid, root, targetBuilding)
 end
 
 function EnemyService.SpawnScrapRat(targetBuilding: BasePart?, isElite: boolean?): ()
@@ -579,13 +611,11 @@ function EnemyService.SpawnWave(waveNumber: number): ()
 	local enemyCount = math.floor(baseCount * difficultyMult + 0.5)
 
 	swarmActive = true
+	local titanCore = ObjectiveService.GetTitanCore()
 	for _ = 1, enemyCount do
-		local targetBuilding = getTargetBuilding()
-		if targetBuilding == nil then
-			targetBuilding = ObjectiveService.GetTitanCore()
-		end
-		if targetBuilding ~= nil then
-			EnemyService.SpawnScrapRat(targetBuilding)
+		local target = titanCore or getTargetBuilding()
+		if target ~= nil then
+			EnemyService.SpawnScrapRat(target)
 		end
 	end
 
@@ -638,8 +668,25 @@ local function startFinalStandSpawning()
 	end)
 end
 
+local function resolveRatModel(ratModelOrPart: Instance): Model?
+	local ratModel: Model? = nil
+	if ratModelOrPart:IsA("Model") then
+		ratModel = ratModelOrPart
+	elseif ratModelOrPart:IsA("BasePart") then
+		local ancestor = ratModelOrPart:FindFirstAncestorOfClass("Model")
+		if ancestor ~= nil then
+			ratModel = ancestor
+		end
+	end
+	if ratModel == nil or ratModel.Name ~= "ScrapRat" then
+		return nil
+	end
+	return ratModel
+end
+
 function EnemyService.Init(): ()
 	RemoteGuard.Register("HitEnemy", 5, 1)
+	RemoteGuard.Register("PunchEnemy", 5, 1)
 
 	remotes.HitEnemy.OnServerEvent:Connect(function(player: Player, ratModelOrPart: Instance)
 		if not gameActive then
@@ -653,17 +700,8 @@ function EnemyService.Init(): ()
 			return
 		end
 
-		local ratModel: Model? = nil
-		if ratModelOrPart:IsA("Model") then
-			ratModel = ratModelOrPart
-		elseif ratModelOrPart:IsA("BasePart") then
-			local ancestor = ratModelOrPart:FindFirstAncestorOfClass("Model")
-			if ancestor ~= nil then
-				ratModel = ancestor
-			end
-		end
-
-		if ratModel == nil or ratModel.Name ~= "ScrapRat" then
+		local ratModel = resolveRatModel(ratModelOrPart)
+		if ratModel == nil then
 			return
 		end
 
@@ -686,6 +724,41 @@ function EnemyService.Init(): ()
 		local damageMultAttr = player:GetAttribute("DamageMult")
 		local damageMult = if typeof(damageMultAttr) == "number" then (damageMultAttr :: number) else 1
 		local damage = Constants.COMBAT.ShotgunBaseDamage * damageMult
+		humanoid:TakeDamage(damage)
+	end)
+
+	remotes.PunchEnemy.OnServerEvent:Connect(function(player: Player, ratModelOrPart: Instance)
+		if not gameActive then
+			return
+		end
+		if not RemoteGuard.Check("PunchEnemy", player) then
+			return
+		end
+
+		local ratModel = resolveRatModel(ratModelOrPart)
+		if ratModel == nil then
+			return
+		end
+
+		local humanoid = ratModel:FindFirstChildOfClass("Humanoid")
+		if humanoid == nil or humanoid.Health <= 0 then
+			return
+		end
+
+		local root = ratModel.PrimaryPart
+		local char = player.Character
+		local playerRoot = if char then char:FindFirstChild("HumanoidRootPart") else nil
+		if root == nil or playerRoot == nil or not playerRoot:IsA("BasePart") then
+			return
+		end
+
+		if (playerRoot.Position - root.Position).Magnitude > Constants.COMBAT.PunchRange then
+			return
+		end
+
+		local damageMultAttr = player:GetAttribute("DamageMult")
+		local damageMult = if typeof(damageMultAttr) == "number" then (damageMultAttr :: number) else 1
+		local damage = Constants.COMBAT.PunchDamage * damageMult
 		humanoid:TakeDamage(damage)
 	end)
 
