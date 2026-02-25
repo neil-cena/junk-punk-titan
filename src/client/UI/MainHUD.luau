@@ -4,6 +4,7 @@ local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local TeleportService = game:GetService("TeleportService")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 
@@ -39,6 +40,7 @@ local repairInputConnection: RBXScriptConnection? = nil
 local wavePulseTween: Tween? = nil
 local wavePulseBackTween: Tween? = nil
 local waveTimerSignal = Instance.new("BindableEvent")
+local gameOverGui: Frame? = nil
 
 local function animateScrapPop(label: TextLabel)
 	local grow = TweenService:Create(label, TweenInfo.new(0.08, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
@@ -157,6 +159,55 @@ local function updateWaveTimer(secondsRemaining: number)
 		waveTimerSignal:Fire()
 	end
 	lastWaveSeconds = seconds
+end
+
+local function showGameOver()
+	if gameOverGui ~= nil then
+		return
+	end
+
+	local rootGui = PlayerGui:FindFirstChild("MainHUDGui")
+	if rootGui == nil or not rootGui:IsA("ScreenGui") then
+		return
+	end
+
+	local overlay = Instance.new("Frame")
+	overlay.Name = "GameOverOverlay"
+	overlay.Size = UDim2.fromScale(1, 1)
+	overlay.BackgroundColor3 = Color3.fromRGB(10, 5, 5)
+	overlay.BackgroundTransparency = 0.2
+	overlay.Parent = rootGui
+	gameOverGui = overlay
+
+	local title = Instance.new("TextLabel")
+	title.Size = UDim2.fromScale(1, 0.2)
+	title.Position = UDim2.new(0, 0, 0.35, 0)
+	title.BackgroundTransparency = 1
+	title.Font = Enum.Font.GothamBlack
+	title.TextScaled = true
+	title.TextColor3 = Color3.fromRGB(255, 70, 70)
+	title.TextStrokeTransparency = 0.4
+	title.Text = "THE TITAN HAS COLLAPSED"
+	title.Parent = overlay
+
+	local subtitle = Instance.new("TextLabel")
+	subtitle.Size = UDim2.fromScale(1, 0.08)
+	subtitle.Position = UDim2.new(0, 0, 0.56, 0)
+	subtitle.BackgroundTransparency = 1
+	subtitle.Font = Enum.Font.GothamBold
+	subtitle.TextScaled = true
+	subtitle.TextColor3 = Color3.fromRGB(255, 210, 210)
+	subtitle.Text = "Resetting Session..."
+	subtitle.Parent = overlay
+
+	task.delay(3, function()
+		local ok = pcall(function()
+			TeleportService:Teleport(game.PlaceId, LocalPlayer)
+		end)
+		if not ok then
+			LocalPlayer:Kick("Titan collapsed. Session reset.")
+		end
+	end)
 end
 
 local function ensureBar(part: BasePart): BillboardGui
@@ -804,6 +855,9 @@ function MainHUD.Init()
 	end)
 	remotes.UpdateWaveTimer.OnClientEvent:Connect(function(secondsRemaining: number, _nextWaveTime: number)
 		updateWaveTimer(secondsRemaining)
+	end)
+	remotes.GlobalGameOver.OnClientEvent:Connect(function()
+		showGameOver()
 	end)
 
 	local ok, snapshot = pcall(function()

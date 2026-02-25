@@ -22,6 +22,14 @@ local function setProgress(part: BasePart, progress: number)
 	part:SetAttribute(ATTR_PROGRESS, clampedProgress)
 end
 
+local function getProgressPerSecond(part: BasePart): number
+	local attr = part:GetAttribute("TheftProgressPerSecond")
+	if typeof(attr) == "number" and (attr :: number) > 0 then
+		return attr :: number
+	end
+	return Constants.THEFT_SETTINGS.ProgressPerSecond
+end
+
 function TheftComponent.Attach(part: BasePart): TheftData
 	local current = states[part]
 	if current ~= nil then
@@ -68,7 +76,7 @@ function TheftComponent.StartDismantle(part: BasePart, enemyModel: Model?): ()
 			local delta = now - lastTick
 			lastTick = now
 
-			state.dismantleProgress = math.min(100, state.dismantleProgress + Constants.THEFT_SETTINGS.ProgressPerSecond * delta)
+			state.dismantleProgress = math.min(100, state.dismantleProgress + getProgressPerSecond(part) * delta)
 			setProgress(part, state.dismantleProgress)
 		end
 

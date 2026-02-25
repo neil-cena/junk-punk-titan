@@ -12,6 +12,7 @@ local RemotesModule = require(Shared:WaitForChild("Remotes"))
 local TheftComponent = require(Shared:WaitForChild("TheftComponent"))
 local EconomyService = require(script.Parent:WaitForChild("EconomyService"))
 local BuildingService = require(script.Parent:WaitForChild("BuildingService"))
+local ObjectiveService = require(script.Parent:WaitForChild("ObjectiveService"))
 
 local EnemyService = {}
 EnemyService.__index = EnemyService
@@ -353,6 +354,9 @@ function EnemyService.SpawnWave(waveNumber: number): ()
 
 	for _ = 1, enemyCount do
 		local targetBuilding = getMostExpensiveBuilding()
+		if targetBuilding == nil then
+			targetBuilding = ObjectiveService.GetTitanCore()
+		end
 		if targetBuilding ~= nil then
 			task.spawn(function()
 				EnemyService.SpawnScrapRat(targetBuilding)

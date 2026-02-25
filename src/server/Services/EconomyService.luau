@@ -18,6 +18,30 @@ local teamScrap = 0
 local stormSteel = 0
 local remotes = RemotesModule.Get()
 
+local function applyDeathPenalty()
+	if teamScrap <= 0 then
+		return
+	end
+	local loss = math.floor(teamScrap * 0.15 + 0.5)
+	if loss <= 0 then
+		return
+	end
+	teamScrap = math.max(0, teamScrap - loss)
+	remotes.ScrapUpdated:FireAllClients(teamScrap)
+end
+
+local function bindDeathPenalty(player: Player)
+	player.CharacterAdded:Connect(function(character)
+		local humanoid = character:FindFirstChildOfClass("Humanoid") or character:WaitForChild("Humanoid")
+		if humanoid == nil or not humanoid:IsA("Humanoid") then
+			return
+		end
+		humanoid.Died:Connect(function()
+			applyDeathPenalty()
+		end)
+	end)
+end
+
 function EconomyService.GetCost(baseCost: number, count: number): number
 	local clampedCount = math.max(0, count)
 	local rawCost = baseCost * (Constants.GROWTH_RATE ^ clampedCount)
@@ -108,9 +132,11 @@ function EconomyService.Init(initialScrap: number?): ()
 	for _, player in Players:GetPlayers() do
 		remotes.ScrapUpdated:FireClient(player, teamScrap)
 		remotes.StormSteelUpdated:FireClient(player, stormSteel)
+		bindDeathPenalty(player)
 	end
 
 	Players.PlayerAdded:Connect(function(player)
+		bindDeathPenalty(player)
 		task.defer(function()
 			remotes.ScrapUpdated:FireClient(player, teamScrap)
 			remotes.StormSteelUpdated:FireClient(player, stormSteel)

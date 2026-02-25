@@ -27,6 +27,7 @@ local RemoteNames = {
 	RoleSelected = "RoleSelected",
 	WaveStarted = "WaveStarted",
 	UpdateWaveTimer = "UpdateWaveTimer",
+	GlobalGameOver = "GlobalGameOver",
 	RepairMinigameResult = "RepairMinigameResult",
 	DrillRepaired = "DrillRepaired",
 }
@@ -110,6 +111,7 @@ function Remotes.Get()
 			RoleSelected = getOrCreateRemoteEvent(folder, RemoteNames.RoleSelected),
 			WaveStarted = getOrCreateRemoteEvent(folder, RemoteNames.WaveStarted),
 			UpdateWaveTimer = getOrCreateRemoteEvent(folder, RemoteNames.UpdateWaveTimer),
+			GlobalGameOver = getOrCreateRemoteEvent(folder, RemoteNames.GlobalGameOver),
 			RepairMinigameResult = getOrCreateRemoteEvent(folder, RemoteNames.RepairMinigameResult),
 			DrillRepaired = getOrCreateRemoteEvent(folder, RemoteNames.DrillRepaired),
 		}
@@ -140,6 +142,7 @@ function Remotes.Get()
 		RoleSelected = waitForRemoteEvent(folder, RemoteNames.RoleSelected),
 		WaveStarted = waitForRemoteEvent(folder, RemoteNames.WaveStarted),
 		UpdateWaveTimer = waitForRemoteEvent(folder, RemoteNames.UpdateWaveTimer),
+		GlobalGameOver = waitForRemoteEvent(folder, RemoteNames.GlobalGameOver),
 		RepairMinigameResult = waitForRemoteEvent(folder, RemoteNames.RepairMinigameResult),
 		DrillRepaired = waitForRemoteEvent(folder, RemoteNames.DrillRepaired),
 	}
