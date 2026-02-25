@@ -506,7 +506,7 @@ function VFXController.Init()
 		lastScrap = newValue
 	end)
 	remotes.EnemyKilled.OnClientEvent:Connect(function(position: Vector3)
-		playLootFountain(Constants.COMBAT.RatKillScrapReward, position)
+		playLootFountain(Constants.COMBAT.StandardKillMaxReward, position)
 	end)
 
 	remotes.BlueprintFinished.OnClientEvent:Connect(function(_blueprintId: string, position: Vector3)

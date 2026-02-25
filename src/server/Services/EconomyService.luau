@@ -17,12 +17,21 @@ EconomyService.__index = EconomyService
 local teamScrap = 0
 local stormSteel = 0
 local remotes = RemotesModule.Get()
+local deathPenaltyCooldowns: { [number]: number } = {}
 
-local function applyDeathPenalty()
+local function applyDeathPenalty(player: Player)
 	if teamScrap <= 0 then
 		return
 	end
-	local loss = math.floor(teamScrap * 0.15 + 0.5)
+
+	local now = os.clock()
+	local lastPenaltyAt = deathPenaltyCooldowns[player.UserId] or 0
+	if now - lastPenaltyAt < Constants.ECONOMY.DeathPenaltyCooldownSeconds then
+		return
+	end
+	deathPenaltyCooldowns[player.UserId] = now
+
+	local loss = math.floor(teamScrap * Constants.ECONOMY.DeathPenaltyPercent + 0.5)
 	if loss <= 0 then
 		return
 	end
@@ -37,7 +46,7 @@ local function bindDeathPenalty(player: Player)
 			return
 		end
 		humanoid.Died:Connect(function()
-			applyDeathPenalty()
+			applyDeathPenalty(player)
 		end)
 	end)
 end
@@ -120,6 +129,8 @@ end
 function EconomyService.Init(initialScrap: number?): ()
 	if typeof(initialScrap) == "number" then
 		teamScrap = math.max(0, initialScrap :: number)
+	else
+		teamScrap = Constants.ECONOMY.InitialScrap
 	end
 
 	remotes.RequestEconomyState.OnServerInvoke = function(_player: Player)
@@ -141,6 +152,10 @@ function EconomyService.Init(initialScrap: number?): ()
 			remotes.ScrapUpdated:FireClient(player, teamScrap)
 			remotes.StormSteelUpdated:FireClient(player, stormSteel)
 		end)
+	end)
+
+	Players.PlayerRemoving:Connect(function(player)
+		deathPenaltyCooldowns[player.UserId] = nil
 	end)
 end
 

@@ -18,19 +18,7 @@ local StormService = {}
 local remotes = RemotesModule.Get()
 local activeStorm = false
 local tetherPads: { BasePart } = {}
-
-local function createStormScrapBundle(atPosition: Vector3)
-	local bundle = Instance.new("Part")
-	bundle.Name = "StormScrapBundle"
-	bundle.Size = Vector3.new(1.2, 1.2, 1.2)
-	bundle.Shape = Enum.PartType.Ball
-	bundle.Material = Enum.Material.Metal
-	bundle.Color = Color3.fromRGB(120, 120, 120)
-	bundle.Anchored = false
-	bundle.CanCollide = true
-	bundle.Position = atPosition + Vector3.new(0, 2, 0)
-	bundle.Parent = Workspace
-end
+local activeStormSteel: { BasePart } = {}
 
 local function spawnTetherPads()
 	local center = Vector3.new(0, 0.5, 0)
@@ -101,24 +89,25 @@ end
 local function applyStormWindDamage()
 	for _, instance in CollectionService:GetTagged("DismantlableBuilding") do
 		if instance:IsA("BasePart") and instance.Parent ~= nil then
-			local progressAttr = instance:GetAttribute("DismantleProgress")
-			local currentProgress = if typeof(progressAttr) == "number" then (progressAttr :: number) else 0
-			local nextProgress = math.clamp(currentProgress + Constants.STORM.WindDamagePerSecond, 0, 100)
-			instance:SetAttribute("DismantleProgress", nextProgress)
-			instance:SetAttribute("IsBeingDismantled", true)
+			local hpAttr = instance:GetAttribute("BuildingHP")
+			local currentHP = if typeof(hpAttr) == "number" then (hpAttr :: number) else Constants.BUILDING.DefaultHP
+			local nextHP = currentHP - Constants.STORM.WindDamagePerSecond
 
-			if nextProgress >= 100 then
+			if nextHP <= 0 then
 				local destroyedPos = instance.Position
 				local buildingType = instance:GetAttribute("BuildingType")
 				remotes.BuildingDismantled:FireAllClients("StormDamage", destroyedPos)
 				instance:Destroy()
 				BuildingService.RegisterDestroyedSlot(destroyedPos, buildingType)
+			else
+				instance:SetAttribute("BuildingHP", nextHP)
 			end
 		end
 	end
 end
 
-local function spawnStormSteelDrops()
+local function spawnStormSteelDuringStorm()
+	local radius = Constants.STORM.SteelSpawnRadius
 	for _ = 1, Constants.STORM.StormSteelDropCount do
 		local drop = Instance.new("Part")
 		drop.Name = "StormHardenedSteel"
@@ -126,10 +115,11 @@ local function spawnStormSteelDrops()
 		drop.Material = Enum.Material.Metal
 		drop.Color = Color3.fromRGB(100, 160, 200)
 		drop.Size = Vector3.new(1.6, 1.6, 1.6)
-		drop.Position = Vector3.new(math.random(-25, 25), 3, math.random(-25, 25))
+		drop.Position = Vector3.new(math.random(-radius, radius), 3, math.random(-radius, radius))
 		drop.Anchored = false
 		drop.CanCollide = true
 		drop.Parent = Workspace
+		table.insert(activeStormSteel, drop)
 
 		local picked = false
 		drop.Touched:Connect(function(hit: BasePart)
@@ -154,10 +144,20 @@ local function spawnStormSteelDrops()
 	end
 end
 
+local function clearStormSteel()
+	for _, drop in activeStormSteel do
+		if drop.Parent ~= nil then
+			drop:Destroy()
+		end
+	end
+	activeStormSteel = {}
+end
+
 local function runStorm()
 	activeStorm = true
 	remotes.StormStarted:FireAllClients()
 	spawnTetherPads()
+	spawnStormSteelDuringStorm()
 
 	local elapsed = 0
 	while activeStorm and elapsed < Constants.STORM.DurationSeconds do
@@ -174,8 +174,8 @@ local function runStorm()
 	end
 
 	clearTetherPads()
+	clearStormSteel()
 	remotes.TetherStatus:FireAllClients(0, 0)
-	spawnStormSteelDrops()
 	activeStorm = false
 	remotes.StormEnded:FireAllClients()
 end

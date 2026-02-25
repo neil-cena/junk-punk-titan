@@ -113,6 +113,7 @@ local function createFinalBuilding(buildingType: BuildingType, position: Vector3
 	part.CanCollide = true
 	part.CFrame = CFrame.new(position + Vector3.new(0, part.Size.Y * 0.5, 0))
 	part:SetAttribute("BuildingType", buildingType)
+	part:SetAttribute("BuildingHP", Constants.BUILDING.DefaultHP)
 	part.Parent = Workspace
 	CollectionService:AddTag(part, DISMANTLABLE_TAG)
 	if buildingType == "Drill" then
@@ -120,34 +121,6 @@ local function createFinalBuilding(buildingType: BuildingType, position: Vector3
 	end
 	TheftComponent.Attach(part)
 	return part
-end
-
-local function killRatFromBuilding(targetRat: Model)
-	local root = targetRat.PrimaryPart
-	local atPosition = if root ~= nil then root.Position else targetRat:GetPivot().Position
-	if targetRat.Parent ~= nil then
-		targetRat:Destroy()
-	end
-
-	local bundle = Instance.new("Part")
-	bundle.Name = "ScrapBundle"
-	bundle.Size = Vector3.new(1.2, 1.2, 1.2)
-	bundle.Shape = Enum.PartType.Ball
-	bundle.Material = Enum.Material.Metal
-	bundle.Color = Color3.fromRGB(168, 168, 168)
-	bundle.Anchored = false
-	bundle.CanCollide = true
-	bundle.Position = atPosition + Vector3.new(0, 1.5, 0)
-	bundle.Parent = Workspace
-
-	task.delay(30, function()
-		if bundle.Parent ~= nil then
-			bundle:Destroy()
-		end
-	end)
-
-	EconomyService.AddScrap(Constants.COMBAT.RatKillScrapReward)
-	remotes.EnemyKilled:FireAllClients(atPosition)
 end
 
 local function playTurretMuzzleFlash(turretPart: BasePart, targetPosition: Vector3)
@@ -203,12 +176,15 @@ local function getNearestRat(position: Vector3, maxRange: number): Model?
 	local nearestDist = maxRange
 	for _, instance in CollectionService:GetTagged("ScrapRatEnemy") do
 		if instance:IsA("Model") and instance.Parent ~= nil then
-			local root = instance.PrimaryPart
-			if root ~= nil then
-				local distance = (root.Position - position).Magnitude
-				if distance <= nearestDist then
-					nearestDist = distance
-					nearest = instance
+			local humanoid = instance:FindFirstChildOfClass("Humanoid")
+			if humanoid ~= nil and humanoid.Health > 0 then
+				local root = instance.PrimaryPart
+				if root ~= nil then
+					local distance = (root.Position - position).Magnitude
+					if distance <= nearestDist then
+						nearestDist = distance
+						nearest = instance
+					end
 				end
 			end
 		end
@@ -228,11 +204,12 @@ local function activateBuildingBehavior(part: BasePart, buildingType: BuildingTy
 				task.wait(Constants.BUILDING.TurretFireInterval)
 				local targetRat = getNearestRat(part.Position, Constants.BUILDING.TurretRange)
 				if targetRat ~= nil then
+					local humanoid = targetRat:FindFirstChildOfClass("Humanoid")
 					local root = targetRat.PrimaryPart
-					if root ~= nil then
+					if humanoid ~= nil and root ~= nil and humanoid.Health > 0 then
 						playTurretMuzzleFlash(part, root.Position)
+						humanoid:TakeDamage(Constants.BUILDING.TurretDamage)
 					end
-					killRatFromBuilding(targetRat)
 				end
 			end
 			activeBuildingTasks[part] = nil

@@ -1,8 +1,8 @@
 # Junk-Punk Titan: Implementation Strategy
 
-## Current State: ~35-40% Complete
+## Current State: ~55-60% Complete
 
-The core loop skeleton exists (role selection, building placement, wave spawning, storms), but ~60% of the GDD is missing, broken, or incorrectly implemented. This document tracks our phased plan to bring the game to full spec.
+Phases 1-2 are done. Security patched, architecture cleaned up, and all core combat/economy/enemy mechanics now match the GDD. The game loop is playable end-to-end except for the win condition (Titan stages) and polish layers. This document tracks our phased plan to bring the game to full spec.
 
 ---
 
@@ -23,24 +23,99 @@ No new features — stop the bleeding. Fix what's actively broken or exploitable
 - [x] **1.11** Add server-side overlap validation for building placement
 - [x] **1.12** Add pending repair timeout in `ResourceService` (10s server-side fallback)
 
+### Phase 1 Changelog
+
+**New files created:**
+- `src/shared/Utils.luau` — Shared utility functions (`SnapToGrid`, `RemoveToolByName`) to eliminate duplication across modules.
+- `src/server/Services/PlayerTrackingService.luau` — Centralized player count tracking and legacy buff calculations, replacing 4 duplicated copies.
+- `src/server/RemoteGuard.luau` — Server-side rate limiter for all client-fired remotes. Tracks per-player call timestamps with configurable window/max.
+
+**Modified files:**
+- `src/shared/Remotes.luau` — Removed the exploitable `RequestPurchase` remote.
+- `src/server/Services/EconomyService.luau` — Deleted `RequestPurchase` handler, added `amount <= 0` guards on `AddScrap`/`AddStormSteel`.
+- `src/server/Services/RoleService.luau` — Role lock after first selection, legacy buffs from `PlayerTrackingService`, `RemoteGuard` on `RoleSelected`, tool cleanup via `Utils`.
+- `src/server/Services/BuildingService.luau` — Server-side overlap validation, `builtCounts` decrement on destruction, `RegisterDestroyedSlot` accepts `buildingType`, blueprint cleanup on disconnect, `RemoteGuard` on placement remotes.
+- `src/server/Services/EnemyService.luau` — Player tracking via `PlayerTrackingService`, `RemoteGuard` on `HitEnemy`, `:Destroy()` instead of `Parent = nil`.
+- `src/server/Services/ResourceService.luau` — Player tracking via `PlayerTrackingService`, 10s pending repair timeout, `RemoteGuard` on `RepairMinigameResult`.
+- `src/server/Services/StormService.luau` — Player tracking via `PlayerTrackingService`, `:Destroy()` for wind-killed buildings, `RegisterDestroyedSlot` calls.
+- `src/server/init.server.luau` — All `Init()` calls wrapped in `pcall` with `warn()` on failure, `PlayerTrackingService` initialized first.
+- `src/client/init.client.luau` — All `Init()` calls wrapped in `pcall` with `warn()` on failure.
+- `src/client/Controllers/BlueprintController.luau` — Uses `Utils.SnapToGrid`, removed dead `localPlacedBlueprints` code.
+
 ---
 
 ## Phase 2: Core Mechanics Completion (Combat, Economy, Enemies)
 
 The game loop is fundamentally incomplete without these.
 
-- [ ] **2.1** Implement rat HP system — give rats actual health, turrets deal damage per shot, shotgun deals damage with role multiplier
-- [ ] **2.2** Fix turret balance — damage per shot + fire rate so rats survive multiple hits
-- [ ] **2.3** Implement scrap bundle pickup — add `.Touched` handler + 30s despawn timer to all scrap bundles
-- [ ] **2.4** Differentiate standard kill vs. thief kill rewards — standard = 2-5 scrap, thief = 50% of stolen building cost
-- [ ] **2.5** Fix enemy targeting — distribute rats across multiple buildings instead of all piling on one
-- [ ] **2.6** Hook up `GetDifficultyMultiplier()` — actually use it in `SpawnWave` for player-count scaling
-- [ ] **2.7** Correct Constants to match GDD — Turret base cost 100, Drill 250, rat reward 2-5, shotgun range shortened
-- [ ] **2.8** Implement loose scrap spawns — periodic map-wide scrap pile generation for Scrappers
-- [ ] **2.9** Fix storm steel timing — spawn during storm (not after), despawn when storm ends
-- [ ] **2.10** Fix storm wind damage — separate damage system (not `DismantleProgress`), don't reward players for wind destruction
-- [ ] **2.11** Add death penalty cooldown — per-player 10s cooldown on scrap tax
-- [ ] **2.12** Implement tool restrictions — Enforcer can't use Wrench, non-Enforcer can't effectively use Shotgun
+- [x] **2.1** Implement rat HP system — give rats actual health, turrets deal damage per shot, shotgun deals damage with role multiplier
+- [x] **2.2** Fix turret balance — damage per shot + fire rate so rats survive multiple hits
+- [x] **2.3** Implement scrap bundle pickup — add `.Touched` handler + 30s despawn timer to all scrap bundles
+- [x] **2.4** Differentiate standard kill vs. thief kill rewards — standard = 2-5 scrap, thief = 50% of stolen building cost
+- [x] **2.5** Fix enemy targeting — distribute rats across multiple buildings instead of all piling on one
+- [x] **2.6** Hook up `GetDifficultyMultiplier()` — actually use it in `SpawnWave` for player-count scaling
+- [x] **2.7** Correct Constants to match GDD — Turret base cost 100, Drill 250, rat reward 2-5, shotgun range shortened
+- [x] **2.8** Implement loose scrap spawns — periodic map-wide scrap pile generation for Scrappers
+- [x] **2.9** Fix storm steel timing — spawn during storm (not after), despawn when storm ends
+- [x] **2.10** Fix storm wind damage — separate damage system (not `DismantleProgress`), don't reward players for wind destruction
+- [x] **2.11** Add death penalty cooldown — per-player 10s cooldown on scrap tax
+- [x] **2.12** Implement tool restrictions — Enforcer can't use Wrench, non-Enforcer can't effectively use Shotgun
+
+### Phase 2 Changelog
+
+**New files created:**
+- `src/server/Services/ScrapSpawnService.luau` — Periodically spawns loose scrap piles across the map (3 piles every 15s, 5 scrap each, 45s despawn). Raycast-placed on terrain surface with `.Touched` pickup handler.
+
+**Modified files:**
+
+- `src/shared/Constants.luau` — Comprehensive GDD alignment:
+  - `BASE_COSTS`: Turret 50→100, Drill 75→250.
+  - `BUILDING`: `TurretFireInterval` 0.5→1.5s, added `TurretDamage = 15`, `DefaultHP = 100`.
+  - `COMBAT`: Renamed `ShotgunDamage` → `ShotgunBaseDamage = 40`, `ShotgunRange` 80→30, removed `RatKillScrapReward`, added `RatBaseHealth = 100`, `RatFleeSpeedMultiplier = 1.2`, `StandardKillMinReward = 2`, `StandardKillMaxReward = 5`, `ThiefKillRefundPercent = 0.5`, `ScrapBundleDespawnSeconds = 30`.
+  - `MAINTENANCE`: `DrillBaseOutput` 10→15.
+  - Added `ECONOMY` section: `InitialScrap = 100`, `DeathPenaltyPercent = 0.15`, `DeathPenaltyCooldownSeconds = 10`.
+  - Added `SCRAP_SPAWNS` section for loose scrap system.
+  - `STORM`: Added `SteelSpawnRadius = 120`, `StormSteelDropCount` 3→5.
+  - Removed top-level `SCRAP_BUNDLE_VALUE`.
+
+- `src/server/Services/EnemyService.luau` — Major rewrite:
+  - **Rat HP system**: Rats spawn with `Humanoid.MaxHealth = 100`. Death handled via `Humanoid.Died` event instead of instant destruction.
+  - **Rat state machine**: `ratStates` table tracks `"approaching"` → `"dismantling"` → `"fleeing"` with `stolenBuildingCost` and `despawning` flag.
+  - **Standard vs. thief kills**: Standard kills award 2-5 random scrap immediately. Thief kills (rat in flee state) additionally drop a physical Scrap Bundle worth 50% of the stolen building's base cost.
+  - **Collectible scrap bundles**: `.Touched` pickup handler with double-collection guard and 30s auto-despawn.
+  - **Distributed targeting**: `getTargetBuilding()` randomly picks from top 3 most expensive buildings instead of always targeting the single most expensive one.
+  - **Difficulty scaling**: `SpawnWave` now applies `GetDifficultyMultiplier()` to enemy count (1x for ≤3 players, 1.5x for 4, 2x for 5+).
+  - **Server-authoritative damage**: `HitEnemy` handler computes damage from `ShotgunBaseDamage * player.DamageMult` — client no longer sends damage.
+  - **Enforcer gate**: `HitEnemy` rejects players without `Role = "Enforcer"`.
+  - **Flee speed**: Fleeing rats get 1.2x walk speed. Movement loop exits early if humanoid dies mid-path.
+  - Removed `getMostExpensiveBuilding`, `getBuildingTypeAndBaseCost`, `spawnScrapBundle` (replaced by new implementations).
+
+- `src/server/Services/BuildingService.luau` — Turret + wind HP changes:
+  - **Turrets deal damage**: `humanoid:TakeDamage(TurretDamage)` per shot instead of `killRatFromBuilding()`. A rat survives ~7 turret shots (10.5s).
+  - **Skip dead rats**: `getNearestRat` checks `humanoid.Health > 0` before targeting.
+  - **Building HP attribute**: `createFinalBuilding` sets `BuildingHP = 100` on every new building.
+  - Removed `killRatFromBuilding` entirely — kill rewards now handled by `Humanoid.Died` in `EnemyService`.
+
+- `src/server/Services/StormService.luau` — Timing + damage model fix:
+  - **Steel spawns during storm**: `spawnStormSteelDuringStorm()` called at storm start, `clearStormSteel()` at storm end. Previously steel only appeared after the storm was over.
+  - **Wind damage uses `BuildingHP`**: Reads/decrements a separate `BuildingHP` attribute instead of hijacking `DismantleProgress`. No `IsBeingDismantled` flag set.
+  - **No scrap for wind destruction**: Buildings destroyed by wind trigger `RegisterDestroyedSlot` but no `AddScrap` — purely a loss event as intended by GDD.
+  - Removed `createStormScrapBundle` and post-storm `spawnStormSteelDrops`.
+
+- `src/server/Services/EconomyService.luau` — Death penalty overhaul:
+  - **Per-player 10s cooldown**: `deathPenaltyCooldowns` map tracks last penalty timestamp per `UserId`. Dying twice within 10s only triggers one penalty.
+  - **Initial scrap from constants**: Uses `Constants.ECONOMY.InitialScrap` (100) instead of hardcoded parameter.
+  - **Cleanup on disconnect**: Cooldown timestamps cleared on `PlayerRemoving`.
+
+- `src/client/Controllers/ToolController.luau` — Role enforcement:
+  - **Enforcer-only shotgun**: `fireShotgun()` early-returns if `Role ~= "Enforcer"`.
+  - **Fixer-only wrench**: `useWrench()` early-returns if `Role ~= "Fixer"`.
+  - **No client-sent damage**: `HitEnemy:FireServer(ratModel)` — removed damage parameter (now server-authoritative).
+
+- `src/client/Controllers/VFXController.luau` — Fixed broken constant reference:
+  - `RatKillScrapReward` → `StandardKillMaxReward` for kill position VFX.
+
+- `src/server/init.server.luau` — Added `ScrapSpawnService` to init order. `EconomyService.Init()` no longer receives hardcoded `100` (uses constant).
 
 ---
 
@@ -124,6 +199,10 @@ Phase 1 is non-negotiable first — security and architectural fixes before buil
 | `src/server/Services/ObjectiveService.luau` | Titan core, integrity drain, stage completion (dead code) |
 | `src/server/Services/RoleService.luau` | Role assignment, stat multipliers, legacy buff |
 | `src/server/Services/StormService.luau` | Storm events, tether pads, wind damage, steel drops |
+| `src/server/Services/ScrapSpawnService.luau` | Periodic loose scrap pile spawning for Scrappers |
+| `src/server/Services/PlayerTrackingService.luau` | Centralized player count + legacy buff calculations |
+| `src/server/RemoteGuard.luau` | Server-side rate limiter for client-fired remotes |
+| `src/shared/Utils.luau` | Shared utilities (SnapToGrid, RemoveToolByName) |
 | `src/server/Services/DebugService.luau` | Studio-only debug commands |
 | `src/client/UI/MainHUD.luau` | All UI (893-line god module) |
 | `src/client/Controllers/BlueprintController.luau` | Client-side building preview + placement |

@@ -89,6 +89,10 @@ local function fireShotgun()
 		return
 	end
 
+	if LocalPlayer:GetAttribute("Role") ~= "Enforcer" then
+		return
+	end
+
 	local character = LocalPlayer.Character
 	if character == nil or activeShotgun.Parent ~= character then
 		return
@@ -126,9 +130,7 @@ local function fireShotgun()
 		return
 	end
 
-	local damageMultAttr = LocalPlayer:GetAttribute("DamageMult")
-	local damageMult = if typeof(damageMultAttr) == "number" then damageMultAttr :: number else 1
-	remotes.HitEnemy:FireServer(ratModel, Constants.COMBAT.ShotgunDamage * damageMult)
+	remotes.HitEnemy:FireServer(ratModel)
 end
 
 local function findDrillModel(instance: Instance?): BasePart?
@@ -144,6 +146,10 @@ end
 
 local function useWrench()
 	if activeWrench == nil then
+		return
+	end
+
+	if LocalPlayer:GetAttribute("Role") ~= "Fixer" then
 		return
 	end
 

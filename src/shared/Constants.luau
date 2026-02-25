@@ -4,8 +4,8 @@ local Constants = {
 	GROWTH_RATE = 1.15,
 
 	BASE_COSTS = {
-		Turret = 50,
-		Drill = 75,
+		Turret = 100,
+		Drill = 250,
 		Wall = 30,
 	},
 
@@ -38,9 +38,11 @@ local Constants = {
 		PlacementMaxDistance = 50,
 		RebuildCooldownSeconds = 15,
 		TurretRange = 45,
-		TurretFireInterval = 0.5,
+		TurretFireInterval = 1.5,
+		TurretDamage = 15,
 		DrillScrapPerTick = 4,
 		DrillTickInterval = 2.5,
+		DefaultHP = 100,
 		Sizes = {
 			Turret = Vector3.new(4, 4, 4),
 			Drill = Vector3.new(4, 6, 4),
@@ -63,7 +65,7 @@ local Constants = {
 
 	MAINTENANCE = {
 		ResourceTickSeconds = 10,
-		DrillBaseOutput = 10,
+		DrillBaseOutput = 15,
 		StabilityDegradationPercent = 1,
 		StabilityDegradationInterval = 2,
 		WrenchSuccessRestore = 40,
@@ -82,10 +84,21 @@ local Constants = {
 	},
 
 	COMBAT = {
-		ShotgunDamage = 100,
-		ShotgunRange = 80,
+		ShotgunBaseDamage = 40,
+		ShotgunRange = 30,
 		ShotgunCooldown = 0.8,
-		RatKillScrapReward = 15,
+		RatBaseHealth = 100,
+		RatFleeSpeedMultiplier = 1.2,
+		StandardKillMinReward = 2,
+		StandardKillMaxReward = 5,
+		ThiefKillRefundPercent = 0.5,
+		ScrapBundleDespawnSeconds = 30,
+	},
+
+	ECONOMY = {
+		InitialScrap = 100,
+		DeathPenaltyPercent = 0.15,
+		DeathPenaltyCooldownSeconds = 10,
 	},
 
 	STORM = {
@@ -95,10 +108,17 @@ local Constants = {
 		TetherPadRadius = 6,
 		TetherPadsRequired = 3,
 		TetherPadsReducedOnLeave = 2,
-		StormSteelDropCount = 3,
+		StormSteelDropCount = 5,
+		SteelSpawnRadius = 120,
 	},
 
-	SCRAP_BUNDLE_VALUE = 20,
+	SCRAP_SPAWNS = {
+		IntervalSeconds = 15,
+		CountPerSpawn = 3,
+		ValuePerPile = 5,
+		SpawnRadius = 180,
+		DespawnSeconds = 45,
+	},
 }
 
 return Constants
