@@ -43,6 +43,7 @@ local Constants = {
 		DrillScrapPerTick = 4,
 		DrillTickInterval = 2.5,
 		DefaultHP = 100,
+		BaseBuildTimeSeconds = 3,
 		Sizes = {
 			Turret = Vector3.new(4, 4, 4),
 			Drill = Vector3.new(4, 6, 4),
@@ -77,8 +78,10 @@ local Constants = {
 	},
 
 	WAVES = {
-		IntervalSeconds = 120,
-		BaseEnemyCount = 5,
+		IntervalSeconds = 150,
+		FirstWaveDelaySeconds = 180,
+		SwarmDurationSeconds = 30,
+		BaseEnemyCount = 3,
 		EnemiesPerWave = 2,
 		SpawnRadius = 60,
 	},
@@ -96,14 +99,14 @@ local Constants = {
 	},
 
 	ECONOMY = {
-		InitialScrap = 100,
+		InitialScrap = 200,
 		DeathPenaltyPercent = 0.15,
 		DeathPenaltyCooldownSeconds = 10,
 	},
 
 	STORM = {
-		IntervalSeconds = 600,
-		DurationSeconds = 60,
+		IntervalSeconds = 450,
+		DurationSeconds = 20,
 		WindDamagePerSecond = 2,
 		TetherPadRadius = 6,
 		TetherPadsRequired = 3,

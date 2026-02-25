@@ -47,6 +47,9 @@ local titanIntegrityFill: Frame? = nil
 local titanIntegrityBar: Frame? = nil
 local titanRequirementLabel: TextLabel? = nil
 local titanDistanceLabel: TextLabel? = nil
+local buildProgressFrame: Frame? = nil
+local buildProgressFill: Frame? = nil
+local buildProgressLabel: TextLabel? = nil
 
 local function playUISound(soundId: string, volume: number?)
 	local sound = Instance.new("Sound")
@@ -471,14 +474,14 @@ local function createToolbar(parent: Instance)
 	local hintLabel = Instance.new("TextLabel")
 	hintLabel.Name = "RotateHint"
 	hintLabel.AnchorPoint = Vector2.new(0.5, 0)
-	hintLabel.Position = UDim2.new(0.5, 0, 1, 2)
-	hintLabel.Size = UDim2.new(0.6, 0, 0, 16)
+	hintLabel.Position = UDim2.new(0.5, 0, 0.975, 0)
+	hintLabel.Size = UDim2.new(0.22, 0, 0, 16)
 	hintLabel.BackgroundTransparency = 1
 	hintLabel.Font = Enum.Font.Gotham
 	hintLabel.TextScaled = true
 	hintLabel.TextColor3 = Color3.fromRGB(160, 160, 160)
 	hintLabel.Text = "[R] Rotate  |  [RMB/Esc] Cancel"
-	hintLabel.Parent = frame
+	hintLabel.Parent = parent
 end
 
 local function refreshBuildCosts()
@@ -966,6 +969,46 @@ local function createMainHUD()
 	createTitanProgressPanel(gui)
 	createSettingsPanel(gui)
 	createDebugPanel(gui)
+
+	local bpFrame = Instance.new("Frame")
+	bpFrame.Name = "BuildProgressBar"
+	bpFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+	bpFrame.Position = UDim2.new(0.5, 0, 0.75, 0)
+	bpFrame.Size = UDim2.new(0.18, 0, 0, 20)
+	bpFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+	bpFrame.BackgroundTransparency = 0.3
+	bpFrame.Visible = false
+	bpFrame.Parent = gui
+
+	local bpCorner = Instance.new("UICorner")
+	bpCorner.CornerRadius = UDim.new(0, 4)
+	bpCorner.Parent = bpFrame
+
+	local bpFill = Instance.new("Frame")
+	bpFill.Name = "Fill"
+	bpFill.Size = UDim2.fromScale(0, 1)
+	bpFill.BackgroundColor3 = Color3.fromRGB(90, 220, 120)
+	bpFill.BorderSizePixel = 0
+	bpFill.Parent = bpFrame
+
+	local bpFillCorner = Instance.new("UICorner")
+	bpFillCorner.CornerRadius = UDim.new(0, 4)
+	bpFillCorner.Parent = bpFill
+
+	local bpLabel = Instance.new("TextLabel")
+	bpLabel.Name = "Label"
+	bpLabel.Size = UDim2.fromScale(1, 1)
+	bpLabel.BackgroundTransparency = 1
+	bpLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+	bpLabel.Font = Enum.Font.GothamBold
+	bpLabel.TextScaled = true
+	bpLabel.Text = "BUILDING..."
+	bpLabel.ZIndex = 2
+	bpLabel.Parent = bpFrame
+
+	buildProgressFrame = bpFrame
+	buildProgressFill = bpFill
+	buildProgressLabel = bpLabel
 end
 
 local function showThreatBanner(buildingName: string)
@@ -1051,6 +1094,22 @@ function MainHUD.Init()
 	createMainHUD()
 	createRoleSelection()
 
+	BlueprintController.ConnectBuildProgress(function(progress: number)
+		if buildProgressFrame == nil or buildProgressFill == nil then
+			return
+		end
+		if progress <= 0 then
+			buildProgressFrame.Visible = false
+			buildProgressFill.Size = UDim2.fromScale(0, 1)
+		else
+			buildProgressFrame.Visible = true
+			buildProgressFill.Size = UDim2.fromScale(math.clamp(progress, 0, 1), 1)
+			if buildProgressLabel ~= nil then
+				buildProgressLabel.Text = string.format("BUILDING... %d%%", math.floor(progress * 100))
+			end
+		end
+	end)
+
 	remotes.ScrapUpdated.OnClientEvent:Connect(function(newScrap: number)
 		updateScrap(newScrap)
 	end)
@@ -1084,6 +1143,9 @@ function MainHUD.Init()
 	end)
 	remotes.FinalStandStarted.OnClientEvent:Connect(function()
 		showFinalStandBanner()
+		if waveTimerLabel ~= nil then
+			waveTimerLabel.Visible = false
+		end
 	end)
 	remotes.TitanStageCompleted.OnClientEvent:Connect(function(_stage: number)
 		playUISound(AudioManifest.StageComplete, 0.5)

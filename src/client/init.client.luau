@@ -1,5 +1,10 @@
 --!strict
 
+local StarterGui = game:GetService("StarterGui")
+pcall(function()
+	StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, false)
+end)
+
 local BlueprintController = require(script:WaitForChild("Controllers"):WaitForChild("BlueprintController"))
 local ToolController = require(script:WaitForChild("Controllers"):WaitForChild("ToolController"))
 local VFXController = require(script:WaitForChild("Controllers"):WaitForChild("VFXController"))

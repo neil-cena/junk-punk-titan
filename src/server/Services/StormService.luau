@@ -9,10 +9,20 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Constants = require(Shared:WaitForChild("Constants"))
 local RemotesModule = require(Shared:WaitForChild("Remotes"))
 
+local TweenService = game:GetService("TweenService")
+
 local EconomyService = require(script.Parent:WaitForChild("EconomyService"))
 local BuildingService = require(script.Parent:WaitForChild("BuildingService"))
 local PlayerTrackingService = require(script.Parent:WaitForChild("PlayerTrackingService"))
 local ObjectiveService = require(script.Parent:WaitForChild("ObjectiveService"))
+
+local EnemyService: any = nil
+local function getEnemyService()
+	if EnemyService == nil then
+		EnemyService = require(script.Parent:WaitForChild("EnemyService"))
+	end
+	return EnemyService
+end
 
 local StormService = {}
 
@@ -39,11 +49,18 @@ local function spawnTetherPads()
 		pad.CanCollide = false
 		pad.Material = Enum.Material.Neon
 		pad.Color = Color3.fromRGB(255, 175, 70)
-		pad.Size = Vector3.new(8, 0.6, 8)
+		pad.Size = Vector3.new(0.2, 0.05, 0.2)
 		pad.Position = center + offset
 		pad.Parent = Workspace
 		CollectionService:AddTag(pad, "TetherPad")
 		table.insert(tetherPads, pad)
+
+		local tween = TweenService:Create(pad, TweenInfo.new(0.6, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+			Size = Vector3.new(8, 0.6, 8),
+		})
+		task.delay(index * 0.15, function()
+			tween:Play()
+		end)
 	end
 end
 
@@ -228,7 +245,12 @@ function StormService.Init(): ()
 		while gameActive do
 			task.wait(Constants.STORM.IntervalSeconds)
 			if not activeStorm and gameActive then
-				StormService.TriggerStormNow()
+				while getEnemyService().IsSwarmActive() and gameActive do
+					task.wait(1)
+				end
+				if gameActive and not activeStorm then
+					StormService.TriggerStormNow()
+				end
 			end
 		end
 	end)

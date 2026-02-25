@@ -23,6 +23,7 @@ local currentWave = 0
 local totalKills = 0
 local gameActive = true
 local finalStandActive = false
+local swarmActive = false
 local activeRats: { [Model]: true } = {}
 local burrowPositions = {
 	Vector3.new(-220, 0.2, -220),
@@ -35,6 +36,7 @@ type RatState = {
 	state: string,
 	stolenBuildingCost: number,
 	despawning: boolean,
+	targetBuilding: BasePart?,
 }
 
 local ratStates: { [Model]: RatState } = {}
@@ -185,6 +187,7 @@ local function createScrapRatModel(spawnPosition: Vector3, isElite: boolean?): M
 		state = "approaching",
 		stolenBuildingCost = 0,
 		despawning = false,
+		targetBuilding = nil,
 	}
 
 	rat.Parent = Workspace
@@ -201,12 +204,15 @@ local function getBuildingBaseCost(buildingPart: BasePart): number
 end
 
 local function getTargetBuilding(): BasePart?
-	local buildings: { { part: BasePart, cost: number } } = {}
+	local buildings: { { part: BasePart, score: number } } = {}
 
 	for _, instance in CollectionService:GetTagged("DismantlableBuilding") do
 		if instance:IsA("BasePart") and instance.Parent ~= nil then
 			local baseCost = getBuildingBaseCost(instance)
-			table.insert(buildings, { part = instance, cost = baseCost })
+			local hpAttr = instance:GetAttribute("BuildingHP")
+			local hp = if typeof(hpAttr) == "number" then (hpAttr :: number) else Constants.BUILDING.DefaultHP
+			local score = baseCost * (hp / Constants.BUILDING.DefaultHP)
+			table.insert(buildings, { part = instance, score = score })
 		end
 	end
 
@@ -214,7 +220,7 @@ local function getTargetBuilding(): BasePart?
 		return nil
 	end
 
-	table.sort(buildings, function(a, b) return a.cost > b.cost end)
+	table.sort(buildings, function(a, b) return a.score > b.score end)
 	local poolSize = math.min(3, #buildings)
 	return buildings[math.random(1, poolSize)].part
 end
@@ -344,10 +350,78 @@ moveToWithShortTimeout = function(humanoid: Humanoid, targetPosition: Vector3, t
 	return reached
 end
 
+local spawnRatToward: (BasePart, boolean?) -> ()
+
+local function retargetRat(ratModel: Model)
+	local state = ratStates[ratModel]
+	if state == nil or state.despawning then
+		return
+	end
+	local newTarget = getTargetBuilding() or ObjectiveService.GetTitanCore()
+	if newTarget == nil then
+		despawnRat(ratModel)
+		return
+	end
+	state.state = "approaching"
+	state.targetBuilding = newTarget
+	task.spawn(function()
+		local humanoid = ratModel:FindFirstChildOfClass("Humanoid")
+		local root = ratModel.PrimaryPart
+		if humanoid == nil or root == nil or humanoid.Health <= 0 then
+			return
+		end
+		local path = PathfindingService:CreatePath()
+		local ok = pcall(function()
+			path:ComputeAsync(root.Position, newTarget.Position)
+		end)
+		if ok and path.Status == Enum.PathStatus.Success then
+			for _, waypoint in path:GetWaypoints() do
+				if humanoid.Health <= 0 or newTarget.Parent == nil or activeRats[ratModel] == nil then
+					if newTarget.Parent == nil and activeRats[ratModel] ~= nil then
+						retargetRat(ratModel)
+					end
+					return
+				end
+				moveToWithShortTimeout(humanoid, waypoint.Position, 0.9)
+			end
+		else
+			moveToWithShortTimeout(humanoid, newTarget.Position, 1.2)
+		end
+		if humanoid.Health <= 0 or activeRats[ratModel] == nil or ratModel.Parent == nil then
+			return
+		end
+		if newTarget.Parent ~= nil then
+			EnemyService.StartDismantle(newTarget, ratModel)
+			task.spawn(function()
+				while activeRats[ratModel] ~= nil and newTarget.Parent ~= nil do
+					if humanoid.Health <= 0 then
+						return
+					end
+					task.wait(0.2)
+					local progressAttr = newTarget:GetAttribute("DismantleProgress")
+					if typeof(progressAttr) == "number" and (progressAttr :: number) >= 100 then
+						return
+					end
+				end
+				if activeRats[ratModel] ~= nil and newTarget.Parent == nil then
+					retargetRat(ratModel)
+				end
+			end)
+		end
+	end)
+end
+
 local function dismantleAndDestroyBuilding(dismantledPart: BasePart, ratModel: Model?)
 	local finalPosition = dismantledPart.Position
 	local buildingType = dismantledPart:GetAttribute("BuildingType")
 	local baseCost = if typeof(buildingType) == "string" then (Constants.BASE_COSTS[buildingType] or 0) else 0
+
+	local affectedRats: { Model } = {}
+	for rat, state in ratStates do
+		if rat ~= ratModel and state.targetBuilding == dismantledPart and not state.despawning and activeRats[rat] ~= nil then
+			table.insert(affectedRats, rat)
+		end
+	end
 
 	if dismantledPart.Parent ~= nil then
 		remotes.BuildingDismantled:FireAllClients(dismantledPart.Name, finalPosition)
@@ -363,6 +437,24 @@ local function dismantleAndDestroyBuilding(dismantledPart: BasePart, ratModel: M
 			state.stolenBuildingCost = baseCost
 		end
 		fleeAndDespawnRat(ratModel)
+	end
+
+	local fleeCount = math.ceil(baseCost / 30)
+	for i, rat in affectedRats do
+		if i <= fleeCount then
+			local state = ratStates[rat]
+			if state ~= nil then
+				state.state = "fleeing"
+				state.stolenBuildingCost = math.random(1, 2)
+			end
+			task.spawn(function()
+				fleeAndDespawnRat(rat)
+			end)
+		else
+			task.spawn(function()
+				retargetRat(rat)
+			end)
+		end
 	end
 end
 
@@ -388,6 +480,7 @@ end
 function EnemyService.StopAll(): ()
 	gameActive = false
 	finalStandActive = false
+	swarmActive = false
 	for rat in activeRats do
 		if rat.Parent ~= nil then
 			local state = ratStates[rat]
@@ -401,11 +494,16 @@ function EnemyService.StopAll(): ()
 	ratStates = {}
 end
 
-local function spawnRatToward(targetBuilding: BasePart, isElite: boolean?)
+spawnRatToward = function(targetBuilding: BasePart, isElite: boolean?)
 	local radius = Constants.WAVES.SpawnRadius
 	local spawnPosition = targetBuilding.Position + Vector3.new(math.random(-radius, radius), 3, math.random(-radius, radius))
 	local ratModel = createScrapRatModel(spawnPosition, isElite)
 	activeRats[ratModel] = true
+
+	local state = ratStates[ratModel]
+	if state ~= nil then
+		state.targetBuilding = targetBuilding
+	end
 
 	local humanoid = ratModel:FindFirstChildOfClass("Humanoid")
 	local root = ratModel.PrimaryPart
@@ -423,7 +521,7 @@ local function spawnRatToward(targetBuilding: BasePart, isElite: boolean?)
 		for _, waypoint in path:GetWaypoints() do
 			if humanoid.Health <= 0 or targetBuilding.Parent == nil or activeRats[ratModel] == nil then
 				if targetBuilding.Parent == nil and activeRats[ratModel] ~= nil then
-					despawnRat(ratModel)
+					retargetRat(ratModel)
 				end
 				return
 			end
@@ -453,7 +551,7 @@ local function spawnRatToward(targetBuilding: BasePart, isElite: boolean?)
 			end
 
 			if activeRats[ratModel] ~= nil and targetBuilding.Parent == nil then
-				despawnRat(ratModel)
+				retargetRat(ratModel)
 			end
 		end)
 	end
@@ -477,6 +575,7 @@ function EnemyService.SpawnWave(waveNumber: number): ()
 	local difficultyMult = EnemyService.GetDifficultyMultiplier()
 	local enemyCount = math.floor(baseCount * difficultyMult + 0.5)
 
+	swarmActive = true
 	for _ = 1, enemyCount do
 		local targetBuilding = getTargetBuilding()
 		if targetBuilding == nil then
@@ -486,10 +585,41 @@ function EnemyService.SpawnWave(waveNumber: number): ()
 			EnemyService.SpawnScrapRat(targetBuilding)
 		end
 	end
+
+	task.spawn(function()
+		task.wait(Constants.WAVES.SwarmDurationSeconds)
+		swarmActive = false
+		remotes.SwarmEnded:FireAllClients()
+		retreatAllRats()
+	end)
 end
 
 function EnemyService.GetCurrentWave(): number
 	return currentWave
+end
+
+function EnemyService.IsSwarmActive(): boolean
+	return swarmActive
+end
+
+local function retreatAllRats()
+	local ratsToRetreat: { Model } = {}
+	for rat in activeRats do
+		local state = ratStates[rat]
+		if state ~= nil and not state.despawning and state.state ~= "fleeing" then
+			table.insert(ratsToRetreat, rat)
+		end
+	end
+	for _, rat in ratsToRetreat do
+		local state = ratStates[rat]
+		if state ~= nil then
+			state.state = "fleeing"
+			state.stolenBuildingCost = 0
+		end
+		task.spawn(function()
+			fleeAndDespawnRat(rat)
+		end)
+	end
 end
 
 local function startFinalStandSpawning()
@@ -569,19 +699,35 @@ function EnemyService.Init(): ()
 	end)
 
 	task.spawn(function()
+		local firstDelay = Constants.WAVES.FirstWaveDelaySeconds
+		local remaining = firstDelay
+		while remaining > 0 and gameActive do
+			publishNextWaveTimer(remaining)
+			task.wait(1)
+			remaining -= 1
+		end
+
 		while gameActive do
-			local remaining = Constants.WAVES.IntervalSeconds
-			while remaining > 0 and gameActive do
-				publishNextWaveTimer(remaining)
-				task.wait(1)
-				remaining -= 1
-			end
 			if not gameActive then
 				break
 			end
 			publishNextWaveTimer(0)
 			local nextWave = currentWave + 1
 			EnemyService.SpawnWave(nextWave)
+
+			while swarmActive and gameActive do
+				task.wait(0.5)
+			end
+			if not gameActive then
+				break
+			end
+
+			remaining = Constants.WAVES.IntervalSeconds
+			while remaining > 0 and gameActive do
+				publishNextWaveTimer(remaining)
+				task.wait(1)
+				remaining -= 1
+			end
 		end
 	end)
 end

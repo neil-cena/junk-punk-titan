@@ -21,4 +21,5 @@ return {
 	MinigameFail = "rbxassetid://12222208",
 
 	AmbientBase = "rbxassetid://9043887091",
+	LootCollect = "rbxassetid://12221976",
 }

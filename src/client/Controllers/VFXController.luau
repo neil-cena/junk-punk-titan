@@ -305,16 +305,52 @@ local function refreshDrillSmoke(drill: BasePart)
 	end
 end
 
+local overclockGlows: { [BasePart]: PointLight } = {}
+
+local function refreshOverclockGlow(drill: BasePart)
+	local isOverclocked = drill:GetAttribute("IsOverclocked") == true
+	if isOverclocked then
+		if overclockGlows[drill] == nil then
+			local light = Instance.new("PointLight")
+			light.Name = "OverclockGlow"
+			light.Color = Color3.fromRGB(255, 200, 50)
+			light.Range = 12
+			light.Brightness = 2
+			light.Parent = drill
+			overclockGlows[drill] = light
+		end
+	else
+		local light = overclockGlows[drill]
+		if light ~= nil then
+			light:Destroy()
+			overclockGlows[drill] = nil
+		end
+	end
+end
+
+local function clearOverclockGlow(drill: BasePart)
+	local light = overclockGlows[drill]
+	if light ~= nil then
+		light:Destroy()
+		overclockGlows[drill] = nil
+	end
+end
+
 local function bindDrillFx(drill: BasePart)
 	drill:GetAttributeChangedSignal("Stability"):Connect(function()
 		refreshDrillSmoke(drill)
 	end)
+	drill:GetAttributeChangedSignal("IsOverclocked"):Connect(function()
+		refreshOverclockGlow(drill)
+	end)
 	drill.AncestryChanged:Connect(function(_, parent)
 		if parent == nil then
 			clearDrillSmoke(drill)
+			clearOverclockGlow(drill)
 		end
 	end)
 	refreshDrillSmoke(drill)
+	refreshOverclockGlow(drill)
 end
 
 local function playBuildFlash(position: Vector3)
@@ -376,7 +412,7 @@ local function startStormFx()
 		stormBlur.Size = 0
 		stormBlur.Parent = Lighting
 	end
-	TweenService:Create(stormBlur, TweenInfo.new(1.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Size = 12 }):Play()
+	TweenService:Create(stormBlur, TweenInfo.new(1.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Size = 3 }):Play()
 
 	if stormColor == nil then
 		stormColor = Instance.new("ColorCorrectionEffect")
@@ -385,7 +421,7 @@ local function startStormFx()
 		stormColor.Parent = Lighting
 	end
 	TweenService:Create(stormColor, TweenInfo.new(1.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-		TintColor = Color3.fromRGB(130, 95, 65),
+		TintColor = Color3.fromRGB(180, 160, 140),
 	}):Play()
 
 	if stormWindSound == nil then
@@ -603,6 +639,17 @@ function VFXController.Init()
 		local delta = newValue - lastScrap
 		if delta > 0 then
 			playLootFountain(delta)
+			local ching = Instance.new("Sound")
+			ching.SoundId = AudioManifest.LootCollect
+			ching.Volume = 0.25
+			ching.PlaybackSpeed = 1.2
+			ching.Parent = SoundService
+			ching:Play()
+			ching.Ended:Connect(function()
+				if ching.Parent ~= nil then
+					ching:Destroy()
+				end
+			end)
 		end
 		lastScrap = newValue
 	end)
@@ -670,15 +717,16 @@ function VFXController.Init()
 				PlaybackSpeed = 1.08,
 			}):Play()
 		end
-		task.delay(30, function()
-			waveIntensityActive = false
-			if ambientMusic and ambientMusic.Parent then
-				TweenService:Create(ambientMusic, TweenInfo.new(3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-					Volume = 0.1,
-					PlaybackSpeed = 1,
-				}):Play()
-			end
-		end)
+	end)
+
+	remotes.SwarmEnded.OnClientEvent:Connect(function()
+		waveIntensityActive = false
+		if ambientMusic and ambientMusic.Parent then
+			TweenService:Create(ambientMusic, TweenInfo.new(3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+				Volume = 0.1,
+				PlaybackSpeed = 1,
+			}):Play()
+		end
 	end)
 
 	ambientMusic = Instance.new("Sound")

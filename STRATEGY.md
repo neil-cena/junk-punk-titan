@@ -1,8 +1,8 @@
 # Junk-Punk Titan: Implementation Strategy
 
-## Current State: ~100% Complete
+## Current State: Refinement Phase 1 Complete
 
-All 5 phases are done. Security patched, architecture cleaned, core mechanics match GDD, game completable end-to-end, audio/VFX polished, UI refactored and responsive, building rotation added, settings menu, tutorial hints, and module extraction complete.
+All 5 build phases done + Refinement Phase 1. Security patched, architecture cleaned, core mechanics match GDD, game completable end-to-end, audio/VFX polished, UI refactored and responsive, building rotation, settings menu, tutorial hints, module extraction. R1 adds balance tuning, time-limited swarms with retargeting, hold-to-build, storm/swarm exclusion, overclock glow, ka-ching, bug fixes.
 
 ---
 
@@ -283,6 +283,70 @@ This makes the game playable by real humans.
   - **Tutorial hints**: 3 sequential contextual hints appear 2s after init (build keys, rotation, Titan deposit), each visible for 4s with fade-out animation.
   - **Dismantle bar throttle**: `updateDismantleBars` now fires every 0.1s via delta accumulator instead of every `Heartbeat` frame.
   - **Distance indicator**: Titan progress panel shows live "Xm to Core" distance, updated every 0.5s.
+
+---
+
+## Refinement Phase 1: Balance, Rhythm, and GDD Compliance
+
+- [x] **R1.1** Early game balance — initial scrap 100→200, first wave delay 180s, base enemy count 5→3
+- [x] **R1.2** Time-limited swarm phase — 30s swarm duration, rats retreat when timer expires
+- [x] **R1.3** Smart rat retargeting — proportional flee on building destruction, remaining rats acquire new targets
+- [x] **R1.4** Enemy targeting formula — Cost * (HP/MaxHP) scoring instead of base cost only
+- [x] **R1.5** Storm visual refinement — blur 12→3, softer tint (130,95,65→180,160,140), duration 60→20s
+- [x] **R1.6** Storm/swarm mutual exclusion — storm defers until swarm ends
+- [x] **R1.7** Tether pad emergence animation — scale up from 0 with Back easing, staggered per pad
+- [x] **R1.8** Hold-to-build construction — 3s base time (Fixer 1.8s), progress bar, E release cancels
+- [x] **R1.9** Overclock glow VFX — PointLight on drills when IsOverclocked attribute is true
+- [x] **R1.10** Ka-ching sound on loot collection — plays on ScrapUpdated with positive delta
+- [x] **R1.11** Hide wave timer during Final Stand
+- [x] **R1.12** Bug fix: rotate hint moved out of toolbar UIListLayout
+- [x] **R1.13** Bug fix: disabled default Roblox backpack UI to prevent 1/2/3 key conflicts
+
+### Refinement Phase 1 Changelog
+
+**Modified files:**
+
+- `src/shared/Constants.luau` — Balance tuning:
+  - `ECONOMY.InitialScrap`: 100→200.
+  - `WAVES.BaseEnemyCount`: 5→3, added `FirstWaveDelaySeconds = 180`, `SwarmDurationSeconds = 30`.
+  - `STORM.DurationSeconds`: 60→20, `IntervalSeconds`: 600→450.
+  - `BUILDING.BaseBuildTimeSeconds = 3` added.
+
+- `src/shared/Remotes.luau` — Added `SwarmEnded` (RemoteEvent), `BuildProgress` (RemoteEvent).
+
+- `src/shared/AudioManifest.luau` — Added `LootCollect` sound entry.
+
+- `src/client/init.client.luau` — Disables `CoreGuiType.Backpack` to prevent hotkey conflicts with building toolbar.
+
+- `src/server/Services/EnemyService.luau` — Major swarm/retarget rewrite:
+  - **Swarm timer**: `SpawnWave` sets `swarmActive = true`, starts 30s timer. On expiry, `retreatAllRats()` sends all surviving rats to burrows, fires `SwarmEnded` to clients.
+  - **Smart retargeting**: `retargetRat(ratModel)` picks a new target via `getTargetBuilding()` and pathfinds to it. Called when a rat's target building is destroyed instead of despawning.
+  - **Proportional flee**: `dismantleAndDestroyBuilding` now collects all rats targeting the destroyed building. A proportion (based on building cost) flee with loot; the rest retarget to other buildings.
+  - **Cost * HP targeting**: `getTargetBuilding` scores buildings by `baseCost * (currentHP / maxHP)` instead of flat base cost.
+  - **RatState.targetBuilding**: New field tracks each rat's current target for retargeting lookup.
+  - **First wave delay**: Wave loop uses `FirstWaveDelaySeconds` (180s) before first wave, then waits for swarm to end before restarting the interval timer.
+  - **`IsSwarmActive()`**: Exposed for StormService to defer storms during swarms.
+
+- `src/server/Services/StormService.luau` — Storm/swarm exclusion + VFX:
+  - **Swarm exclusion**: Storm interval loop waits for `EnemyService.IsSwarmActive()` to be false before triggering. Uses lazy require to avoid circular dependency.
+  - **Tether pad emergence**: Pads spawn at size 0.2x0.05x0.2 and tween to full size (8x0.6x8) with `Back` easing over 0.6s, staggered by 0.15s per pad.
+
+- `src/client/Controllers/VFXController.luau` — Visual/audio polish:
+  - **Storm blur reduced**: 12→3 for less gameplay disruption.
+  - **Storm tint softened**: `(130,95,65)` → `(180,160,140)` for subtler color shift.
+  - **Overclock glow**: `refreshOverclockGlow(drill)` adds/removes a PointLight (yellow, range 12, brightness 2) based on `IsOverclocked` attribute. Bound on `GetAttributeChangedSignal`.
+  - **Ka-ching sound**: Plays `LootCollect` sound from AudioManifest on every positive `ScrapUpdated` delta.
+  - **Swarm music end**: `SwarmEnded` remote now triggers music intensity fade-back instead of a hardcoded 30s delay.
+
+- `src/client/Controllers/BlueprintController.luau` — Hold-to-build:
+  - **Hold-E system**: Pressing E starts a build timer (default 3s, Fixer 1.8s = 60% speed). Progress tracked via `RenderStepped`, cancels on release or distance > 14 studs.
+  - **Progress callback**: `ConnectBuildProgress(callback)` API lets MainHUD display the progress bar.
+  - **InputEnded handler**: Cancels hold when E is released.
+
+- `src/client/UI/MainHUD.luau` — UI fixes + build progress:
+  - **Rotate hint fix**: Parented to root ScreenGui instead of toolbar frame, preventing UIListLayout from consuming it.
+  - **Build progress bar**: Centered at 75% screen height, 18% width. Shows "BUILDING... X%" text over a green fill bar. Driven by `BlueprintController.ConnectBuildProgress`.
+  - **Wave timer hidden**: `FinalStandStarted` handler now sets `waveTimerLabel.Visible = false`.
 
 ---
 

@@ -30,6 +30,12 @@ local placementPosition: Vector3? = nil
 local placementValid = false
 local currentRotation: number = 0
 
+local holdTarget: BasePart? = nil
+local holdStartTime: number = 0
+local holdDuration: number = 0
+local holdRenderConn: RBXScriptConnection? = nil
+local buildProgressCallback: ((number) -> ())? = nil
+
 local function clearGhost()
 	if renderConn ~= nil then
 		renderConn:Disconnect()
@@ -181,6 +187,75 @@ local function getNearestBlueprint(range: number): BasePart?
 	return nearest
 end
 
+local function getBuildTime(): number
+	local base = Constants.BUILDING.BaseBuildTimeSeconds
+	local role = LocalPlayer:GetAttribute("Role")
+	if role == "Fixer" then
+		return base * 0.6
+	end
+	return base
+end
+
+local function cancelHold()
+	if holdRenderConn ~= nil then
+		holdRenderConn:Disconnect()
+		holdRenderConn = nil
+	end
+	holdTarget = nil
+	if buildProgressCallback ~= nil then
+		buildProgressCallback(0)
+	end
+	if mode == "Interacting" then
+		mode = "Idle"
+	end
+end
+
+local function startHold()
+	local nearest = getNearestBlueprint(12)
+	if nearest == nil then
+		return
+	end
+	mode = "Interacting"
+	holdTarget = nearest
+	holdStartTime = os.clock()
+	holdDuration = getBuildTime()
+
+	holdRenderConn = RunService.RenderStepped:Connect(function()
+		if holdTarget == nil or holdTarget.Parent == nil then
+			cancelHold()
+			return
+		end
+
+		local elapsed = os.clock() - holdStartTime
+		local progress = math.clamp(elapsed / holdDuration, 0, 1)
+
+		if buildProgressCallback ~= nil then
+			buildProgressCallback(progress)
+		end
+
+		if progress >= 1 then
+			local bpId = holdTarget:GetAttribute("BlueprintId")
+			cancelHold()
+			if typeof(bpId) == "string" then
+				BlueprintController.FinishBlueprint(bpId :: string)
+			end
+			return
+		end
+
+		local character = LocalPlayer.Character
+		local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
+		if root ~= nil and root:IsA("BasePart") then
+			if (root.Position - holdTarget.Position).Magnitude > 14 then
+				cancelHold()
+			end
+		end
+	end)
+end
+
+function BlueprintController.ConnectBuildProgress(callback: (number) -> ())
+	buildProgressCallback = callback
+end
+
 local function onInputBegan(input: InputObject, processed: boolean)
 	if mode == "Placing" then
 		if input.KeyCode == Enum.KeyCode.R then
@@ -212,15 +287,15 @@ local function onInputBegan(input: InputObject, processed: boolean)
 	elseif input.KeyCode == Enum.KeyCode.Three then
 		BlueprintController.StartPlacing("Wall")
 	elseif input.KeyCode == Enum.KeyCode.E then
-		mode = "Interacting"
-		local nearest = getNearestBlueprint(12)
-		if nearest ~= nil then
-			local blueprintId = nearest:GetAttribute("BlueprintId")
-			if typeof(blueprintId) == "string" then
-				BlueprintController.FinishBlueprint(blueprintId :: string)
-			end
+		if holdTarget == nil then
+			startHold()
 		end
-		mode = "Idle"
+	end
+end
+
+local function onInputEnded(input: InputObject, _processed: boolean)
+	if input.KeyCode == Enum.KeyCode.E and holdTarget ~= nil then
+		cancelHold()
 	end
 end
 
@@ -231,6 +306,7 @@ function BlueprintController.Init()
 	isInitialized = true
 
 	UserInputService.InputBegan:Connect(onInputBegan)
+	UserInputService.InputEnded:Connect(onInputEnded)
 end
 
 return BlueprintController

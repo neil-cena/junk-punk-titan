@@ -33,6 +33,8 @@ local RemoteNames = {
 	RequestSessionStats = "RequestSessionStats",
 	RepairMinigameResult = "RepairMinigameResult",
 	DrillRepaired = "DrillRepaired",
+	SwarmEnded = "SwarmEnded",
+	BuildProgress = "BuildProgress",
 }
 
 local function getOrCreateRemoteFolder(): Folder
@@ -120,6 +122,8 @@ function Remotes.Get()
 			RequestSessionStats = getOrCreateRemoteFunction(folder, RemoteNames.RequestSessionStats),
 			RepairMinigameResult = getOrCreateRemoteEvent(folder, RemoteNames.RepairMinigameResult),
 			DrillRepaired = getOrCreateRemoteEvent(folder, RemoteNames.DrillRepaired),
+			SwarmEnded = getOrCreateRemoteEvent(folder, RemoteNames.SwarmEnded),
+			BuildProgress = getOrCreateRemoteEvent(folder, RemoteNames.BuildProgress),
 		}
 	end
 
@@ -154,6 +158,8 @@ function Remotes.Get()
 		RequestSessionStats = waitForRemoteFunction(folder, RemoteNames.RequestSessionStats),
 		RepairMinigameResult = waitForRemoteEvent(folder, RemoteNames.RepairMinigameResult),
 		DrillRepaired = waitForRemoteEvent(folder, RemoteNames.DrillRepaired),
+		SwarmEnded = waitForRemoteEvent(folder, RemoteNames.SwarmEnded),
+		BuildProgress = waitForRemoteEvent(folder, RemoteNames.BuildProgress),
 	}
 end
 
