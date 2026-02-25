@@ -50,7 +50,7 @@ function TheftComponent.Attach(part: BasePart): TheftData
 	return state
 end
 
-function TheftComponent.StartDismantle(part: BasePart, enemyModel: Model?): ()
+function TheftComponent.StartDismantle(part: BasePart, enemyModel: Model?, progressMultiplier: number?): ()
 	local state = (states[part] or TheftComponent.Attach(part)) :: InternalState
 
 	if state.isBeingDismantled then
@@ -76,7 +76,10 @@ function TheftComponent.StartDismantle(part: BasePart, enemyModel: Model?): ()
 			local delta = now - lastTick
 			lastTick = now
 
-			state.dismantleProgress = math.min(100, state.dismantleProgress + getProgressPerSecond(part) * delta)
+			local speedMult = if typeof(progressMultiplier) == "number"
+				then math.max(0.05, progressMultiplier :: number)
+				else 1
+			state.dismantleProgress = math.min(100, state.dismantleProgress + (getProgressPerSecond(part) * speedMult * delta))
 			setProgress(part, state.dismantleProgress)
 		end
 

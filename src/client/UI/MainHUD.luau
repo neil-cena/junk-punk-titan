@@ -30,6 +30,7 @@ local isInitialized = false
 local currentScrap = 0
 local currentStormSteel = 0
 local lastWaveSeconds = -1
+local scrapHistory: { { t: number, v: number } } = {}
 local scrapLabel: TextLabel? = nil
 local stormSteelLabel: TextLabel? = nil
 local waveTimerLabel: TextLabel? = nil
@@ -111,12 +112,48 @@ local function showScrapDelta(delta: number)
 	end)
 end
 
+local function getScrapRate(): number
+	local now = os.clock()
+	local cutoff = now - 10
+	local pruned: { { t: number, v: number } } = {}
+	for _, entry in scrapHistory do
+		if entry.t >= cutoff then
+			table.insert(pruned, entry)
+		end
+	end
+	scrapHistory = pruned
+	if #scrapHistory < 2 then
+		return 0
+	end
+	local oldest = scrapHistory[1]
+	local newest = scrapHistory[#scrapHistory]
+	local elapsed = newest.t - oldest.t
+	if elapsed < 0.5 then
+		return 0
+	end
+	return (newest.v - oldest.v) / elapsed
+end
+
+local function refreshScrapLabel()
+	if scrapLabel == nil then
+		return
+	end
+
+	local rate = getScrapRate()
+	if rate > 0.1 then
+		scrapLabel.Text = ("Scrap: %d (+%.1f/s)"):format(currentScrap, rate)
+	else
+		scrapLabel.Text = ("Scrap: %d"):format(currentScrap)
+	end
+end
+
 local function updateScrap(newScrap: number)
 	local previous = currentScrap
 	currentScrap = newScrap
+	table.insert(scrapHistory, { t = os.clock(), v = newScrap })
 
 	if scrapLabel ~= nil then
-		scrapLabel.Text = ("Scrap: %d"):format(currentScrap)
+		refreshScrapLabel()
 		animateScrapPop(scrapLabel)
 	end
 
@@ -1372,11 +1409,17 @@ function MainHUD.Init()
 	end
 
 	local dismantleBarAccum = 0
+	local scrapRateAccum = 0
 	RunService.Heartbeat:Connect(function(dt: number)
 		dismantleBarAccum += dt
+		scrapRateAccum += dt
 		if dismantleBarAccum >= 0.1 then
 			dismantleBarAccum = 0
 			updateDismantleBars()
+		end
+		if scrapRateAccum >= 1 then
+			scrapRateAccum = 0
+			refreshScrapLabel()
 		end
 	end)
 

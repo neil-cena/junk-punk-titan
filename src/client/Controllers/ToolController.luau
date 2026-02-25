@@ -100,18 +100,39 @@ local function tryPunch()
 	local rayParams = RaycastParams.new()
 	rayParams.FilterType = Enum.RaycastFilterType.Exclude
 	rayParams.FilterDescendantsInstances = { character }
-	local result = Workspace:Raycast(unitRay.Origin, unitRay.Direction * Constants.COMBAT.PunchRange, rayParams)
+	local result = Workspace:Raycast(unitRay.Origin, unitRay.Direction * 500, rayParams)
 
 	lastPunchAt = os.clock()
 	playPunchEffects()
 
-	if result == nil then
-		return
+	local ratModel: Model? = nil
+	if result ~= nil then
+		ratModel = findRatModel(result.Instance)
 	end
 
-	local ratModel = findRatModel(result.Instance)
 	if ratModel == nil then
-		return
+		local root = character:FindFirstChild("HumanoidRootPart")
+		if root == nil or not root:IsA("BasePart") then
+			return
+		end
+		local nearest: Model? = nil
+		local nearestDist = Constants.COMBAT.PunchRange + 0.1
+		for _, rat in CollectionService:GetTagged("ScrapRatEnemy") do
+			if rat:IsA("Model") and rat.Parent ~= nil then
+				local ratRoot = rat.PrimaryPart
+				if ratRoot ~= nil then
+					local dist = (ratRoot.Position - root.Position).Magnitude
+					if dist <= nearestDist then
+						nearestDist = dist
+						nearest = rat
+					end
+				end
+			end
+		end
+		ratModel = nearest
+		if ratModel == nil then
+			return
+		end
 	end
 
 	remotes.PunchEnemy:FireServer(ratModel)
@@ -440,11 +461,12 @@ function ToolController.Init()
 	end
 
 	UserInputService.InputBegan:Connect(function(input, processed)
-		if processed then
-			return
-		end
 		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
 			tryPunch()
+			return
+		end
+		if processed then
+			return
 		end
 	end)
 end

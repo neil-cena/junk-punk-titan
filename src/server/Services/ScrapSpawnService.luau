@@ -44,7 +44,7 @@ local function spawnScrapPile()
 	local yPos = if result then result.Position.Y + 0.8 else 0.8
 
 	local pile = Instance.new("Part")
-	pile.Name = "LooseScrapPile"
+	pile.Name = "JunkBlock"
 	pile.Size = Vector3.new(1.8, 1.0, 1.8)
 	pile.Material = Enum.Material.CorrodedMetal
 	pile.Color = Color3.fromRGB(180, 160, 100)
@@ -69,10 +69,12 @@ function ScrapSpawnService.Init(): ()
 		end
 	end)
 
+	local MAGNET_TICK = 0.05
+	local PULL_SPEED = 40
 	local magnetAcc = 0
 	RunService.Heartbeat:Connect(function(dt)
 		magnetAcc += dt
-		if magnetAcc < 0.05 then
+		if magnetAcc < MAGNET_TICK then
 			return
 		end
 		magnetAcc = 0
@@ -107,11 +109,17 @@ function ScrapSpawnService.Init(): ()
 			if nearestRoot ~= nil and nearestDist <= magnetRadius then
 				if nearestDist <= 1.5 then
 					pickedPiles[pile] = true
-					EconomyService.AddScrap(Constants.SCRAP_SPAWNS.ValuePerPile)
+					EconomyService.AddScrap(Constants.LOOT.JunkBlockValue)
 					pile:Destroy()
 				else
-					local direction = (nearestRoot.Position - pile.Position).Unit
-					pile.Position = pile.Position + direction * math.min(2, nearestDist * 0.4)
+					local distRatio = nearestDist / magnetRadius
+					local arcY = math.sin(distRatio * math.pi) * 1.5
+					local targetPos = nearestRoot.Position + Vector3.new(0, arcY, 0)
+					local dir = (targetPos - pile.Position).Unit
+					local step = PULL_SPEED * MAGNET_TICK
+					local newPos = pile.Position + dir * math.min(step, nearestDist)
+					local spinAngle = os.clock() * 4
+					pile.CFrame = CFrame.new(newPos) * CFrame.Angles(0, spinAngle, math.sin(spinAngle) * 0.3)
 					table.insert(alive, pile)
 				end
 			else

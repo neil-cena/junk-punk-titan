@@ -63,6 +63,10 @@ local function isPositionValid(player: Player, requestedPosition: Vector3): (boo
 	if (root.Position - snapped).Magnitude > maxDist then
 		return false, nil
 	end
+	local maxBuildRadius = Constants.BUILDING.MaxBuildRadiusFromCenter
+	if Vector3.new(snapped.X, 0, snapped.Z).Magnitude > maxBuildRadius then
+		return false, nil
+	end
 
 	return true, snapped
 end

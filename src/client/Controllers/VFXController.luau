@@ -22,6 +22,7 @@ local POOL_SIZE = 20
 local isInitialized = false
 local remotes = Remotes.Get()
 local lastScrap = 0
+local lastStormSteel = 0
 
 type ActiveDismantleEffect = {
 	baseCFrame: CFrame,
@@ -42,6 +43,7 @@ local ambientMusic: Sound? = nil
 local waveIntensityActive = false
 local ratHealthBars: { [Model]: BillboardGui } = {}
 local ratHealthConnections: { [Model]: { RBXScriptConnection } } = {}
+local baseRadiusMarker: Instance? = nil
 
 local function createGearPart(): BasePart
 	local part = Instance.new("Part")
@@ -338,6 +340,40 @@ local function clearOverclockGlow(drill: BasePart)
 	end
 end
 
+local function computeDrillEfficiency(stability: number): number
+	if stability >= 80 then
+		return 1
+	elseif stability >= 20 then
+		return 0.5
+	end
+	return 0
+end
+
+local function refreshDrillRateLabel(drill: BasePart, rateLabel: TextLabel)
+	local isClogged = drill:GetAttribute("IsClogged")
+	if isClogged == true then
+		rateLabel.Text = "+0.0/s"
+		rateLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
+		return
+	end
+
+	local stabilityAttr = drill:GetAttribute("Stability")
+	local stability = if typeof(stabilityAttr) == "number" then (stabilityAttr :: number) else 100
+	local efficiency = computeDrillEfficiency(stability)
+
+	local isOverclocked = drill:GetAttribute("IsOverclocked")
+	local overclockMult = if isOverclocked == true then Constants.MAINTENANCE.OverclockMultiplier else 1
+
+	local rate = Constants.MAINTENANCE.DrillBaseOutput * efficiency * overclockMult / Constants.MAINTENANCE.ResourceTickSeconds
+	if rate > 0 then
+		rateLabel.Text = ("+%.1f/s"):format(rate)
+		rateLabel.TextColor3 = Color3.fromRGB(80, 220, 90)
+	else
+		rateLabel.Text = "+0.0/s"
+		rateLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
+	end
+end
+
 local function bindDrillFx(drill: BasePart)
 	drill:GetAttributeChangedSignal("Stability"):Connect(function()
 		refreshDrillSmoke(drill)
@@ -353,6 +389,37 @@ local function bindDrillFx(drill: BasePart)
 	end)
 	refreshDrillSmoke(drill)
 	refreshOverclockGlow(drill)
+
+	local rateGui = Instance.new("BillboardGui")
+	rateGui.Name = "DrillRateGui"
+	rateGui.Size = UDim2.new(5, 0, 0.6, 0)
+	rateGui.StudsOffset = Vector3.new(0, 4, 0)
+	rateGui.AlwaysOnTop = false
+	rateGui.MaxDistance = 60
+	rateGui.Adornee = drill
+	rateGui.Parent = drill
+
+	local rateLabel = Instance.new("TextLabel")
+	rateLabel.Name = "RateLabel"
+	rateLabel.Size = UDim2.fromScale(1, 1)
+	rateLabel.BackgroundTransparency = 1
+	rateLabel.Font = Enum.Font.GothamBold
+	rateLabel.TextScaled = true
+	rateLabel.TextStrokeTransparency = 0.4
+	rateLabel.TextColor3 = Color3.fromRGB(80, 220, 90)
+	rateLabel.Parent = rateGui
+
+	refreshDrillRateLabel(drill, rateLabel)
+
+	drill:GetAttributeChangedSignal("Stability"):Connect(function()
+		refreshDrillRateLabel(drill, rateLabel)
+	end)
+	drill:GetAttributeChangedSignal("IsOverclocked"):Connect(function()
+		refreshDrillRateLabel(drill, rateLabel)
+	end)
+	drill:GetAttributeChangedSignal("IsClogged"):Connect(function()
+		refreshDrillRateLabel(drill, rateLabel)
+	end)
 end
 
 local function playBuildFlash(position: Vector3)
@@ -665,6 +732,7 @@ local function bindRatHealthBar(ratModel: Model)
 	gui.MaxDistance = 100
 	gui.Adornee = root
 	gui.Parent = ratModel
+	gui.Enabled = false
 
 	local bg = Instance.new("Frame")
 	bg.Name = "BG"
@@ -686,6 +754,7 @@ local function bindRatHealthBar(ratModel: Model)
 		end
 		local maxHealth = math.max(1, humanoid.MaxHealth)
 		local percent = math.clamp(humanoid.Health / maxHealth, 0, 1)
+		gui.Enabled = humanoid.Health < maxHealth
 		fill.Size = UDim2.fromScale(percent, 1)
 		fill.BackgroundColor3 = healthColor(percent)
 	end
@@ -701,6 +770,61 @@ local function bindRatHealthBar(ratModel: Model)
 			end
 		end),
 	}
+end
+
+local function refreshBaseRadiusMarker()
+	if baseRadiusMarker ~= nil and baseRadiusMarker.Parent ~= nil then
+		baseRadiusMarker:Destroy()
+	end
+	baseRadiusMarker = nil
+
+	local titanCore: BasePart? = nil
+	for _, tagged in CollectionService:GetTagged("TitanObjective") do
+		if tagged:IsA("BasePart") then
+			titanCore = tagged
+			break
+		end
+	end
+	if titanCore == nil then
+		return
+	end
+
+	local radius = Constants.WAVES.MinSpawnDistanceFromCenter
+	local ring = Instance.new("Model")
+	ring.Name = "BaseRadiusMarker"
+
+	local center = Vector3.new(titanCore.Position.X, titanCore.Position.Y, titanCore.Position.Z)
+	local groundRayParams = RaycastParams.new()
+	groundRayParams.FilterType = Enum.RaycastFilterType.Exclude
+	groundRayParams.FilterDescendantsInstances = { titanCore }
+	local groundHit = Workspace:Raycast(center + Vector3.new(0, 60, 0), Vector3.new(0, -200, 0), groundRayParams)
+	local groundY = if groundHit ~= nil then groundHit.Position.Y + 0.08 else center.Y
+
+	local segmentCount = 56
+	local segmentHeight = 0.12
+	local segmentThickness = 0.35
+	for i = 1, segmentCount do
+		local a0 = ((i - 1) / segmentCount) * math.pi * 2
+		local a1 = (i / segmentCount) * math.pi * 2
+		local p0 = Vector3.new(center.X + math.cos(a0) * radius, groundY, center.Z + math.sin(a0) * radius)
+		local p1 = Vector3.new(center.X + math.cos(a1) * radius, groundY, center.Z + math.sin(a1) * radius)
+		local mid = (p0 + p1) * 0.5
+		local length = (p1 - p0).Magnitude
+
+		local segment = Instance.new("Part")
+		segment.Name = "BorderSegment"
+		segment.Anchored = true
+		segment.CanCollide = false
+		segment.Material = Enum.Material.Neon
+		segment.Color = Color3.fromRGB(100, 170, 255)
+		segment.Transparency = 0.2
+		segment.Size = Vector3.new(segmentThickness, segmentHeight, length + 0.04)
+		segment.CFrame = CFrame.lookAt(mid, p1)
+		segment.Parent = ring
+	end
+
+	ring.Parent = Workspace
+	baseRadiusMarker = ring
 end
 
 function VFXController.Init()
@@ -749,6 +873,13 @@ function VFXController.Init()
 		end
 	end)
 
+	refreshBaseRadiusMarker()
+	CollectionService:GetInstanceAddedSignal("TitanObjective"):Connect(function(instance)
+		if instance:IsA("BasePart") then
+			task.defer(refreshBaseRadiusMarker)
+		end
+	end)
+
 	remotes.ScrapUpdated.OnClientEvent:Connect(function(newValue: number)
 		local delta = newValue - lastScrap
 		if delta > 0 then
@@ -767,8 +898,51 @@ function VFXController.Init()
 		end
 		lastScrap = newValue
 	end)
+
+	remotes.StormSteelUpdated.OnClientEvent:Connect(function(newValue: number)
+		local delta = newValue - lastStormSteel
+		if delta > 0 then
+			local chime = Instance.new("Sound")
+			chime.SoundId = AudioManifest.SteelCollect
+			chime.Volume = 0.4
+			chime.PlaybackSpeed = 1.3 + math.random() * 0.2
+			chime.Parent = SoundService
+			chime:Play()
+			chime.Ended:Connect(function()
+				if chime.Parent ~= nil then
+					chime:Destroy()
+				end
+			end)
+
+			local character = LocalPlayer.Character
+			local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
+			if root ~= nil and root:IsA("BasePart") then
+				local ring = Instance.new("Part")
+				ring.Name = "SteelPickupFlash"
+				ring.Shape = Enum.PartType.Ball
+				ring.Material = Enum.Material.Neon
+				ring.Color = Color3.fromRGB(80, 180, 255)
+				ring.Anchored = true
+				ring.CanCollide = false
+				ring.Size = Vector3.new(2, 2, 2)
+				ring.Position = root.Position
+				ring.Transparency = 0.4
+				ring.Parent = Workspace
+				TweenService:Create(ring, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+					Size = Vector3.new(12, 12, 12),
+					Transparency = 1,
+				}):Play()
+				task.delay(0.45, function()
+					if ring.Parent ~= nil then
+						ring:Destroy()
+					end
+				end)
+			end
+		end
+		lastStormSteel = newValue
+	end)
+
 	remotes.EnemyKilled.OnClientEvent:Connect(function(position: Vector3)
-		playLootFountain(Constants.COMBAT.StandardKillMaxReward, position)
 		playEnemyDeathFx(position)
 	end)
 

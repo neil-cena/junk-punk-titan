@@ -127,6 +127,7 @@ function Remotes.Get()
 			SwarmEnded = getOrCreateRemoteEvent(folder, RemoteNames.SwarmEnded),
 			BuildProgress = getOrCreateRemoteEvent(folder, RemoteNames.BuildProgress),
 			CancelBlueprint = getOrCreateRemoteEvent(folder, RemoteNames.CancelBlueprint),
+			PunchEnemy = getOrCreateRemoteEvent(folder, RemoteNames.PunchEnemy),
 		}
 	end
 
@@ -164,6 +165,7 @@ function Remotes.Get()
 		SwarmEnded = waitForRemoteEvent(folder, RemoteNames.SwarmEnded),
 		BuildProgress = waitForRemoteEvent(folder, RemoteNames.BuildProgress),
 		CancelBlueprint = waitForRemoteEvent(folder, RemoteNames.CancelBlueprint),
+		PunchEnemy = waitForRemoteEvent(folder, RemoteNames.PunchEnemy),
 	}
 end
 

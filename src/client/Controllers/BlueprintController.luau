@@ -81,6 +81,10 @@ local function getPlacementResult(): (boolean, Vector3?)
 	if (root.Position - snapped).Magnitude > maxDistance then
 		return false, nil
 	end
+	local maxBuildRadius = Constants.BUILDING.MaxBuildRadiusFromCenter
+	if Vector3.new(snapped.X, 0, snapped.Z).Magnitude > maxBuildRadius then
+		return false, nil
+	end
 
 	local buildType = currentType
 	if buildType == nil then

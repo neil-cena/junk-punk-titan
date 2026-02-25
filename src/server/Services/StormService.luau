@@ -3,6 +3,7 @@
 local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
@@ -32,6 +33,7 @@ local permanentStorm = false
 local gameActive = true
 local tetherPads: { BasePart } = {}
 local activeStormSteel: { BasePart } = {}
+local pickedSteel: { [BasePart]: boolean } = {}
 
 local function spawnTetherPads()
 	local center = Vector3.new(0, 0.5, 0)
@@ -200,7 +202,7 @@ local function runStorm()
 	end
 
 	clearTetherPads()
-	clearStormSteel()
+	task.delay(3, clearStormSteel)
 	remotes.TetherStatus:FireAllClients(0, 0)
 	activeStorm = false
 	remotes.StormEnded:FireAllClients()
@@ -245,11 +247,85 @@ function StormService.Init(): ()
 		while gameActive do
 			task.wait(Constants.STORM.IntervalSeconds)
 			if not activeStorm and gameActive then
-				while getEnemyService().IsSwarmActive() and gameActive do
+				while gameActive do
+					local isSwarm = false
+					pcall(function()
+						isSwarm = getEnemyService().IsSwarmActive()
+					end)
+					if not isSwarm then
+						break
+					end
 					task.wait(1)
 				end
 				if gameActive and not activeStorm then
 					StormService.TriggerStormNow()
+				end
+			end
+		end
+	end)
+
+	local STEEL_MAGNET_TICK = 0.05
+	local STEEL_PULL_SPEED = 35
+	local STEEL_MAGNET_RADIUS = 7
+	local steelMagnetAcc = 0
+	RunService.Heartbeat:Connect(function(dt)
+		steelMagnetAcc += dt
+		if steelMagnetAcc < STEEL_MAGNET_TICK then
+			return
+		end
+		steelMagnetAcc = 0
+
+		for _, drop in activeStormSteel do
+			if drop.Parent == nil or pickedSteel[drop] then
+				continue
+			end
+
+			local nearestRoot: BasePart? = nil
+			local nearestDist = STEEL_MAGNET_RADIUS + 1
+
+			for _, player in Players:GetPlayers() do
+				local character = player.Character
+				if character == nil then
+					continue
+				end
+				local root = character:FindFirstChild("HumanoidRootPart")
+				if root == nil or not root:IsA("BasePart") then
+					continue
+				end
+				local pDist = (root.Position - drop.Position).Magnitude
+				if pDist < nearestDist then
+					nearestDist = pDist
+					nearestRoot = root
+				end
+			end
+
+			if nearestRoot ~= nil and nearestDist <= STEEL_MAGNET_RADIUS then
+				if not drop.Anchored then
+					drop.Anchored = true
+					local sparkle = Instance.new("ParticleEmitter")
+					sparkle.Name = "SteelSparkle"
+					sparkle.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+					sparkle.Color = ColorSequence.new(Color3.fromRGB(100, 200, 255), Color3.fromRGB(60, 140, 220))
+					sparkle.Lifetime = NumberRange.new(0.15, 0.3)
+					sparkle.Speed = NumberRange.new(2, 5)
+					sparkle.Rate = 40
+					sparkle.SpreadAngle = Vector2.new(180, 180)
+					sparkle.Size = NumberSequence.new(0.15, 0.03)
+					sparkle.LightEmission = 1
+					sparkle.Parent = drop
+				end
+
+				if nearestDist <= 1.5 then
+					pickedSteel[drop] = true
+					EconomyService.AddStormSteel(1)
+					drop:Destroy()
+				else
+					local distRatio = nearestDist / STEEL_MAGNET_RADIUS
+					local arcY = math.sin(distRatio * math.pi) * 2.0
+					local targetPos = nearestRoot.Position + Vector3.new(0, arcY, 0)
+					local dir = (targetPos - drop.Position).Unit
+					local step = STEEL_PULL_SPEED * STEEL_MAGNET_TICK
+					drop.Position = drop.Position + dir * math.min(step, nearestDist)
 				end
 			end
 		end

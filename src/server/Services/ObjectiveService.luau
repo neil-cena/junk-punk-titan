@@ -253,7 +253,7 @@ local function startIntegrityDrainLoop()
 			lastTick = now
 
 			if core:GetAttribute("IsBeingDismantled") == true then
-				setIntegrity(integrity - delta)
+				setIntegrity(integrity - (delta * Constants.TITAN.IntegrityDrainPerSecond))
 				if integrity <= 0 then
 					setIntegrity(0)
 					triggerGameOver()
