@@ -40,6 +40,8 @@ local baseAmbient = Lighting.Ambient
 local baseBrightness = Lighting.Brightness
 local ambientMusic: Sound? = nil
 local waveIntensityActive = false
+local ratHealthBars: { [Model]: BillboardGui } = {}
+local ratHealthConnections: { [Model]: { RBXScriptConnection } } = {}
 
 local function createGearPart(): BasePart
 	local part = Instance.new("Part")
@@ -601,6 +603,87 @@ local function playWaveHorn()
 	end)
 end
 
+local function clearRatHealthBar(ratModel: Model)
+	local bar = ratHealthBars[ratModel]
+	if bar ~= nil then
+		bar:Destroy()
+		ratHealthBars[ratModel] = nil
+	end
+
+	local conns = ratHealthConnections[ratModel]
+	if conns ~= nil then
+		for _, conn in conns do
+			conn:Disconnect()
+		end
+		ratHealthConnections[ratModel] = nil
+	end
+end
+
+local function healthColor(percent: number): Color3
+	if percent >= 0.66 then
+		return Color3.fromRGB(80, 220, 90)
+	elseif percent >= 0.33 then
+		return Color3.fromRGB(255, 200, 70)
+	end
+	return Color3.fromRGB(255, 80, 80)
+end
+
+local function bindRatHealthBar(ratModel: Model)
+	if ratHealthBars[ratModel] ~= nil then
+		return
+	end
+
+	local humanoid = ratModel:FindFirstChildOfClass("Humanoid")
+	local root = ratModel.PrimaryPart
+	if humanoid == nil or root == nil then
+		return
+	end
+
+	local gui = Instance.new("BillboardGui")
+	gui.Name = "RatHealthBar"
+	gui.Size = UDim2.fromOffset(56, 8)
+	gui.StudsOffset = Vector3.new(0, 2.5, 0)
+	gui.AlwaysOnTop = true
+	gui.Adornee = root
+	gui.Parent = ratModel
+
+	local bg = Instance.new("Frame")
+	bg.Name = "BG"
+	bg.Size = UDim2.fromScale(1, 1)
+	bg.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+	bg.BorderSizePixel = 0
+	bg.Parent = gui
+
+	local fill = Instance.new("Frame")
+	fill.Name = "Fill"
+	fill.Size = UDim2.fromScale(1, 1)
+	fill.BackgroundColor3 = Color3.fromRGB(80, 220, 90)
+	fill.BorderSizePixel = 0
+	fill.Parent = bg
+
+	local function refresh()
+		if humanoid.Parent == nil then
+			return
+		end
+		local maxHealth = math.max(1, humanoid.MaxHealth)
+		local percent = math.clamp(humanoid.Health / maxHealth, 0, 1)
+		fill.Size = UDim2.fromScale(percent, 1)
+		fill.BackgroundColor3 = healthColor(percent)
+	end
+
+	refresh()
+	ratHealthBars[ratModel] = gui
+	ratHealthConnections[ratModel] = {
+		humanoid.HealthChanged:Connect(refresh),
+		humanoid:GetPropertyChangedSignal("MaxHealth"):Connect(refresh),
+		ratModel.AncestryChanged:Connect(function(_, parent)
+			if parent == nil then
+				clearRatHealthBar(ratModel)
+			end
+		end),
+	}
+end
+
 function VFXController.Init()
 	if isInitialized then
 		return
@@ -632,6 +715,18 @@ function VFXController.Init()
 	CollectionService:GetInstanceAddedSignal("Drill"):Connect(function(instance)
 		if instance:IsA("BasePart") then
 			bindDrillFx(instance)
+		end
+	end)
+
+	for _, instance in CollectionService:GetTagged("ScrapRatEnemy") do
+		if instance:IsA("Model") then
+			bindRatHealthBar(instance)
+		end
+	end
+
+	CollectionService:GetInstanceAddedSignal("ScrapRatEnemy"):Connect(function(instance)
+		if instance:IsA("Model") then
+			bindRatHealthBar(instance)
 		end
 	end)
 

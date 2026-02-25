@@ -496,7 +496,10 @@ end
 
 spawnRatToward = function(targetBuilding: BasePart, isElite: boolean?)
 	local radius = Constants.WAVES.SpawnRadius
-	local spawnPosition = targetBuilding.Position + Vector3.new(math.random(-radius, radius), 3, math.random(-radius, radius))
+	local minDist = math.min(Constants.WAVES.MinSpawnDistanceFromCenter, radius)
+	local angle = math.random() * math.pi * 2
+	local dist = minDist + (math.random() * (radius - minDist))
+	local spawnPosition = Vector3.new(math.cos(angle) * dist, 3, math.sin(angle) * dist)
 	local ratModel = createScrapRatModel(spawnPosition, isElite)
 	activeRats[ratModel] = true
 

@@ -290,6 +290,14 @@ local function onInputBegan(input: InputObject, processed: boolean)
 		if holdTarget == nil then
 			startHold()
 		end
+	elseif input.KeyCode == Enum.KeyCode.X then
+		local nearest = getNearestBlueprint(12)
+		if nearest ~= nil then
+			local bpId = nearest:GetAttribute("BlueprintId")
+			if typeof(bpId) == "string" then
+				remotes.CancelBlueprint:FireServer(bpId :: string)
+			end
+		end
 	end
 end
 

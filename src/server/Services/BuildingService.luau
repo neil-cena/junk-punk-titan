@@ -382,9 +382,30 @@ function BuildingService.GetBuildingsLost(): number
 	return buildingsLostCount
 end
 
+local function cancelBlueprint(player: Player, blueprintId: string)
+	if typeof(blueprintId) ~= "string" then
+		return
+	end
+	local blueprint = blueprints[blueprintId]
+	if blueprint == nil then
+		return
+	end
+	if blueprint.ownerUserId ~= player.UserId then
+		return
+	end
+	if blueprint.isFinished then
+		return
+	end
+	if blueprint.ghostPart.Parent ~= nil then
+		blueprint.ghostPart:Destroy()
+	end
+	blueprints[blueprintId] = nil
+end
+
 function BuildingService.Init(): ()
 	RemoteGuard.Register("PlaceBlueprint", 5, 1)
 	RemoteGuard.Register("FinishBlueprint", 3, 1)
+	RemoteGuard.Register("CancelBlueprint", 5, 1)
 
 	remotes.PlaceBlueprint.OnServerEvent:Connect(function(player: Player, buildingType: BuildingType, position: Vector3, rotation: number?)
 		if not RemoteGuard.Check("PlaceBlueprint", player) then
@@ -402,6 +423,13 @@ function BuildingService.Init(): ()
 	remotes.RequestBuildCosts.OnServerInvoke = function(_player: Player)
 		return getNextBuildCosts()
 	end
+
+	remotes.CancelBlueprint.OnServerEvent:Connect(function(player: Player, blueprintId: string)
+		if not RemoteGuard.Check("CancelBlueprint", player) then
+			return
+		end
+		cancelBlueprint(player, blueprintId)
+	end)
 
 	Players.PlayerRemoving:Connect(cleanupPlayerBlueprints)
 end

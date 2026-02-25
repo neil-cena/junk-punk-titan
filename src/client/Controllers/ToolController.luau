@@ -261,20 +261,79 @@ local function bindWrenchTool(tool: Tool)
 	end)
 end
 
+local function tryAutoEquip(tool: Tool)
+	local character = LocalPlayer.Character
+	if character == nil then
+		return
+	end
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if humanoid == nil then
+		return
+	end
+	if tool.Parent == character then
+		return
+	end
+	humanoid:EquipTool(tool)
+end
+
+local function getRoleToolName(): string?
+	local role = LocalPlayer:GetAttribute("Role")
+	if role == "Enforcer" then
+		return SHOTGUN_TOOL_NAME
+	elseif role == "Fixer" then
+		return WRENCH_TOOL_NAME
+	end
+	return nil
+end
+
+local function getToolInstance(toolName: string): Tool?
+	local character = LocalPlayer.Character
+	if character ~= nil then
+		local equipped = character:FindFirstChild(toolName)
+		if equipped ~= nil and equipped:IsA("Tool") then
+			return equipped
+		end
+	end
+
+	local backpack = LocalPlayer:FindFirstChild("Backpack")
+	if backpack ~= nil then
+		local stored = backpack:FindFirstChild(toolName)
+		if stored ~= nil and stored:IsA("Tool") then
+			return stored
+		end
+	end
+
+	return nil
+end
+
 local function bindContainer(container: Instance)
+	local isBackpack = container:IsA("Backpack")
+
 	for _, child in container:GetChildren() do
 		if child:IsA("Tool") and child.Name == SHOTGUN_TOOL_NAME then
 			bindShotgunTool(child)
+			if isBackpack then
+				tryAutoEquip(child)
+			end
 		elseif child:IsA("Tool") and child.Name == WRENCH_TOOL_NAME then
 			bindWrenchTool(child)
+			if isBackpack then
+				tryAutoEquip(child)
+			end
 		end
 	end
 
 	container.ChildAdded:Connect(function(child)
 		if child:IsA("Tool") and child.Name == SHOTGUN_TOOL_NAME then
 			bindShotgunTool(child)
+			if isBackpack then
+				tryAutoEquip(child)
+			end
 		elseif child:IsA("Tool") and child.Name == WRENCH_TOOL_NAME then
 			bindWrenchTool(child)
+			if isBackpack then
+				tryAutoEquip(child)
+			end
 		end
 	end)
 end
@@ -292,12 +351,75 @@ function ToolController.Init()
 		activeShotgun = nil
 		activeWrench = nil
 		bindContainer(character)
+
+		task.defer(function()
+			local bp = LocalPlayer:FindFirstChild("Backpack")
+			if bp then
+				for _, child in bp:GetChildren() do
+					if child:IsA("Tool") and (child.Name == SHOTGUN_TOOL_NAME or child.Name == WRENCH_TOOL_NAME) then
+						tryAutoEquip(child)
+						break
+					end
+				end
+			end
+		end)
 	end)
 
 	local currentCharacter = LocalPlayer.Character
 	if currentCharacter ~= nil then
 		bindContainer(currentCharacter)
 	end
+end
+
+function ToolController.GetCurrentToolName(): string?
+	return getRoleToolName()
+end
+
+function ToolController.IsCurrentToolEquipped(): boolean
+	local toolName = getRoleToolName()
+	if toolName == nil then
+		return false
+	end
+	local character = LocalPlayer.Character
+	return character ~= nil and character:FindFirstChild(toolName) ~= nil
+end
+
+function ToolController.EquipCurrentTool(): boolean
+	local toolName = getRoleToolName()
+	if toolName == nil then
+		return false
+	end
+
+	local tool = getToolInstance(toolName)
+	if tool == nil then
+		return false
+	end
+
+	local character = LocalPlayer.Character
+	if character == nil then
+		return false
+	end
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if humanoid == nil then
+		return false
+	end
+
+	humanoid:EquipTool(tool)
+	return true
+end
+
+function ToolController.UnequipCurrentTool(): boolean
+	local character = LocalPlayer.Character
+	if character == nil then
+		return false
+	end
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if humanoid == nil then
+		return false
+	end
+
+	humanoid:UnequipTools()
+	return true
 end
 
 return ToolController

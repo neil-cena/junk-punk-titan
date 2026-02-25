@@ -83,6 +83,7 @@ local Constants = {
 		SwarmDurationSeconds = 30,
 		BaseEnemyCount = 3,
 		EnemiesPerWave = 2,
+		MinSpawnDistanceFromCenter = 50,
 		SpawnRadius = 60,
 	},
 
@@ -119,8 +120,10 @@ local Constants = {
 		IntervalSeconds = 15,
 		CountPerSpawn = 3,
 		ValuePerPile = 5,
-		SpawnRadius = 180,
-		DespawnSeconds = 45,
+		MinSpawnRadius = 30,
+		MaxSpawnRadius = 180,
+		RadiusRampCycles = 20,
+		MaxActivePiles = 30,
 	},
 
 	TITAN = {

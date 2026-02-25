@@ -50,6 +50,11 @@ local titanDistanceLabel: TextLabel? = nil
 local buildProgressFrame: Frame? = nil
 local buildProgressFill: Frame? = nil
 local buildProgressLabel: TextLabel? = nil
+local toolPanelFrame: Frame? = nil
+local toolPanelButton: TextButton? = nil
+
+local SHOTGUN_TOOL_NAME = "RustyShotgun"
+local WRENCH_TOOL_NAME = "RustyWrench"
 
 local function playUISound(soundId: string, volume: number?)
 	local sound = Instance.new("Sound")
@@ -480,8 +485,145 @@ local function createToolbar(parent: Instance)
 	hintLabel.Font = Enum.Font.Gotham
 	hintLabel.TextScaled = true
 	hintLabel.TextColor3 = Color3.fromRGB(160, 160, 160)
-	hintLabel.Text = "[R] Rotate  |  [RMB/Esc] Cancel"
+	hintLabel.Text = "[R] Rotate  |  [RMB/Esc] Cancel  |  [X] Remove"
 	hintLabel.Parent = parent
+end
+
+local function getRoleToolName(): string?
+	local role = LocalPlayer:GetAttribute("Role")
+	if role == "Enforcer" then
+		return SHOTGUN_TOOL_NAME
+	elseif role == "Fixer" then
+		return WRENCH_TOOL_NAME
+	end
+	return nil
+end
+
+local function isRoleToolEquipped(toolName: string): boolean
+	local character = LocalPlayer.Character
+	return character ~= nil and character:FindFirstChild(toolName) ~= nil
+end
+
+local function updateToolPanelVisual()
+	if toolPanelFrame == nil or toolPanelButton == nil then
+		return
+	end
+
+	local toolName = getRoleToolName()
+	if toolName == nil then
+		toolPanelFrame.Visible = false
+		return
+	end
+
+	toolPanelFrame.Visible = true
+	if toolName == SHOTGUN_TOOL_NAME then
+		toolPanelButton.Text = "SHOTGUN"
+	else
+		toolPanelButton.Text = "WRENCH"
+	end
+
+	if isRoleToolEquipped(toolName) then
+		toolPanelButton.BackgroundColor3 = Color3.fromRGB(78, 140, 76)
+	else
+		toolPanelButton.BackgroundColor3 = Color3.fromRGB(48, 48, 58)
+	end
+end
+
+local function toggleRoleTool()
+	local toolName = getRoleToolName()
+	if toolName == nil then
+		return
+	end
+
+	local character = LocalPlayer.Character
+	if character == nil then
+		return
+	end
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if humanoid == nil then
+		return
+	end
+
+	if isRoleToolEquipped(toolName) then
+		humanoid:UnequipTools()
+		updateToolPanelVisual()
+		return
+	end
+
+	local backpack = LocalPlayer:FindFirstChild("Backpack")
+	if backpack == nil then
+		return
+	end
+	local tool = backpack:FindFirstChild(toolName)
+	if tool ~= nil and tool:IsA("Tool") then
+		humanoid:EquipTool(tool)
+		task.defer(updateToolPanelVisual)
+	end
+end
+
+local function createToolPanel(parent: Instance)
+	local panel = Instance.new("Frame")
+	panel.Name = "ToolPanel"
+	panel.AnchorPoint = Vector2.new(1, 0.5)
+	panel.Position = UDim2.new(1, -6, 0.56, 0)
+	panel.Size = UDim2.fromOffset(56, 64)
+	panel.BackgroundColor3 = Color3.fromRGB(26, 26, 34)
+	panel.BackgroundTransparency = 0.15
+	panel.Visible = false
+	panel.Parent = parent
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 8)
+	corner.Parent = panel
+
+	local button = Instance.new("TextButton")
+	button.Name = "ToolToggle"
+	button.AnchorPoint = Vector2.new(0.5, 0.5)
+	button.Position = UDim2.fromScale(0.5, 0.5)
+	button.Size = UDim2.fromOffset(46, 50)
+	button.BackgroundColor3 = Color3.fromRGB(48, 48, 58)
+	button.TextColor3 = Color3.fromRGB(240, 240, 240)
+	button.TextScaled = true
+	button.Font = Enum.Font.GothamBold
+	button.Text = "TOOL"
+	button.Parent = panel
+	button.MouseButton1Click:Connect(function()
+		playUISound(AudioManifest.UIClick)
+		toggleRoleTool()
+	end)
+
+	local buttonCorner = Instance.new("UICorner")
+	buttonCorner.CornerRadius = UDim.new(0, 6)
+	buttonCorner.Parent = button
+
+	toolPanelFrame = panel
+	toolPanelButton = button
+	updateToolPanelVisual()
+
+	LocalPlayer:GetAttributeChangedSignal("Role"):Connect(function()
+		updateToolPanelVisual()
+	end)
+
+	LocalPlayer.CharacterAdded:Connect(function(character)
+		character.ChildAdded:Connect(function(child)
+			if child:IsA("Tool") then
+				updateToolPanelVisual()
+			end
+		end)
+		character.ChildRemoved:Connect(function(child)
+			if child:IsA("Tool") then
+				updateToolPanelVisual()
+			end
+		end)
+		task.defer(updateToolPanelVisual)
+	end)
+
+	task.spawn(function()
+		while toolPanelFrame ~= nil and toolPanelFrame.Parent ~= nil do
+			updateToolPanelVisual()
+			task.wait(0.25)
+		end
+	end)
 end
 
 local function refreshBuildCosts()
@@ -966,6 +1108,7 @@ local function createMainHUD()
 	tetherStatusLabel = tetherLabel
 
 	createToolbar(gui)
+	createToolPanel(gui)
 	createTitanProgressPanel(gui)
 	createSettingsPanel(gui)
 	createDebugPanel(gui)

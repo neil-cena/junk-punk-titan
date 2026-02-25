@@ -35,6 +35,7 @@ local RemoteNames = {
 	DrillRepaired = "DrillRepaired",
 	SwarmEnded = "SwarmEnded",
 	BuildProgress = "BuildProgress",
+	CancelBlueprint = "CancelBlueprint",
 }
 
 local function getOrCreateRemoteFolder(): Folder
@@ -124,6 +125,7 @@ function Remotes.Get()
 			DrillRepaired = getOrCreateRemoteEvent(folder, RemoteNames.DrillRepaired),
 			SwarmEnded = getOrCreateRemoteEvent(folder, RemoteNames.SwarmEnded),
 			BuildProgress = getOrCreateRemoteEvent(folder, RemoteNames.BuildProgress),
+			CancelBlueprint = getOrCreateRemoteEvent(folder, RemoteNames.CancelBlueprint),
 		}
 	end
 
@@ -160,6 +162,7 @@ function Remotes.Get()
 		DrillRepaired = waitForRemoteEvent(folder, RemoteNames.DrillRepaired),
 		SwarmEnded = waitForRemoteEvent(folder, RemoteNames.SwarmEnded),
 		BuildProgress = waitForRemoteEvent(folder, RemoteNames.BuildProgress),
+		CancelBlueprint = waitForRemoteEvent(folder, RemoteNames.CancelBlueprint),
 	}
 end
 

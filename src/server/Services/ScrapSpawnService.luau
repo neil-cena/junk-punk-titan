@@ -11,11 +11,31 @@ local EconomyService = require(script.Parent:WaitForChild("EconomyService"))
 local ScrapSpawnService = {}
 
 local activeScrapPiles: { BasePart } = {}
+local elapsedCycles = 0
+
+local function getActivePileCount(): number
+	local alive: { BasePart } = {}
+	for _, pile in activeScrapPiles do
+		if pile.Parent ~= nil then
+			table.insert(alive, pile)
+		end
+	end
+	activeScrapPiles = alive
+	return #activeScrapPiles
+end
+
+local function getCurrentRadius(): number
+	local cfg = Constants.SCRAP_SPAWNS
+	local t = math.clamp(elapsedCycles / cfg.RadiusRampCycles, 0, 1)
+	return cfg.MinSpawnRadius + (cfg.MaxSpawnRadius - cfg.MinSpawnRadius) * t
+end
 
 local function spawnScrapPile()
-	local radius = Constants.SCRAP_SPAWNS.SpawnRadius
-	local x = math.random(-radius, radius)
-	local z = math.random(-radius, radius)
+	local radius = getCurrentRadius()
+	local angle = math.random() * math.pi * 2
+	local dist = math.random() * radius
+	local x = math.floor(math.cos(angle) * dist)
+	local z = math.floor(math.sin(angle) * dist)
 
 	local rayOrigin = Vector3.new(x, 200, z)
 	local result = Workspace:Raycast(rayOrigin, Vector3.new(0, -400, 0))
@@ -52,21 +72,19 @@ local function spawnScrapPile()
 		EconomyService.AddScrap(Constants.SCRAP_SPAWNS.ValuePerPile)
 		pile:Destroy()
 	end)
-
-	task.delay(Constants.SCRAP_SPAWNS.DespawnSeconds, function()
-		if not picked and pile.Parent ~= nil then
-			pile:Destroy()
-		end
-	end)
 end
 
 function ScrapSpawnService.Init(): ()
 	task.spawn(function()
 		while true do
 			task.wait(Constants.SCRAP_SPAWNS.IntervalSeconds)
-			for _ = 1, Constants.SCRAP_SPAWNS.CountPerSpawn do
+			local activeCount = getActivePileCount()
+			local budget = math.max(0, Constants.SCRAP_SPAWNS.MaxActivePiles - activeCount)
+			local spawnCount = math.min(Constants.SCRAP_SPAWNS.CountPerSpawn, budget)
+			for _ = 1, spawnCount do
 				spawnScrapPile()
 			end
+			elapsedCycles += 1
 		end
 	end)
 end
