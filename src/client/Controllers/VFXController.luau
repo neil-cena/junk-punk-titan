@@ -13,6 +13,7 @@ local LocalPlayer = Players.LocalPlayer
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Constants = require(Shared:WaitForChild("Constants"))
 local Remotes = require(Shared:WaitForChild("Remotes"))
+local MainHUD = require(script.Parent.Parent:WaitForChild("UI"):WaitForChild("MainHUD"))
 
 local VFXController = {}
 
@@ -33,6 +34,7 @@ local stormBlur: BlurEffect? = nil
 local stormColor: ColorCorrectionEffect? = nil
 local stormWindSound: Sound? = nil
 local stormRattleSound: Sound? = nil
+local lastWaveHornAt = 0
 local baseAmbient = Lighting.Ambient
 local baseBrightness = Lighting.Brightness
 
@@ -439,6 +441,29 @@ local function playRepairSuccessFx(position: Vector3)
 	end)
 end
 
+local function playWaveHorn()
+	local now = os.clock()
+	if now - lastWaveHornAt < 1 then
+		return
+	end
+	lastWaveHornAt = now
+
+	local horn = Instance.new("Sound")
+	horn.Name = "WaveHorn"
+	horn.SoundId = "rbxassetid://9114243152"
+	horn.Volume = 0.45
+	horn.PlaybackSpeed = 0.85
+	horn.RollOffMode = Enum.RollOffMode.Linear
+	horn.MaxDistance = 140
+	horn.Parent = SoundService
+	horn:Play()
+	horn.Ended:Connect(function()
+		if horn.Parent ~= nil then
+			horn:Destroy()
+		end
+	end)
+end
+
 function VFXController.Init()
 	if isInitialized then
 		return
@@ -495,6 +520,9 @@ function VFXController.Init()
 	end)
 	remotes.DrillRepaired.OnClientEvent:Connect(function(position: Vector3)
 		playRepairSuccessFx(position)
+	end)
+	MainHUD.ConnectWaveTimerZero(function()
+		playWaveHorn()
 	end)
 end
 

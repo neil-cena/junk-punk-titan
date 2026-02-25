@@ -23,8 +23,10 @@ local remotes = Remotes.Get()
 local isInitialized = false
 local currentScrap = 0
 local currentStormSteel = 0
+local lastWaveSeconds = -1
 local scrapLabel: TextLabel? = nil
 local stormSteelLabel: TextLabel? = nil
+local waveTimerLabel: TextLabel? = nil
 local dismantleBars: { [BasePart]: BillboardGui } = {}
 local buildCostButtons: { [BuildingType]: TextButton } = {}
 local roleScreen: ScreenGui? = nil
@@ -34,6 +36,9 @@ local tetherStatusLabel: TextLabel? = nil
 local activeRepairMinigame: Frame? = nil
 local repairRenderConnection: RBXScriptConnection? = nil
 local repairInputConnection: RBXScriptConnection? = nil
+local wavePulseTween: Tween? = nil
+local wavePulseBackTween: Tween? = nil
+local waveTimerSignal = Instance.new("BindableEvent")
 
 local function animateScrapPop(label: TextLabel)
 	local grow = TweenService:Create(label, TweenInfo.new(0.08, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
@@ -100,6 +105,58 @@ local function updateStormSteel(newStormSteel: number)
 
 	stormSteelLabel.Text = ("Storm Steel: %d"):format(currentStormSteel)
 	stormSteelLabel.Visible = currentStormSteel > 0
+end
+
+local function formatTimer(secondsRemaining: number): string
+	local seconds = math.max(0, math.floor(secondsRemaining + 0.5))
+	local mins = math.floor(seconds / 60)
+	local secs = seconds % 60
+	return ("NEXT SWARM: %02d:%02d"):format(mins, secs)
+end
+
+local function pulseWaveTimer()
+	if waveTimerLabel == nil then
+		return
+	end
+
+	local baseSize = 20
+	waveTimerLabel.TextSize = baseSize
+	wavePulseTween = TweenService:Create(waveTimerLabel, TweenInfo.new(0.12, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+		TextSize = 24,
+	})
+	wavePulseBackTween = TweenService:Create(waveTimerLabel, TweenInfo.new(0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+		TextSize = baseSize,
+	})
+	wavePulseTween:Play()
+	wavePulseTween.Completed:Connect(function()
+		if wavePulseBackTween ~= nil then
+			wavePulseBackTween:Play()
+		end
+	end)
+end
+
+local function updateWaveTimer(secondsRemaining: number)
+	local seconds = math.max(0, math.floor(secondsRemaining + 0.5))
+	if waveTimerLabel == nil then
+		lastWaveSeconds = seconds
+		return
+	end
+
+	waveTimerLabel.Text = formatTimer(seconds)
+	if seconds > 10 then
+		waveTimerLabel.TextColor3 = Color3.fromRGB(255, 193, 64)
+	else
+		waveTimerLabel.TextColor3 = Color3.fromRGB(255, 60, 60)
+	end
+
+	if seconds <= 5 and seconds ~= lastWaveSeconds then
+		pulseWaveTimer()
+	end
+
+	if seconds == 0 and lastWaveSeconds ~= 0 then
+		waveTimerSignal:Fire()
+	end
+	lastWaveSeconds = seconds
 end
 
 local function ensureBar(part: BasePart): BillboardGui
@@ -423,6 +480,20 @@ local function createMainHUD()
 	steelLabel.Parent = scrapFrame
 	stormSteelLabel = steelLabel
 
+	local waveLabel = Instance.new("TextLabel")
+	waveLabel.Name = "WaveTimer"
+	waveLabel.AnchorPoint = Vector2.new(0.5, 0)
+	waveLabel.Position = UDim2.new(0.5, 0, 0.095, 0)
+	waveLabel.Size = UDim2.fromOffset(300, 28)
+	waveLabel.BackgroundTransparency = 1
+	waveLabel.TextColor3 = Color3.fromRGB(255, 193, 64)
+	waveLabel.Font = Enum.Font.RobotoMono
+	waveLabel.TextScaled = false
+	waveLabel.TextSize = 20
+	waveLabel.Text = "NEXT SWARM: 00:00"
+	waveLabel.Parent = gui
+	waveTimerLabel = waveLabel
+
 	local threat = Instance.new("TextLabel")
 	threat.Name = "ThreatBanner"
 	threat.AnchorPoint = Vector2.new(0.5, 0)
@@ -731,6 +802,9 @@ function MainHUD.Init()
 	remotes.BlueprintFinished.OnClientEvent:Connect(function(_blueprintId: string, _position: Vector3)
 		refreshBuildCosts()
 	end)
+	remotes.UpdateWaveTimer.OnClientEvent:Connect(function(secondsRemaining: number, _nextWaveTime: number)
+		updateWaveTimer(secondsRemaining)
+	end)
 
 	local ok, snapshot = pcall(function()
 		return remotes.RequestEconomyState:InvokeServer()
@@ -749,7 +823,17 @@ function MainHUD.Init()
 
 	refreshBuildCosts()
 
+	local nextWaveTimeAttr = remotes.Folder:GetAttribute("NextWaveTime")
+	if typeof(nextWaveTimeAttr) == "number" then
+		local remaining = math.max(0, (nextWaveTimeAttr :: number) - os.time())
+		updateWaveTimer(remaining)
+	end
+
 	RunService.Heartbeat:Connect(updateDismantleBars)
+end
+
+function MainHUD.ConnectWaveTimerZero(callback: () -> ()): RBXScriptConnection
+	return waveTimerSignal.Event:Connect(callback)
 end
 
 return MainHUD

@@ -26,6 +26,7 @@ local RemoteNames = {
 	TetherStatus = "TetherStatus",
 	RoleSelected = "RoleSelected",
 	WaveStarted = "WaveStarted",
+	UpdateWaveTimer = "UpdateWaveTimer",
 	RepairMinigameResult = "RepairMinigameResult",
 	DrillRepaired = "DrillRepaired",
 }
@@ -108,6 +109,7 @@ function Remotes.Get()
 			TetherStatus = getOrCreateRemoteEvent(folder, RemoteNames.TetherStatus),
 			RoleSelected = getOrCreateRemoteEvent(folder, RemoteNames.RoleSelected),
 			WaveStarted = getOrCreateRemoteEvent(folder, RemoteNames.WaveStarted),
+			UpdateWaveTimer = getOrCreateRemoteEvent(folder, RemoteNames.UpdateWaveTimer),
 			RepairMinigameResult = getOrCreateRemoteEvent(folder, RemoteNames.RepairMinigameResult),
 			DrillRepaired = getOrCreateRemoteEvent(folder, RemoteNames.DrillRepaired),
 		}
@@ -137,6 +139,7 @@ function Remotes.Get()
 		TetherStatus = waitForRemoteEvent(folder, RemoteNames.TetherStatus),
 		RoleSelected = waitForRemoteEvent(folder, RemoteNames.RoleSelected),
 		WaveStarted = waitForRemoteEvent(folder, RemoteNames.WaveStarted),
+		UpdateWaveTimer = waitForRemoteEvent(folder, RemoteNames.UpdateWaveTimer),
 		RepairMinigameResult = waitForRemoteEvent(folder, RemoteNames.RepairMinigameResult),
 		DrillRepaired = waitForRemoteEvent(folder, RemoteNames.DrillRepaired),
 	}

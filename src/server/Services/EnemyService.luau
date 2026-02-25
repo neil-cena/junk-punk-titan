@@ -27,6 +27,13 @@ local burrowPositions = {
 	Vector3.new(220, 0.2, 220),
 }
 
+local function publishNextWaveTimer(secondsRemaining: number)
+	local remaining = math.max(0, math.floor(secondsRemaining + 0.5))
+	local nextWaveTime = os.time() + remaining
+	remotes.Folder:SetAttribute("NextWaveTime", nextWaveTime)
+	remotes.UpdateWaveTimer:FireAllClients(remaining, nextWaveTime)
+end
+
 local function updatePeakPlayerCount()
 	peakPlayerCount = math.max(peakPlayerCount, #Players:GetPlayers())
 end
@@ -339,6 +346,7 @@ end
 
 function EnemyService.SpawnWave(waveNumber: number): ()
 	currentWave = waveNumber
+	publishNextWaveTimer(0)
 	remotes.WaveStarted:FireAllClients(currentWave)
 
 	local enemyCount = Constants.WAVES.BaseEnemyCount + (currentWave * Constants.WAVES.EnemiesPerWave)
@@ -399,7 +407,13 @@ function EnemyService.Init(): ()
 
 	task.spawn(function()
 		while true do
-			task.wait(Constants.WAVES.IntervalSeconds)
+			local remaining = Constants.WAVES.IntervalSeconds
+			while remaining > 0 do
+				publishNextWaveTimer(remaining)
+				task.wait(1)
+				remaining -= 1
+			end
+			publishNextWaveTimer(0)
 			local nextWave = currentWave + 1
 			EnemyService.SpawnWave(nextWave)
 		end
