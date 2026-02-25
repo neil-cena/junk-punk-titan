@@ -6,7 +6,6 @@ local RunService = game:GetService("RunService")
 local REMOTE_FOLDER_NAME = "Remotes"
 
 local RemoteNames = {
-	RequestPurchase = "RequestPurchase",
 	RequestEconomyState = "RequestEconomyState",
 	RequestBuildCosts = "RequestBuildCosts",
 	UseWrench = "UseWrench",
@@ -90,7 +89,6 @@ function Remotes.Get()
 
 		return {
 			Folder = folder,
-			RequestPurchase = getOrCreateRemoteFunction(folder, RemoteNames.RequestPurchase),
 			RequestEconomyState = getOrCreateRemoteFunction(folder, RemoteNames.RequestEconomyState),
 			RequestBuildCosts = getOrCreateRemoteFunction(folder, RemoteNames.RequestBuildCosts),
 			UseWrench = getOrCreateRemoteFunction(folder, RemoteNames.UseWrench),
@@ -121,7 +119,6 @@ function Remotes.Get()
 
 	return {
 		Folder = folder,
-		RequestPurchase = waitForRemoteFunction(folder, RemoteNames.RequestPurchase),
 		RequestEconomyState = waitForRemoteFunction(folder, RemoteNames.RequestEconomyState),
 		RequestBuildCosts = waitForRemoteFunction(folder, RemoteNames.RequestBuildCosts),
 		UseWrench = waitForRemoteFunction(folder, RemoteNames.UseWrench),

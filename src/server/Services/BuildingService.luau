@@ -2,6 +2,7 @@
 
 local CollectionService = game:GetService("CollectionService")
 local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 
@@ -10,8 +11,10 @@ local Constants = require(Shared:WaitForChild("Constants"))
 local RemotesModule = require(Shared:WaitForChild("Remotes"))
 local Types = require(Shared:WaitForChild("Types"))
 local TheftComponent = require(Shared:WaitForChild("TheftComponent"))
+local Utils = require(Shared:WaitForChild("Utils"))
 
 local EconomyService = require(script.Parent:WaitForChild("EconomyService"))
+local RemoteGuard = require(script.Parent.Parent:WaitForChild("RemoteGuard"))
 
 type BuildingType = Types.BuildingType
 type BlueprintData = Types.BlueprintData
@@ -25,7 +28,6 @@ local BLUEPRINT_TAG = "Blueprint"
 local DISMANTLABLE_TAG = "DismantlableBuilding"
 
 local BuildingService = {}
-BuildingService.__index = BuildingService
 
 local remotes = RemotesModule.Get()
 local blueprints: { [string]: InternalBlueprintData } = {}
@@ -36,15 +38,6 @@ local builtCounts: { [BuildingType]: number } = {
 	Drill = 0,
 	Wall = 0,
 }
-
-local function snapToGrid(position: Vector3): Vector3
-	local grid = Constants.BUILDING.GridSize
-	return Vector3.new(
-		math.round(position.X / grid) * grid,
-		position.Y,
-		math.round(position.Z / grid) * grid
-	)
-end
 
 local function isPositionValid(player: Player, requestedPosition: Vector3): (boolean, Vector3?)
 	local character = player.Character
@@ -64,13 +57,34 @@ local function isPositionValid(player: Player, requestedPosition: Vector3): (boo
 		return false, nil
 	end
 
-	local snapped = snapToGrid(result.Position)
+	local snapped = Utils.SnapToGrid(result.Position, Constants.BUILDING.GridSize)
 	local maxDist = Constants.BUILDING.PlacementMaxDistance
 	if (root.Position - snapped).Magnitude > maxDist then
 		return false, nil
 	end
 
 	return true, snapped
+end
+
+local function isOverlapping(position: Vector3, buildingType: BuildingType): boolean
+	local size = Constants.BUILDING.Sizes[buildingType]
+	local center = position + Vector3.new(0, size.Y * 0.5, 0)
+	local overlapParams = OverlapParams.new()
+	overlapParams.FilterType = Enum.RaycastFilterType.Exclude
+	overlapParams.FilterDescendantsInstances = {}
+
+	local overlaps = Workspace:GetPartBoundsInBox(CFrame.new(center), size, overlapParams)
+	for _, overlap in overlaps do
+		if overlap:IsA("BasePart") and overlap.Name ~= "Baseplate" then
+			if CollectionService:HasTag(overlap, DISMANTLABLE_TAG)
+				or CollectionService:HasTag(overlap, "TitanObjective")
+				or CollectionService:HasTag(overlap, BLUEPRINT_TAG) then
+				return true
+			end
+		end
+	end
+
+	return false
 end
 
 local function createBlueprintGhost(buildingType: BuildingType, position: Vector3): BasePart
@@ -98,6 +112,7 @@ local function createFinalBuilding(buildingType: BuildingType, position: Vector3
 	part.Anchored = true
 	part.CanCollide = true
 	part.CFrame = CFrame.new(position + Vector3.new(0, part.Size.Y * 0.5, 0))
+	part:SetAttribute("BuildingType", buildingType)
 	part.Parent = Workspace
 	CollectionService:AddTag(part, DISMANTLABLE_TAG)
 	if buildingType == "Drill" then
@@ -124,6 +139,12 @@ local function killRatFromBuilding(targetRat: Model)
 	bundle.CanCollide = true
 	bundle.Position = atPosition + Vector3.new(0, 1.5, 0)
 	bundle.Parent = Workspace
+
+	task.delay(30, function()
+		if bundle.Parent ~= nil then
+			bundle:Destroy()
+		end
+	end)
 
 	EconomyService.AddScrap(Constants.COMBAT.RatKillScrapReward)
 	remotes.EnemyKilled:FireAllClients(atPosition)
@@ -239,7 +260,7 @@ local function activateBuildingBehavior(part: BasePart, buildingType: BuildingTy
 end
 
 local function positionSlotKey(position: Vector3): string
-	local snapped = snapToGrid(position)
+	local snapped = Utils.SnapToGrid(position, Constants.BUILDING.GridSize)
 	return ("%d:%d:%d"):format(math.round(snapped.X), math.round(snapped.Y), math.round(snapped.Z))
 end
 
@@ -264,12 +285,20 @@ local function placeBlueprint(player: Player, buildingType: BuildingType, reques
 		return
 	end
 
+	if typeof(requestedPosition) ~= "Vector3" then
+		return
+	end
+
 	local ok, snappedPos = isPositionValid(player, requestedPosition)
 	if not ok or snappedPos == nil then
 		return
 	end
 
 	if getRemainingSlotCooldown(snappedPos) > 0 then
+		return
+	end
+
+	if isOverlapping(snappedPos, buildingType) then
 		return
 	end
 
@@ -300,6 +329,10 @@ local function failResponse(reason: string): PurchaseResponse
 end
 
 local function finishBlueprint(_player: Player, blueprintId: string): PurchaseResponse
+	if typeof(blueprintId) ~= "string" then
+		return failResponse("Invalid blueprint ID")
+	end
+
 	local blueprint = blueprints[blueprintId]
 	if blueprint == nil then
 		return failResponse("Blueprint not found")
@@ -338,22 +371,48 @@ local function getNextBuildCosts(): { [BuildingType]: number }
 	}
 end
 
-function BuildingService.RegisterDestroyedSlot(position: Vector3)
+local function cleanupPlayerBlueprints(player: Player)
+	for id, data in blueprints do
+		if data.ownerUserId == player.UserId and not data.isFinished then
+			if data.ghostPart.Parent ~= nil then
+				data.ghostPart:Destroy()
+			end
+			blueprints[id] = nil
+		end
+	end
+end
+
+function BuildingService.RegisterDestroyedSlot(position: Vector3, buildingType: string?)
 	local key = positionSlotKey(position)
 	blockedSlots[key] = os.clock() + Constants.BUILDING.RebuildCooldownSeconds
+
+	if buildingType ~= nil and builtCounts[buildingType] ~= nil then
+		builtCounts[buildingType] = math.max(0, builtCounts[buildingType] - 1)
+	end
 end
 
 function BuildingService.Init(): ()
+	RemoteGuard.Register("PlaceBlueprint", 5, 1)
+	RemoteGuard.Register("FinishBlueprint", 3, 1)
+
 	remotes.PlaceBlueprint.OnServerEvent:Connect(function(player: Player, buildingType: BuildingType, position: Vector3)
+		if not RemoteGuard.Check("PlaceBlueprint", player) then
+			return
+		end
 		placeBlueprint(player, buildingType, position)
 	end)
 
 	remotes.FinishBlueprint.OnServerInvoke = function(player: Player, blueprintId: string)
+		if not RemoteGuard.Check("FinishBlueprint", player) then
+			return failResponse("Too many requests")
+		end
 		return finishBlueprint(player, blueprintId)
 	end
 	remotes.RequestBuildCosts.OnServerInvoke = function(_player: Player)
 		return getNextBuildCosts()
 	end
+
+	Players.PlayerRemoving:Connect(cleanupPlayerBlueprints)
 end
 
 return BuildingService

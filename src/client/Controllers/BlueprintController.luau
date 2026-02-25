@@ -13,6 +13,7 @@ local Mouse = LocalPlayer:GetMouse()
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Constants = require(Shared:WaitForChild("Constants"))
 local Remotes = require(Shared:WaitForChild("Remotes"))
+local Utils = require(Shared:WaitForChild("Utils"))
 
 type BuildingType = "Turret" | "Drill" | "Wall"
 type ControllerMode = "Idle" | "Placing" | "Interacting"
@@ -27,16 +28,6 @@ local currentGhost: Part? = nil
 local renderConn: RBXScriptConnection? = nil
 local placementPosition: Vector3? = nil
 local placementValid = false
-local localPlacedBlueprints: { [string]: boolean } = {}
-
-local function snapToGrid(position: Vector3): Vector3
-	local grid = Constants.BUILDING.GridSize
-	return Vector3.new(
-		math.round(position.X / grid) * grid,
-		position.Y,
-		math.round(position.Z / grid) * grid
-	)
-end
 
 local function clearGhost()
 	if renderConn ~= nil then
@@ -71,7 +62,7 @@ local function getPlacementResult(): (boolean, Vector3?)
 		return false, nil
 	end
 
-	local snapped = snapToGrid(result.Position)
+	local snapped = Utils.SnapToGrid(result.Position, Constants.BUILDING.GridSize)
 	local character = LocalPlayer.Character
 	local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
 	if root == nil or not root:IsA("BasePart") then
@@ -233,10 +224,6 @@ function BlueprintController.Init()
 	isInitialized = true
 
 	UserInputService.InputBegan:Connect(onInputBegan)
-
-	remotes.BlueprintPlaced.OnClientEvent:Connect(function(blueprintId: string, _buildingType: BuildingType, _position: Vector3)
-		localPlacedBlueprints[blueprintId] = true
-	end)
 end
 
 return BlueprintController

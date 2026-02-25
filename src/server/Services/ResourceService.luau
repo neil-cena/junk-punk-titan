@@ -25,26 +25,18 @@ local ATTR_STABILITY = "Stability"
 local ATTR_CLOGGED = "IsClogged"
 local ATTR_OVERCLOCKED = "IsOverclocked"
 
+local PlayerTrackingService = require(script.Parent:WaitForChild("PlayerTrackingService"))
+local RemoteGuard = require(script.Parent.Parent:WaitForChild("RemoteGuard"))
+
 local ResourceService = {}
-ResourceService.__index = ResourceService
+
+local REPAIR_TIMEOUT_SECONDS = 10
 
 local remotes = RemotesModule.Get()
-local peakPlayerCount = 0
 local drillStates: { [BasePart]: DrillState } = {}
 local trackedDrills: { [BasePart]: true } = {}
 local pendingRepairs: { [number]: BasePart } = {}
-
-local function getLegacyMultiplier(): number
-	local currentPlayers = #Players:GetPlayers()
-	if peakPlayerCount > 0 and currentPlayers < peakPlayerCount then
-		return 1 + Constants.SCALING.LegacyScrapGatherBuff
-	end
-	return 1
-end
-
-local function updatePeakPlayerCount()
-	peakPlayerCount = math.max(peakPlayerCount, #Players:GetPlayers())
-end
+local pendingRepairTimestamps: { [number]: number } = {}
 
 local function getClampedStability(drill: BasePart): number
 	local stabilityAttr = drill:GetAttribute(ATTR_STABILITY)
@@ -148,7 +140,7 @@ local function runResourceLoop()
 
 			local now = os.clock()
 			local totalOutput = 0
-			local legacyMult = getLegacyMultiplier()
+			local legacyMult = PlayerTrackingService.GetLegacyScrapMultiplier()
 			for drill in trackedDrills do
 				if drill.Parent == nil then
 					continue
@@ -200,10 +192,15 @@ local function canUseWrench(player: Player, drill: BasePart): WrenchResponse
 
 	local existingPending = pendingRepairs[player.UserId]
 	if existingPending ~= nil and existingPending ~= drill and existingPending.Parent ~= nil then
-		return {
-			allowed = false,
-			reason = "Repair already active",
-		}
+		local timestamp = pendingRepairTimestamps[player.UserId]
+		if timestamp ~= nil and (os.clock() - timestamp) < REPAIR_TIMEOUT_SECONDS then
+			return {
+				allowed = false,
+				reason = "Repair already active",
+			}
+		end
+		pendingRepairs[player.UserId] = nil
+		pendingRepairTimestamps[player.UserId] = nil
 	end
 
 	local stability = getClampedStability(drill)
@@ -215,6 +212,7 @@ local function canUseWrench(player: Player, drill: BasePart): WrenchResponse
 	end
 
 	pendingRepairs[player.UserId] = drill
+	pendingRepairTimestamps[player.UserId] = os.clock()
 	return { allowed = true }
 end
 
@@ -228,11 +226,9 @@ function ResourceService.DrainAllDrillStability(value: number)
 end
 
 function ResourceService.Init(): ()
-	updatePeakPlayerCount()
-	Players.PlayerAdded:Connect(updatePeakPlayerCount)
 	Players.PlayerRemoving:Connect(function(player)
 		pendingRepairs[player.UserId] = nil
-		task.defer(updatePeakPlayerCount)
+		pendingRepairTimestamps[player.UserId] = nil
 	end)
 
 	for _, instance in CollectionService:GetTagged(DRILL_TAG) do
@@ -257,7 +253,12 @@ function ResourceService.Init(): ()
 		return canUseWrench(player, drill)
 	end
 
+	RemoteGuard.Register("RepairMinigameResult", 2, 1)
+
 	remotes.RepairMinigameResult.OnServerEvent:Connect(function(player: Player, drill: BasePart, wasSuccess: boolean)
+		if not RemoteGuard.Check("RepairMinigameResult", player) then
+			return
+		end
 		local pendingDrill = pendingRepairs[player.UserId]
 		pendingRepairs[player.UserId] = nil
 		if pendingDrill == nil or pendingDrill ~= drill then

@@ -13,12 +13,12 @@ local TheftComponent = require(Shared:WaitForChild("TheftComponent"))
 local EconomyService = require(script.Parent:WaitForChild("EconomyService"))
 local BuildingService = require(script.Parent:WaitForChild("BuildingService"))
 local ObjectiveService = require(script.Parent:WaitForChild("ObjectiveService"))
+local PlayerTrackingService = require(script.Parent:WaitForChild("PlayerTrackingService"))
+local RemoteGuard = require(script.Parent.Parent:WaitForChild("RemoteGuard"))
 
 local EnemyService = {}
-EnemyService.__index = EnemyService
 
 local remotes = RemotesModule.Get()
-local peakPlayerCount = 0
 local currentWave = 0
 local activeRats: { [Model]: true } = {}
 local burrowPositions = {
@@ -33,10 +33,6 @@ local function publishNextWaveTimer(secondsRemaining: number)
 	local nextWaveTime = os.time() + remaining
 	remotes.Folder:SetAttribute("NextWaveTime", nextWaveTime)
 	remotes.UpdateWaveTimer:FireAllClients(remaining, nextWaveTime)
-end
-
-local function updatePeakPlayerCount()
-	peakPlayerCount = math.max(peakPlayerCount, #Players:GetPlayers())
 end
 
 local function createScrapRatModel(spawnPosition: Vector3): Model
@@ -115,25 +111,8 @@ local function getMostExpensiveBuilding(): BasePart?
 end
 
 function EnemyService.GetDifficultyMultiplier(): number
-	local playersInSession = #Players:GetPlayers()
+	local playersInSession = PlayerTrackingService.GetCurrentPlayerCount()
 	return math.max(1, playersInSession * Constants.SCALING.SwarmMultiplierPerPlayer)
-end
-
-function EnemyService.GetLegacyMultiplier(): { scrapMult: number, reloadMult: number }
-	local currentPlayers = #Players:GetPlayers()
-	local didLosePlayer = peakPlayerCount > 0 and currentPlayers < peakPlayerCount
-
-	if didLosePlayer then
-		return {
-			scrapMult = 1 + Constants.SCALING.LegacyScrapGatherBuff,
-			reloadMult = 1 + Constants.SCALING.LegacyReloadSpeedBuff,
-		}
-	end
-
-	return {
-		scrapMult = 1,
-		reloadMult = 1,
-	}
 end
 
 function EnemyService.StartDismantle(targetBuilding: BasePart, ratModel: Model): ()
@@ -258,13 +237,14 @@ end
 
 local function dismantleAndDestroyBuilding(dismantledPart: BasePart, ratModel: Model?)
 	local finalPosition = dismantledPart.Position
+	local buildingType = dismantledPart:GetAttribute("BuildingType")
 
 	if dismantledPart.Parent ~= nil then
-		dismantledPart.Parent = nil
+		remotes.BuildingDismantled:FireAllClients(dismantledPart.Name, finalPosition)
+		dismantledPart:Destroy()
 	end
 
-	BuildingService.RegisterDestroyedSlot(finalPosition)
-	remotes.BuildingDismantled:FireAllClients(dismantledPart.Name, finalPosition)
+	BuildingService.RegisterDestroyedSlot(finalPosition, buildingType)
 
 	if ratModel ~= nil then
 		fleeAndDespawnRat(ratModel)
@@ -370,13 +350,12 @@ function EnemyService.GetCurrentWave(): number
 end
 
 function EnemyService.Init(): ()
-	updatePeakPlayerCount()
-	Players.PlayerAdded:Connect(updatePeakPlayerCount)
-	Players.PlayerRemoving:Connect(function()
-		task.defer(updatePeakPlayerCount)
-	end)
+	RemoteGuard.Register("HitEnemy", 5, 1)
 
 	remotes.HitEnemy.OnServerEvent:Connect(function(player: Player, ratModelOrPart: Instance)
+		if not RemoteGuard.Check("HitEnemy", player) then
+			return
+		end
 		local ratModel: Model? = nil
 		if ratModelOrPart:IsA("Model") then
 			ratModel = ratModelOrPart

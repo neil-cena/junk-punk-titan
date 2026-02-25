@@ -49,6 +49,9 @@ function EconomyService.GetCost(baseCost: number, count: number): number
 end
 
 function EconomyService.AddScrap(amount: number): number
+	if amount <= 0 then
+		return teamScrap
+	end
 	teamScrap += amount
 	remotes.ScrapUpdated:FireAllClients(teamScrap)
 	return teamScrap
@@ -59,6 +62,9 @@ function EconomyService.GetScrap(): number
 end
 
 function EconomyService.AddStormSteel(amount: number): number
+	if amount <= 0 then
+		return stormSteel
+	end
 	stormSteel += amount
 	remotes.StormSteelUpdated:FireAllClients(stormSteel)
 	return stormSteel
@@ -116,18 +122,12 @@ function EconomyService.Init(initialScrap: number?): ()
 		teamScrap = math.max(0, initialScrap :: number)
 	end
 
-	remotes.RequestPurchase.OnServerInvoke = function(_player: Player, buildingType: BuildingType, currentCount: number)
-		return EconomyService.TryPurchase(buildingType, currentCount)
-	end
 	remotes.RequestEconomyState.OnServerInvoke = function(_player: Player)
 		return {
 			scrap = teamScrap,
 			stormSteel = stormSteel,
 		}
 	end
-
-	remotes.ScrapUpdated:FireAllClients(teamScrap)
-	remotes.StormSteelUpdated:FireAllClients(stormSteel)
 
 	for _, player in Players:GetPlayers() do
 		remotes.ScrapUpdated:FireClient(player, teamScrap)

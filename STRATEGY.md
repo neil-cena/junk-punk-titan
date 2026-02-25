@@ -10,18 +10,18 @@ The core loop skeleton exists (role selection, building placement, wave spawning
 
 No new features — stop the bleeding. Fix what's actively broken or exploitable.
 
-- [ ] **1.1** Delete the `RequestPurchase` remote backdoor in `EconomyService` (client-provided `currentCount` bypasses exponential scaling)
-- [ ] **1.2** Lock roles after first selection — prevent re-firing `RoleSelected` to switch roles mid-session
-- [ ] **1.3** Add input validation and rate limiting — create a shared `RemoteGuard` utility for throttling + type-checking all remotes
-- [ ] **1.4** Fix `AddScrap` / `AddStormSteel` to reject negative values
-- [ ] **1.5** Fix `builtCounts` to decrement on building destruction (currently only increments, so replacement costs escalate unfairly)
-- [ ] **1.6** Replace all `Parent = nil` with `:Destroy()` (prevents memory leaks from orphaned connections)
-- [ ] **1.7** Wrap all `Init()` calls in `pcall` with error logging
-- [ ] **1.8** Centralize `peakPlayerCount` into a single `PlayerTrackingService` — delete the 4 duplicated copies across EnemyService, ResourceService, RoleService, StormService
-- [ ] **1.9** Extract shared utilities into `Shared/Utils.luau` — `snapToGrid`, `createScrapBundle`, `removeToolByName`
-- [ ] **1.10** Fix blueprint cleanup — add player disconnect handler to destroy orphaned ghost blueprints
-- [ ] **1.11** Add server-side overlap validation for building placement
-- [ ] **1.12** Add pending repair timeout in `ResourceService` (10s server-side fallback)
+- [x] **1.1** Delete the `RequestPurchase` remote backdoor in `EconomyService` (client-provided `currentCount` bypasses exponential scaling)
+- [x] **1.2** Lock roles after first selection — prevent re-firing `RoleSelected` to switch roles mid-session
+- [x] **1.3** Add input validation and rate limiting — create a shared `RemoteGuard` utility for throttling + type-checking all remotes
+- [x] **1.4** Fix `AddScrap` / `AddStormSteel` to reject negative values
+- [x] **1.5** Fix `builtCounts` to decrement on building destruction (currently only increments, so replacement costs escalate unfairly)
+- [x] **1.6** Replace all `Parent = nil` with `:Destroy()` (prevents memory leaks from orphaned connections)
+- [x] **1.7** Wrap all `Init()` calls in `pcall` with error logging
+- [x] **1.8** Centralize `peakPlayerCount` into a single `PlayerTrackingService` — delete the 4 duplicated copies across EnemyService, ResourceService, RoleService, StormService
+- [x] **1.9** Extract shared utilities into `Shared/Utils.luau` — `snapToGrid`, `removeToolByName`
+- [x] **1.10** Fix blueprint cleanup — add player disconnect handler to destroy orphaned ghost blueprints
+- [x] **1.11** Add server-side overlap validation for building placement
+- [x] **1.12** Add pending repair timeout in `ResourceService` (10s server-side fallback)
 
 ---
 

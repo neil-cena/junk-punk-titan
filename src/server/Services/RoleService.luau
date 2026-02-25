@@ -7,38 +7,19 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Constants = require(Shared:WaitForChild("Constants"))
 local RemotesModule = require(Shared:WaitForChild("Remotes"))
 local Types = require(Shared:WaitForChild("Types"))
+local Utils = require(Shared:WaitForChild("Utils"))
+
+local PlayerTrackingService = require(script.Parent:WaitForChild("PlayerTrackingService"))
+local RemoteGuard = require(script.Parent.Parent:WaitForChild("RemoteGuard"))
 
 type RoleName = Types.RoleName
 
 local RoleService = {}
-RoleService.__index = RoleService
 
 local remotes = RemotesModule.Get()
 local playerRoles: { [number]: RoleName } = {}
-local peakPlayerCount = 0
 local SHOTGUN_TOOL_NAME = "RustyShotgun"
 local WRENCH_TOOL_NAME = "RustyWrench"
-local legacyBuff = {
-	scrapGatherMult = 1,
-	reloadSpeedMult = 1,
-}
-
-local function updateLegacyBuff()
-	local currentPlayers = #Players:GetPlayers()
-	peakPlayerCount = math.max(peakPlayerCount, currentPlayers)
-
-	if peakPlayerCount > 0 and currentPlayers < peakPlayerCount then
-		legacyBuff = {
-			scrapGatherMult = 1 + Constants.SCALING.LegacyScrapGatherBuff,
-			reloadSpeedMult = 1 + Constants.SCALING.LegacyReloadSpeedBuff,
-		}
-	else
-		legacyBuff = {
-			scrapGatherMult = 1,
-			reloadSpeedMult = 1,
-		}
-	end
-end
 
 local function createRustyShotgunTool(): Tool
 	local tool = Instance.new("Tool")
@@ -105,55 +86,11 @@ local function createWrenchTool(): Tool
 end
 
 local function removeShotgun(player: Player)
-	local backpack = player:FindFirstChild("Backpack")
-	if backpack ~= nil then
-		local existing = backpack:FindFirstChild(SHOTGUN_TOOL_NAME)
-		if existing ~= nil then
-			existing:Destroy()
-		end
-	end
-
-	local starterGear = player:FindFirstChild("StarterGear")
-	if starterGear ~= nil then
-		local existing = starterGear:FindFirstChild(SHOTGUN_TOOL_NAME)
-		if existing ~= nil then
-			existing:Destroy()
-		end
-	end
-
-	local character = player.Character
-	if character ~= nil then
-		local equipped = character:FindFirstChild(SHOTGUN_TOOL_NAME)
-		if equipped ~= nil then
-			equipped:Destroy()
-		end
-	end
+	Utils.RemoveToolByName(player, SHOTGUN_TOOL_NAME)
 end
 
 local function removeWrench(player: Player)
-	local backpack = player:FindFirstChild("Backpack")
-	if backpack ~= nil then
-		local existing = backpack:FindFirstChild(WRENCH_TOOL_NAME)
-		if existing ~= nil then
-			existing:Destroy()
-		end
-	end
-
-	local starterGear = player:FindFirstChild("StarterGear")
-	if starterGear ~= nil then
-		local existing = starterGear:FindFirstChild(WRENCH_TOOL_NAME)
-		if existing ~= nil then
-			existing:Destroy()
-		end
-	end
-
-	local character = player.Character
-	if character ~= nil then
-		local equipped = character:FindFirstChild(WRENCH_TOOL_NAME)
-		if equipped ~= nil then
-			equipped:Destroy()
-		end
-	end
+	Utils.RemoveToolByName(player, WRENCH_TOOL_NAME)
 end
 
 local function ensureShotgunForRole(player: Player, roleName: RoleName)
@@ -208,8 +145,8 @@ local function applyRoleAttributes(player: Player, roleName: RoleName)
 	player:SetAttribute("SpeedMult", roleDefinition.speedMult)
 	player:SetAttribute("RepairMult", roleDefinition.repairMult)
 	player:SetAttribute("DamageMult", roleDefinition.damageMult)
-	player:SetAttribute("LegacyScrapGatherMult", legacyBuff.scrapGatherMult)
-	player:SetAttribute("LegacyReloadSpeedMult", legacyBuff.reloadSpeedMult)
+	player:SetAttribute("LegacyScrapGatherMult", PlayerTrackingService.GetLegacyScrapMultiplier())
+	player:SetAttribute("LegacyReloadSpeedMult", PlayerTrackingService.GetLegacyReloadMultiplier())
 
 	local character = player.Character
 	if character ~= nil then
@@ -217,8 +154,8 @@ local function applyRoleAttributes(player: Player, roleName: RoleName)
 		character:SetAttribute("SpeedMult", roleDefinition.speedMult)
 		character:SetAttribute("RepairMult", roleDefinition.repairMult)
 		character:SetAttribute("DamageMult", roleDefinition.damageMult)
-		character:SetAttribute("LegacyScrapGatherMult", legacyBuff.scrapGatherMult)
-		character:SetAttribute("LegacyReloadSpeedMult", legacyBuff.reloadSpeedMult)
+		character:SetAttribute("LegacyScrapGatherMult", PlayerTrackingService.GetLegacyScrapMultiplier())
+		character:SetAttribute("LegacyReloadSpeedMult", PlayerTrackingService.GetLegacyReloadMultiplier())
 	end
 
 	ensureShotgunForRole(player, roleName)
@@ -227,6 +164,10 @@ end
 
 function RoleService.AssignRole(player: Player, roleName: string): boolean
 	if Constants.ROLE_DEFINITIONS[roleName] == nil then
+		return false
+	end
+
+	if playerRoles[player.UserId] ~= nil then
 		return false
 	end
 
@@ -252,16 +193,13 @@ function RoleService.GetActiveBuffs(player: Player): {
 		speedMult = if roleDefinition ~= nil then roleDefinition.speedMult else 1,
 		repairMult = if roleDefinition ~= nil then roleDefinition.repairMult else 1,
 		damageMult = if roleDefinition ~= nil then roleDefinition.damageMult else 1,
-		scrapGatherMult = legacyBuff.scrapGatherMult,
-		reloadSpeedMult = legacyBuff.reloadSpeedMult,
+		scrapGatherMult = PlayerTrackingService.GetLegacyScrapMultiplier(),
+		reloadSpeedMult = PlayerTrackingService.GetLegacyReloadMultiplier(),
 	}
 end
 
 function RoleService.Init(): ()
-	updateLegacyBuff()
-
 	Players.PlayerAdded:Connect(function(player)
-		updateLegacyBuff()
 		player.CharacterAdded:Connect(function()
 			local existingRole = playerRoles[player.UserId]
 			if existingRole ~= nil then
@@ -272,7 +210,6 @@ function RoleService.Init(): ()
 
 	Players.PlayerRemoving:Connect(function(player)
 		playerRoles[player.UserId] = nil
-		updateLegacyBuff()
 
 		for _, survivor in Players:GetPlayers() do
 			local roleName = playerRoles[survivor.UserId]
@@ -282,7 +219,15 @@ function RoleService.Init(): ()
 		end
 	end)
 
+	RemoteGuard.Register("RoleSelected", 1, 5)
+
 	remotes.RoleSelected.OnServerEvent:Connect(function(player: Player, roleName: string)
+		if not RemoteGuard.Check("RoleSelected", player) then
+			return
+		end
+		if typeof(roleName) ~= "string" then
+			return
+		end
 		RoleService.AssignRole(player, roleName)
 	end)
 end

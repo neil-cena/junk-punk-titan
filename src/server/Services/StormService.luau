@@ -10,18 +10,14 @@ local Constants = require(Shared:WaitForChild("Constants"))
 local RemotesModule = require(Shared:WaitForChild("Remotes"))
 
 local EconomyService = require(script.Parent:WaitForChild("EconomyService"))
+local BuildingService = require(script.Parent:WaitForChild("BuildingService"))
+local PlayerTrackingService = require(script.Parent:WaitForChild("PlayerTrackingService"))
 
 local StormService = {}
-StormService.__index = StormService
 
 local remotes = RemotesModule.Get()
-local peakPlayerCount = 0
 local activeStorm = false
 local tetherPads: { BasePart } = {}
-
-local function updatePeakPlayers()
-	peakPlayerCount = math.max(peakPlayerCount, #Players:GetPlayers())
-end
 
 local function createStormScrapBundle(atPosition: Vector3)
 	local bundle = Instance.new("Part")
@@ -95,8 +91,7 @@ local function countAnchoredPads(): number
 end
 
 local function requiredPadCount(): number
-	local currentPlayers = #Players:GetPlayers()
-	if currentPlayers < peakPlayerCount then
+	if PlayerTrackingService.HasLostPlayers() then
 		return Constants.STORM.TetherPadsReducedOnLeave
 	end
 
@@ -114,10 +109,10 @@ local function applyStormWindDamage()
 
 			if nextProgress >= 100 then
 				local destroyedPos = instance.Position
-				instance.Parent = nil
-				createStormScrapBundle(destroyedPos)
-				EconomyService.AddScrap(Constants.SCRAP_BUNDLE_VALUE)
+				local buildingType = instance:GetAttribute("BuildingType")
 				remotes.BuildingDismantled:FireAllClients("StormDamage", destroyedPos)
+				instance:Destroy()
+				BuildingService.RegisterDestroyedSlot(destroyedPos, buildingType)
 			end
 		end
 	end
@@ -195,12 +190,6 @@ function StormService.TriggerStormNow(): boolean
 end
 
 function StormService.Init(): ()
-	updatePeakPlayers()
-	Players.PlayerAdded:Connect(updatePeakPlayers)
-	Players.PlayerRemoving:Connect(function()
-		task.defer(updatePeakPlayers)
-	end)
-
 	task.spawn(function()
 		while true do
 			task.wait(Constants.STORM.IntervalSeconds)
