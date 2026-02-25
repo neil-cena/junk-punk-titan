@@ -16,10 +16,12 @@ local SoundService = game:GetService("SoundService")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Constants = require(Shared:WaitForChild("Constants"))
 local AudioManifest = require(Shared:WaitForChild("AudioManifest"))
+local VisualManifest = require(Shared:WaitForChild("VisualManifest"))
 local Remotes = require(Shared:WaitForChild("Remotes"))
 local BlueprintController = require(script.Parent.Parent:WaitForChild("Controllers"):WaitForChild("BlueprintController"))
 local RepairMinigameUI = require(script.Parent:WaitForChild("RepairMinigameUI"))
 local EndScreenUI = require(script.Parent:WaitForChild("EndScreenUI"))
+local Theme = require(script.Parent:WaitForChild("Theme"))
 
 type BuildingType = "Turret" | "Drill" | "Wall"
 
@@ -53,6 +55,7 @@ local buildProgressFill: Frame? = nil
 local buildProgressLabel: TextLabel? = nil
 local toolPanelFrame: Frame? = nil
 local toolPanelButton: TextButton? = nil
+local hudWatchdogStarted = false
 
 local SHOTGUN_TOOL_NAME = "RustyShotgun"
 local WRENCH_TOOL_NAME = "RustyWrench"
@@ -98,7 +101,7 @@ local function showScrapDelta(delta: number)
 	deltaLabel.Font = Enum.Font.GothamBold
 	deltaLabel.TextStrokeTransparency = 0.35
 	deltaLabel.Text = (delta >= 0 and "+" or "") .. tostring(delta)
-	deltaLabel.TextColor3 = if delta >= 0 then Color3.fromRGB(120, 255, 120) else Color3.fromRGB(255, 120, 120)
+	deltaLabel.TextColor3 = if delta >= 0 then Theme.Colors.ScrapDeltaPositive else Theme.Colors.ScrapDeltaNegative
 	deltaLabel.Parent = gui
 
 	local tween = TweenService:Create(deltaLabel, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
@@ -210,9 +213,9 @@ local function updateWaveTimer(secondsRemaining: number)
 
 	waveTimerLabel.Text = formatTimer(seconds)
 	if seconds > 10 then
-		waveTimerLabel.TextColor3 = Color3.fromRGB(255, 193, 64)
+		waveTimerLabel.TextColor3 = Theme.Colors.WaveTimerNormal
 	else
-		waveTimerLabel.TextColor3 = Color3.fromRGB(255, 60, 60)
+		waveTimerLabel.TextColor3 = Theme.Colors.WaveTimerUrgent
 	end
 
 	if seconds <= 5 and seconds ~= lastWaveSeconds then
@@ -250,14 +253,14 @@ local function ensureBar(part: BasePart): BillboardGui
 	local bg = Instance.new("Frame")
 	bg.Name = "Background"
 	bg.Size = UDim2.fromScale(1, 1)
-	bg.BackgroundColor3 = Color3.fromRGB(120, 25, 25)
+	bg.BackgroundColor3 = Theme.Colors.DismantleBarBg
 	bg.BorderSizePixel = 0
 	bg.Parent = bar
 
 	local fill = Instance.new("Frame")
 	fill.Name = "Fill"
 	fill.Size = UDim2.fromScale(0, 1)
-	fill.BackgroundColor3 = Color3.fromRGB(255, 70, 70)
+	fill.BackgroundColor3 = Theme.Colors.DismantleBarFill
 	fill.BorderSizePixel = 0
 	fill.Parent = bg
 
@@ -267,7 +270,7 @@ local function ensureBar(part: BasePart): BillboardGui
 	text.BackgroundTransparency = 1
 	text.TextScaled = true
 	text.Font = Enum.Font.GothamBold
-	text.TextColor3 = Color3.fromRGB(255, 255, 255)
+	text.TextColor3 = Theme.Colors.DismantleBarText
 	text.TextStrokeTransparency = 0.4
 	text.Text = "0%"
 	text.Parent = bg
@@ -301,10 +304,10 @@ local function updateDismantleBars()
 			if isFixer and progress > 0 then
 				bg.BorderSizePixel = 2
 				local pulse = (math.sin(os.clock() * 6) + 1) * 0.5
-				bg.BorderColor3 = Color3.fromRGB(
-					math.floor(255 * pulse + 180 * (1 - pulse)),
-					math.floor(215 * pulse + 100 * (1 - pulse)),
-					math.floor(85 * pulse + 30 * (1 - pulse))
+				bg.BorderColor3 = Color3.new(
+					(math.floor(255 * pulse + 180 * (1 - pulse))) / 255,
+					(math.floor(215 * pulse + 100 * (1 - pulse))) / 255,
+					(math.floor(85 * pulse + 30 * (1 - pulse))) / 255
 				)
 			else
 				bg.BorderSizePixel = 0
@@ -329,11 +332,7 @@ local ROLE_DESCRIPTIONS = {
 	Enforcer = "Combat expert. The only role that\ncan use the shotgun to fight rats.",
 }
 
-local ROLE_COLORS = {
-	Scrapper = Color3.fromRGB(255, 200, 60),
-	Fixer = Color3.fromRGB(100, 200, 255),
-	Enforcer = Color3.fromRGB(255, 100, 80),
-}
+local ROLE_COLORS = Theme.Colors.RoleColors
 
 local function makeRoleButton(parent: Instance, roleName: string, xScale: number)
 	local roleDef = Constants.ROLE_DEFINITIONS[roleName]
@@ -342,7 +341,7 @@ local function makeRoleButton(parent: Instance, roleName: string, xScale: number
 	card.Name = roleName .. "Card"
 	card.Size = UDim2.new(0.25, 0, 0.5, 0)
 	card.Position = UDim2.new(xScale, 0, 0.25, 0)
-	card.BackgroundColor3 = Color3.fromRGB(30, 30, 38)
+	card.BackgroundColor3 = Theme.Colors.RoleCardBg
 	card.BackgroundTransparency = 0.1
 	card.Parent = parent
 
@@ -357,7 +356,7 @@ local function makeRoleButton(parent: Instance, roleName: string, xScale: number
 	nameLabel.BackgroundTransparency = 1
 	nameLabel.Font = Enum.Font.GothamBlack
 	nameLabel.TextScaled = true
-	nameLabel.TextColor3 = ROLE_COLORS[roleName] or Color3.fromRGB(255, 255, 255)
+	nameLabel.TextColor3 = ROLE_COLORS[roleName] or Theme.Colors.TextPrimary
 	nameLabel.Text = string.upper(roleName)
 	nameLabel.Parent = card
 
@@ -369,7 +368,7 @@ local function makeRoleButton(parent: Instance, roleName: string, xScale: number
 	descLabel.Font = Enum.Font.Gotham
 	descLabel.TextScaled = true
 	descLabel.TextWrapped = true
-	descLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+	descLabel.TextColor3 = Theme.Colors.TextPrimary
 	descLabel.Text = ROLE_DESCRIPTIONS[roleName] or ""
 	descLabel.Parent = card
 
@@ -380,7 +379,7 @@ local function makeRoleButton(parent: Instance, roleName: string, xScale: number
 	statsLabel.BackgroundTransparency = 1
 	statsLabel.Font = Enum.Font.GothamSemibold
 	statsLabel.TextScaled = true
-	statsLabel.TextColor3 = Color3.fromRGB(160, 160, 160)
+	statsLabel.TextColor3 = Theme.Colors.TextMuted
 	statsLabel.Text = string.format("SPD x%.1f  RPR x%.1f  DMG x%.1f", roleDef.speedMult, roleDef.repairMult, roleDef.damageMult)
 	statsLabel.Parent = card
 
@@ -389,8 +388,8 @@ local function makeRoleButton(parent: Instance, roleName: string, xScale: number
 	button.Size = UDim2.new(0.8, 0, 0, 36)
 	button.AnchorPoint = Vector2.new(0.5, 0)
 	button.Position = UDim2.new(0.5, 0, 1, -48)
-	button.BackgroundColor3 = ROLE_COLORS[roleName] or Color3.fromRGB(80, 80, 90)
-	button.TextColor3 = Color3.fromRGB(20, 20, 20)
+	button.BackgroundColor3 = ROLE_COLORS[roleName] or Theme.Colors.PanelStroke
+	button.TextColor3 = Theme.Colors.Panel
 	button.TextScaled = true
 	button.Font = Enum.Font.GothamBold
 	button.Text = "SELECT"
@@ -435,7 +434,7 @@ local function createRoleSelection()
 	local overlay = Instance.new("Frame")
 	overlay.Name = "Overlay"
 	overlay.Size = UDim2.fromScale(1, 1)
-	overlay.BackgroundColor3 = Color3.fromRGB(10, 10, 15)
+	overlay.BackgroundColor3 = Theme.Colors.RoleOverlay
 	overlay.BackgroundTransparency = 0.2
 	overlay.Parent = screen
 
@@ -446,7 +445,7 @@ local function createRoleSelection()
 	chooseTitle.BackgroundTransparency = 1
 	chooseTitle.Font = Enum.Font.GothamBlack
 	chooseTitle.TextScaled = true
-	chooseTitle.TextColor3 = Color3.fromRGB(255, 230, 140)
+	chooseTitle.TextColor3 = Theme.Colors.RoleTitle
 	chooseTitle.TextStrokeTransparency = 0.5
 	chooseTitle.Text = "CHOOSE YOUR ROLE"
 	chooseTitle.Parent = overlay
@@ -462,13 +461,10 @@ local function createToolbar(parent: Instance)
 	frame.AnchorPoint = Vector2.new(0.5, 1)
 	frame.Position = UDim2.new(0.5, 0, 0.97, 0)
 	frame.Size = UDim2.new(0.3, 0, 0, 88)
-	frame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+	frame.BackgroundColor3 = Theme.Colors.Panel
 	frame.BackgroundTransparency = 0.2
 	frame.Parent = parent
-
-	local toolbarCorner = Instance.new("UICorner")
-	toolbarCorner.CornerRadius = UDim.new(0, 6)
-	toolbarCorner.Parent = frame
+	Theme.StylePanel(frame, 8)
 
 	local layout = Instance.new("UIListLayout")
 	layout.FillDirection = Enum.FillDirection.Horizontal
@@ -487,23 +483,21 @@ local function createToolbar(parent: Instance)
 		local slot = Instance.new("TextButton")
 		slot.Name = info.name .. "Slot"
 		slot.Size = UDim2.new(0.3, 0, 0, 72)
-		slot.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
-		slot.TextColor3 = Color3.fromRGB(255, 255, 255)
+		slot.BackgroundColor3 = Theme.Colors.PanelAlt
+		slot.TextColor3 = Theme.Colors.TextPrimary
 		slot.TextScaled = true
 		slot.Font = Enum.Font.GothamBold
 		slot.Text = string.format("%s\n$%d\n[%s]", info.name, Constants.BASE_COSTS[info.name], info.key)
 		slot.Parent = frame
 		buildCostButtons[info.name] = slot
 
-		local slotCorner = Instance.new("UICorner")
-		slotCorner.CornerRadius = UDim.new(0, 4)
-		slotCorner.Parent = slot
+		Theme.StyleButton(slot)
 
 		local colorSwatch = Instance.new("Frame")
 		colorSwatch.Name = "Swatch"
 		colorSwatch.Size = UDim2.fromOffset(12, 12)
 		colorSwatch.Position = UDim2.fromOffset(4, 4)
-		colorSwatch.BackgroundColor3 = Constants.BUILDING.Colors[info.name]
+		colorSwatch.BackgroundColor3 = VisualManifest.Buildings.BaseColors[info.name]
 		colorSwatch.BorderSizePixel = 0
 		colorSwatch.Parent = slot
 
@@ -511,6 +505,30 @@ local function createToolbar(parent: Instance)
 			playUISound(AudioManifest.UIClick)
 			BlueprintController.StartPlacing(info.name)
 		end)
+
+		local viewport = Instance.new("ViewportFrame")
+		viewport.Name = "Icon"
+		viewport.Size = UDim2.fromOffset(24, 24)
+		viewport.Position = UDim2.fromOffset(4, 22)
+		viewport.BackgroundTransparency = 1
+		viewport.Parent = slot
+
+		local iconCamera = Instance.new("Camera")
+		iconCamera.Parent = viewport
+		viewport.CurrentCamera = iconCamera
+
+		local iconModel = Instance.new("Model")
+		iconModel.Name = "IconModel"
+		iconModel.Parent = viewport
+
+		local iconPart = Instance.new("Part")
+		iconPart.Size = Vector3.new(1.6, if info.name == "Wall" then 2 else 1.2, if info.name == "Drill" then 0.9 else 1.4)
+		iconPart.Material = Enum.Material.Metal
+		iconPart.Color = VisualManifest.Buildings.BaseColors[info.name]
+		iconPart.Anchored = true
+		iconPart.CFrame = CFrame.new(0, 0, 0) * CFrame.Angles(math.rad(-10), math.rad(35), 0)
+		iconPart.Parent = iconModel
+		iconCamera.CFrame = CFrame.new(Vector3.new(2.8, 2.3, 2.8), Vector3.zero)
 	end
 
 	local hintLabel = Instance.new("TextLabel")
@@ -521,7 +539,7 @@ local function createToolbar(parent: Instance)
 	hintLabel.BackgroundTransparency = 1
 	hintLabel.Font = Enum.Font.Gotham
 	hintLabel.TextScaled = true
-	hintLabel.TextColor3 = Color3.fromRGB(160, 160, 160)
+	hintLabel.TextColor3 = Theme.Colors.TextMuted
 	hintLabel.Text = "[R] Rotate  |  [RMB/Esc] Cancel  |  [X] Remove"
 	hintLabel.Parent = parent
 end
@@ -560,9 +578,9 @@ local function updateToolPanelVisual()
 	end
 
 	if isRoleToolEquipped(toolName) then
-		toolPanelButton.BackgroundColor3 = Color3.fromRGB(78, 140, 76)
+		toolPanelButton.BackgroundColor3 = Theme.Colors.ToolEquipped
 	else
-		toolPanelButton.BackgroundColor3 = Color3.fromRGB(48, 48, 58)
+		toolPanelButton.BackgroundColor3 = Theme.Colors.ToolUnequipped
 	end
 end
 
@@ -604,22 +622,19 @@ local function createToolPanel(parent: Instance)
 	panel.AnchorPoint = Vector2.new(1, 0.5)
 	panel.Position = UDim2.new(1, -6, 0.56, 0)
 	panel.Size = UDim2.fromOffset(56, 64)
-	panel.BackgroundColor3 = Color3.fromRGB(26, 26, 34)
+	panel.BackgroundColor3 = Theme.Colors.Panel
 	panel.BackgroundTransparency = 0.15
 	panel.Visible = false
 	panel.Parent = parent
-
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 8)
-	corner.Parent = panel
+	Theme.StylePanel(panel, 8)
 
 	local button = Instance.new("TextButton")
 	button.Name = "ToolToggle"
 	button.AnchorPoint = Vector2.new(0.5, 0.5)
 	button.Position = UDim2.fromScale(0.5, 0.5)
 	button.Size = UDim2.fromOffset(46, 50)
-	button.BackgroundColor3 = Color3.fromRGB(48, 48, 58)
-	button.TextColor3 = Color3.fromRGB(240, 240, 240)
+	button.BackgroundColor3 = Theme.Colors.PanelAlt
+	button.TextColor3 = Theme.Colors.TextPrimary
 	button.TextScaled = true
 	button.Font = Enum.Font.GothamBold
 	button.Text = "TOOL"
@@ -628,10 +643,7 @@ local function createToolPanel(parent: Instance)
 		playUISound(AudioManifest.UIClick)
 		toggleRoleTool()
 	end)
-
-	local buttonCorner = Instance.new("UICorner")
-	buttonCorner.CornerRadius = UDim.new(0, 6)
-	buttonCorner.Parent = button
+	Theme.StyleButton(button)
 
 	toolPanelFrame = panel
 	toolPanelButton = button
@@ -708,10 +720,10 @@ local function createSettingsPanel(parent: Instance)
 	toggleBtn.AnchorPoint = Vector2.new(1, 1)
 	toggleBtn.Position = UDim2.new(1, -10, 1, -10)
 	toggleBtn.Size = UDim2.fromOffset(36, 36)
-	toggleBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+	toggleBtn.BackgroundColor3 = Theme.Colors.PanelAlt
 	toggleBtn.Font = Enum.Font.GothamBold
 	toggleBtn.TextScaled = true
-	toggleBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
+	toggleBtn.TextColor3 = Theme.Colors.TextPrimary
 	toggleBtn.Text = "S"
 	toggleBtn.Parent = parent
 
@@ -724,7 +736,7 @@ local function createSettingsPanel(parent: Instance)
 	panel.AnchorPoint = Vector2.new(1, 1)
 	panel.Position = UDim2.new(1, -10, 1, -52)
 	panel.Size = UDim2.new(0.16, 0, 0, 140)
-	panel.BackgroundColor3 = Color3.fromRGB(25, 25, 32)
+	panel.BackgroundColor3 = Theme.Colors.Panel
 	panel.BackgroundTransparency = 0.1
 	panel.Visible = false
 	panel.Parent = parent
@@ -739,7 +751,7 @@ local function createSettingsPanel(parent: Instance)
 	panelTitle.BackgroundTransparency = 1
 	panelTitle.Font = Enum.Font.GothamBold
 	panelTitle.TextScaled = true
-	panelTitle.TextColor3 = Color3.fromRGB(220, 220, 220)
+	panelTitle.TextColor3 = Theme.Colors.TextPrimary
 	panelTitle.Text = "Settings"
 	panelTitle.Parent = panel
 
@@ -751,14 +763,14 @@ local function createSettingsPanel(parent: Instance)
 		sliderLabel.Font = Enum.Font.Gotham
 		sliderLabel.TextScaled = true
 		sliderLabel.TextXAlignment = Enum.TextXAlignment.Left
-		sliderLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
+		sliderLabel.TextColor3 = Theme.Colors.TextMuted
 		sliderLabel.Text = label
 		sliderLabel.Parent = panel
 
 		local track = Instance.new("Frame")
 		track.Size = UDim2.new(1, -16, 0, 8)
 		track.Position = UDim2.new(0, 8, 0, yPos + 18)
-		track.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
+		track.BackgroundColor3 = Theme.Colors.SliderTrack
 		track.BorderSizePixel = 0
 		track.Parent = panel
 
@@ -769,7 +781,7 @@ local function createSettingsPanel(parent: Instance)
 		local fill = Instance.new("Frame")
 		fill.Name = "Fill"
 		fill.Size = UDim2.new(initial, 0, 1, 0)
-		fill.BackgroundColor3 = Color3.fromRGB(255, 200, 80)
+		fill.BackgroundColor3 = Theme.Colors.SliderFill
 		fill.BorderSizePixel = 0
 		fill.Parent = track
 
@@ -842,7 +854,7 @@ local function createDebugPanel(parent: Instance)
 	panel.AnchorPoint = Vector2.new(0, 1)
 	panel.Position = UDim2.new(0, 10, 1, -10)
 	panel.Size = UDim2.fromOffset(230, 140)
-	panel.BackgroundColor3 = Color3.fromRGB(25, 25, 32)
+	panel.BackgroundColor3 = Theme.Colors.Panel
 	panel.BackgroundTransparency = 0.15
 	panel.Parent = parent
 
@@ -852,7 +864,7 @@ local function createDebugPanel(parent: Instance)
 	title.Size = UDim2.fromOffset(220, 26)
 	title.Position = UDim2.fromOffset(6, 4)
 	title.Font = Enum.Font.GothamBold
-	title.TextColor3 = Color3.fromRGB(255, 255, 255)
+	title.TextColor3 = Theme.Colors.TextPrimary
 	title.TextScaled = true
 	title.Text = "Debug Controls"
 	title.Parent = panel
@@ -861,8 +873,8 @@ local function createDebugPanel(parent: Instance)
 		local button = Instance.new("TextButton")
 		button.Size = UDim2.fromOffset(210, 30)
 		button.Position = UDim2.fromOffset(10, y)
-		button.BackgroundColor3 = Color3.fromRGB(48, 48, 60)
-		button.TextColor3 = Color3.fromRGB(255, 255, 255)
+		button.BackgroundColor3 = Theme.Colors.PanelAlt
+		button.TextColor3 = Theme.Colors.TextPrimary
 		button.Font = Enum.Font.GothamSemibold
 		button.TextScaled = true
 		button.Text = label
@@ -887,13 +899,10 @@ local function createTitanProgressPanel(parent: Instance)
 	frame.AnchorPoint = Vector2.new(1, 0)
 	frame.Position = UDim2.new(1, -10, 0, 10)
 	frame.Size = UDim2.new(0.14, 0, 0, 110)
-	frame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+	frame.BackgroundColor3 = Theme.Colors.Panel
 	frame.BackgroundTransparency = 0.15
 	frame.Parent = parent
-
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 6)
-	corner.Parent = frame
+	Theme.StylePanel(frame, 8)
 
 	local titleLabel = Instance.new("TextLabel")
 	titleLabel.Name = "Title"
@@ -901,7 +910,7 @@ local function createTitanProgressPanel(parent: Instance)
 	titleLabel.Position = UDim2.fromOffset(5, 4)
 	titleLabel.BackgroundTransparency = 1
 	titleLabel.Font = Enum.Font.GothamBlack
-	titleLabel.TextColor3 = Color3.fromRGB(200, 210, 230)
+	titleLabel.TextColor3 = Theme.Colors.TextPrimary
 	titleLabel.TextScaled = true
 	titleLabel.Text = "TITAN - STAGE 0/4"
 	titleLabel.Parent = frame
@@ -911,7 +920,7 @@ local function createTitanProgressPanel(parent: Instance)
 	barBg.Name = "IntegrityBarBg"
 	barBg.Size = UDim2.new(1, -20, 0, 16)
 	barBg.Position = UDim2.new(0, 10, 0, 30)
-	barBg.BackgroundColor3 = Color3.fromRGB(60, 20, 20)
+	barBg.BackgroundColor3 = Theme.Colors.IntegrityBarBg
 	barBg.BorderSizePixel = 0
 	barBg.Parent = frame
 	titanIntegrityBar = barBg
@@ -919,7 +928,7 @@ local function createTitanProgressPanel(parent: Instance)
 	local fill = Instance.new("Frame")
 	fill.Name = "Fill"
 	fill.Size = UDim2.fromScale(1, 1)
-	fill.BackgroundColor3 = Color3.fromRGB(80, 200, 100)
+	fill.BackgroundColor3 = Theme.Colors.IntegrityGood
 	fill.BorderSizePixel = 0
 	fill.Parent = barBg
 	titanIntegrityFill = fill
@@ -929,7 +938,7 @@ local function createTitanProgressPanel(parent: Instance)
 	intLabel.Size = UDim2.fromScale(1, 1)
 	intLabel.BackgroundTransparency = 1
 	intLabel.Font = Enum.Font.GothamBold
-	intLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+	intLabel.TextColor3 = Theme.Colors.TextPrimary
 	intLabel.TextScaled = true
 	intLabel.TextStrokeTransparency = 0.3
 	intLabel.Text = "100%"
@@ -941,7 +950,7 @@ local function createTitanProgressPanel(parent: Instance)
 	reqLabel.Position = UDim2.new(0, 5, 0, 52)
 	reqLabel.BackgroundTransparency = 1
 	reqLabel.Font = Enum.Font.GothamSemibold
-	reqLabel.TextColor3 = Color3.fromRGB(200, 200, 180)
+	reqLabel.TextColor3 = Theme.Colors.TextMuted
 	reqLabel.TextScaled = true
 	reqLabel.TextWrapped = true
 	reqLabel.Text = "Next: 200 Scrap"
@@ -955,7 +964,7 @@ local function createTitanProgressPanel(parent: Instance)
 	distLabel.BackgroundTransparency = 1
 	distLabel.Font = Enum.Font.Gotham
 	distLabel.TextScaled = true
-	distLabel.TextColor3 = Color3.fromRGB(150, 150, 170)
+	distLabel.TextColor3 = Theme.Colors.TextMuted
 	distLabel.Text = ""
 	distLabel.Parent = frame
 	titanDistanceLabel = distLabel
@@ -973,11 +982,11 @@ local function updateTitanProgress(titanModelInstance: Model)
 	if titanIntegrityFill then
 		titanIntegrityFill.Size = UDim2.fromScale(math.clamp(intVal / 100, 0, 1), 1)
 		if intVal > 60 then
-			titanIntegrityFill.BackgroundColor3 = Color3.fromRGB(80, 200, 100)
+			titanIntegrityFill.BackgroundColor3 = Theme.Colors.IntegrityGood
 		elseif intVal > 30 then
-			titanIntegrityFill.BackgroundColor3 = Color3.fromRGB(255, 180, 50)
+			titanIntegrityFill.BackgroundColor3 = Theme.Colors.IntegrityWarning
 		else
-			titanIntegrityFill.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
+			titanIntegrityFill.BackgroundColor3 = Theme.Colors.IntegrityBad
 		end
 	end
 	if titanIntegrityBar then
@@ -1052,19 +1061,16 @@ local function createMainHUD()
 	scrapFrame.AnchorPoint = Vector2.new(0.5, 0)
 	scrapFrame.Position = UDim2.new(0.5, 0, 0.02, 0)
 	scrapFrame.Size = UDim2.new(0.14, 0, 0, 48)
-	scrapFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+	scrapFrame.BackgroundColor3 = Theme.Colors.Panel
 	scrapFrame.BackgroundTransparency = 0.15
 	scrapFrame.Parent = gui
-
-	local scrapCorner = Instance.new("UICorner")
-	scrapCorner.CornerRadius = UDim.new(0, 6)
-	scrapCorner.Parent = scrapFrame
+	Theme.StylePanel(scrapFrame, 8)
 
 	local label = Instance.new("TextLabel")
 	label.Name = "ScrapLabel"
 	label.Size = UDim2.fromScale(1, 1)
 	label.BackgroundTransparency = 1
-	label.TextColor3 = Color3.fromRGB(255, 236, 117)
+	label.TextColor3 = Theme.Colors.Accent
 	label.TextScaled = false
 	label.TextSize = 24
 	label.Font = Enum.Font.GothamBold
@@ -1078,7 +1084,7 @@ local function createMainHUD()
 	steelLabel.Position = UDim2.new(1, -8, 0, 56)
 	steelLabel.Size = UDim2.fromOffset(200, 34)
 	steelLabel.BackgroundTransparency = 1
-	steelLabel.TextColor3 = Color3.fromRGB(110, 190, 255)
+	steelLabel.TextColor3 = Theme.Colors.RoleColors.Fixer
 	steelLabel.Font = Enum.Font.GothamBold
 	steelLabel.TextScaled = true
 	steelLabel.Text = "Storm Steel: 0"
@@ -1092,7 +1098,7 @@ local function createMainHUD()
 	waveLabel.Position = UDim2.new(0.5, 0, 0.095, 0)
 	waveLabel.Size = UDim2.fromOffset(300, 28)
 	waveLabel.BackgroundTransparency = 1
-	waveLabel.TextColor3 = Color3.fromRGB(255, 193, 64)
+	waveLabel.TextColor3 = Theme.Colors.Accent
 	waveLabel.Font = Enum.Font.RobotoMono
 	waveLabel.TextScaled = false
 	waveLabel.TextSize = 20
@@ -1105,10 +1111,10 @@ local function createMainHUD()
 	threat.AnchorPoint = Vector2.new(0.5, 0)
 	threat.Position = UDim2.new(0.5, 0, 0.1, 0)
 	threat.Size = UDim2.fromOffset(520, 46)
-	threat.BackgroundColor3 = Color3.fromRGB(172, 35, 35)
+	threat.BackgroundColor3 = Theme.Colors.ThreatBanner
 	threat.BackgroundTransparency = 1
 	threat.TextTransparency = 1
-	threat.TextColor3 = Color3.fromRGB(255, 255, 255)
+	threat.TextColor3 = Theme.Colors.TextPrimary
 	threat.TextScaled = true
 	threat.Font = Enum.Font.GothamBlack
 	threat.Text = ""
@@ -1120,10 +1126,10 @@ local function createMainHUD()
 	stormBanner.AnchorPoint = Vector2.new(0.5, 0)
 	stormBanner.Position = UDim2.new(0.5, 0, 0.17, 0)
 	stormBanner.Size = UDim2.fromOffset(560, 44)
-	stormBanner.BackgroundColor3 = Color3.fromRGB(120, 80, 40)
+	stormBanner.BackgroundColor3 = Theme.Colors.StormBanner
 	stormBanner.BackgroundTransparency = 1
 	stormBanner.TextTransparency = 1
-	stormBanner.TextColor3 = Color3.fromRGB(255, 230, 190)
+	stormBanner.TextColor3 = Theme.Colors.TetherStatus
 	stormBanner.Font = Enum.Font.GothamBlack
 	stormBanner.TextScaled = true
 	stormBanner.Text = "SCRAP STORM INCOMING"
@@ -1136,7 +1142,7 @@ local function createMainHUD()
 	tetherLabel.Position = UDim2.new(0.5, 0, 0.23, 0)
 	tetherLabel.Size = UDim2.fromOffset(360, 34)
 	tetherLabel.BackgroundTransparency = 1
-	tetherLabel.TextColor3 = Color3.fromRGB(255, 230, 180)
+	tetherLabel.TextColor3 = Theme.Colors.TetherStatus
 	tetherLabel.TextTransparency = 1
 	tetherLabel.Font = Enum.Font.GothamBold
 	tetherLabel.TextScaled = true
@@ -1155,7 +1161,7 @@ local function createMainHUD()
 	bpFrame.AnchorPoint = Vector2.new(0.5, 0.5)
 	bpFrame.Position = UDim2.new(0.5, 0, 0.75, 0)
 	bpFrame.Size = UDim2.new(0.18, 0, 0, 20)
-	bpFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+	bpFrame.BackgroundColor3 = Theme.Colors.Panel
 	bpFrame.BackgroundTransparency = 0.3
 	bpFrame.Visible = false
 	bpFrame.Parent = gui
@@ -1167,7 +1173,7 @@ local function createMainHUD()
 	local bpFill = Instance.new("Frame")
 	bpFill.Name = "Fill"
 	bpFill.Size = UDim2.fromScale(0, 1)
-	bpFill.BackgroundColor3 = Color3.fromRGB(90, 220, 120)
+	bpFill.BackgroundColor3 = Theme.Colors.BuildProgressFill
 	bpFill.BorderSizePixel = 0
 	bpFill.Parent = bpFrame
 
@@ -1179,7 +1185,7 @@ local function createMainHUD()
 	bpLabel.Name = "Label"
 	bpLabel.Size = UDim2.fromScale(1, 1)
 	bpLabel.BackgroundTransparency = 1
-	bpLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+	bpLabel.TextColor3 = Theme.Colors.TextPrimary
 	bpLabel.Font = Enum.Font.GothamBold
 	bpLabel.TextScaled = true
 	bpLabel.Text = "BUILDING..."
@@ -1331,7 +1337,7 @@ function MainHUD.Init()
 		playUISound(AudioManifest.StageComplete, 0.5)
 		if titanStageLabel ~= nil then
 			local original = titanStageLabel.TextColor3
-			TweenService:Create(titanStageLabel, TweenInfo.new(0.15), { TextColor3 = Color3.fromRGB(255, 255, 100) }):Play()
+					TweenService:Create(titanStageLabel, TweenInfo.new(0.15), { TextColor3 = Theme.Colors.Accent }):Play()
 			task.delay(0.3, function()
 				if titanStageLabel ~= nil then
 					TweenService:Create(titanStageLabel, TweenInfo.new(0.3), { TextColor3 = original }):Play()
@@ -1374,11 +1380,11 @@ function MainHUD.Init()
 				hintLabel.AnchorPoint = Vector2.new(0.5, 1)
 				hintLabel.Position = UDim2.new(0.5, 0, 0.92, 0)
 				hintLabel.Size = UDim2.new(0.35, 0, 0, 28)
-				hintLabel.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
+				hintLabel.BackgroundColor3 = Theme.Colors.TutorialHintBg
 				hintLabel.BackgroundTransparency = 0.2
 				hintLabel.Font = Enum.Font.GothamSemibold
 				hintLabel.TextScaled = true
-				hintLabel.TextColor3 = Color3.fromRGB(220, 220, 200)
+				hintLabel.TextColor3 = Theme.Colors.TutorialHintText
 				hintLabel.Text = hint.text
 				hintLabel.Parent = rootGui
 
@@ -1448,6 +1454,26 @@ function MainHUD.Init()
 			titanDistanceLabel.Text = ("%dm to Core"):format(dist)
 		end
 	end)
+
+	if not hudWatchdogStarted then
+		hudWatchdogStarted = true
+		task.spawn(function()
+			while isInitialized do
+				task.wait(1)
+				local gui = PlayerGui:FindFirstChild("MainHUDGui")
+				if gui == nil then
+					local ok = pcall(function()
+						createMainHUD()
+					end)
+					if ok then
+						refreshScrapLabel()
+						updateStormSteel(currentStormSteel)
+						refreshBuildCosts()
+					end
+				end
+			end
+		end)
+	end
 end
 
 function MainHUD.ConnectWaveTimerZero(callback: () -> ()): RBXScriptConnection

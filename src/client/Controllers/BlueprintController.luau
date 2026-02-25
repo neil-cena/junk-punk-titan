@@ -12,6 +12,7 @@ local Mouse = LocalPlayer:GetMouse()
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Constants = require(Shared:WaitForChild("Constants"))
+local VisualManifest = require(Shared:WaitForChild("VisualManifest"))
 local Remotes = require(Shared:WaitForChild("Remotes"))
 local Utils = require(Shared:WaitForChild("Utils"))
 
@@ -122,9 +123,9 @@ local function updateGhostVisual()
 	end
 
 	if valid then
-		currentGhost.Color = Color3.fromRGB(90, 220, 90)
+		currentGhost.Color = VisualManifest.Tools.GhostValidColor
 	else
-		currentGhost.Color = Color3.fromRGB(220, 80, 80)
+		currentGhost.Color = VisualManifest.Tools.GhostInvalidColor
 	end
 end
 
@@ -140,8 +141,8 @@ function BlueprintController.StartPlacing(buildingType: BuildingType)
 	ghost.Transparency = Constants.BUILDING.GhostTransparency
 	ghost.Anchored = true
 	ghost.CanCollide = false
-	ghost.Material = Enum.Material.ForceField
-	ghost.Color = Constants.BUILDING.Colors[buildingType]
+	ghost.Material = VisualManifest.Buildings.GhostMaterial
+	ghost.Color = VisualManifest.Buildings.BaseColors[buildingType]
 	ghost.Parent = Workspace
 	currentGhost = ghost
 

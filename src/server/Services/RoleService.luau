@@ -5,6 +5,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Constants = require(Shared:WaitForChild("Constants"))
+local VisualManifest = require(Shared:WaitForChild("VisualManifest"))
 local RemotesModule = require(Shared:WaitForChild("Remotes"))
 local Types = require(Shared:WaitForChild("Types"))
 local Utils = require(Shared:WaitForChild("Utils"))
@@ -30,7 +31,7 @@ local function createRustyShotgunTool(): Tool
 	local handle = Instance.new("Part")
 	handle.Name = "Handle"
 	handle.Size = Vector3.new(1.6, 0.35, 0.35)
-	handle.Color = Color3.fromRGB(87, 65, 47)
+	handle.Color = VisualManifest.Tools.WrenchHandleColor
 	handle.Material = Enum.Material.Wood
 	handle.CanCollide = false
 	handle.Parent = tool
@@ -38,8 +39,8 @@ local function createRustyShotgunTool(): Tool
 	local barrel = Instance.new("Part")
 	barrel.Name = "Barrel"
 	barrel.Size = Vector3.new(1.2, 0.2, 0.2)
-	barrel.Color = Color3.fromRGB(120, 120, 120)
-	barrel.Material = Enum.Material.Metal
+	barrel.Color = VisualManifest.Tools.ShotgunBarrelColor
+	barrel.Material = VisualManifest.Tools.ShotgunBarrelMaterial
 	barrel.CanCollide = false
 	barrel.Massless = true
 	barrel.Parent = tool
@@ -62,16 +63,16 @@ local function createWrenchTool(): Tool
 	local handle = Instance.new("Part")
 	handle.Name = "Handle"
 	handle.Size = Vector3.new(1.2, 0.25, 0.25)
-	handle.Color = Color3.fromRGB(87, 65, 47)
-	handle.Material = Enum.Material.Metal
+	handle.Color = VisualManifest.Tools.WrenchHandleColor
+	handle.Material = Enum.Material.Wood
 	handle.CanCollide = false
 	handle.Parent = tool
 
 	local head = Instance.new("Part")
 	head.Name = "WrenchHead"
 	head.Size = Vector3.new(0.4, 0.7, 0.2)
-	head.Color = Color3.fromRGB(140, 140, 140)
-	head.Material = Enum.Material.Metal
+	head.Color = VisualManifest.Tools.WrenchHeadColor
+	head.Material = VisualManifest.Tools.WrenchHeadMaterial
 	head.CanCollide = false
 	head.Massless = true
 	head.Parent = tool

@@ -50,11 +50,6 @@ local Constants = {
 			Drill = Vector3.new(4, 6, 4),
 			Wall = Vector3.new(8, 8, 2),
 		},
-		Colors = {
-			Turret = Color3.fromRGB(200, 180, 60),
-			Drill = Color3.fromRGB(120, 120, 120),
-			Wall = Color3.fromRGB(90, 80, 70),
-		},
 	},
 
 	SCALING = {
@@ -97,7 +92,7 @@ local Constants = {
 		ShotgunRange = 30,
 		ShotgunCooldown = 0.27,
 		PunchDamage = 5,
-		PunchRange = 8,
+		PunchRange = 6,
 		PunchCooldown = 0.33,
 		RatBaseHealth = 50,
 		RatFleeSpeedMultiplier = 1.2,

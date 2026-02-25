@@ -13,6 +13,7 @@ local LocalPlayer = Players.LocalPlayer
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Constants = require(Shared:WaitForChild("Constants"))
 local AudioManifest = require(Shared:WaitForChild("AudioManifest"))
+local VisualManifest = require(Shared:WaitForChild("VisualManifest"))
 local Remotes = require(Shared:WaitForChild("Remotes"))
 local MainHUD = require(script.Parent.Parent:WaitForChild("UI"):WaitForChild("MainHUD"))
 
@@ -44,6 +45,9 @@ local waveIntensityActive = false
 local ratHealthBars: { [Model]: BillboardGui } = {}
 local ratHealthConnections: { [Model]: { RBXScriptConnection } } = {}
 local baseRadiusMarker: Instance? = nil
+local scrapComboCount = 0
+local lastScrapPickupAt = 0
+local ambientDustPart: BasePart? = nil
 
 local function createGearPart(): BasePart
 	local part = Instance.new("Part")
@@ -51,7 +55,8 @@ local function createGearPart(): BasePart
 	part.Size = Vector3.new(0.6, 0.6, 0.2)
 	part.Shape = Enum.PartType.Cylinder
 	part.Material = Enum.Material.Metal
-	part.Color = Color3.fromRGB(184, 171, 94)
+	part.Color = VisualManifest.VFX.LootGearColor
+	part.Material = VisualManifest.VFX.LootGearMaterial
 	part.Anchored = true
 	part.CanCollide = false
 	part.Transparency = 1
@@ -123,7 +128,7 @@ local function createSparkEmitter(part: BasePart): ParticleEmitter
 	emitter.Name = "DismantleSparks"
 	emitter.Parent = attachment
 	emitter.Texture = "rbxasset://textures/particles/sparkles_main.dds"
-	emitter.Color = ColorSequence.new(Color3.fromRGB(255, 80, 60), Color3.fromRGB(255, 140, 50))
+	emitter.Color = ColorSequence.new(VisualManifest.VFX.DismantleSparksA, VisualManifest.VFX.DismantleSparksB)
 	emitter.Lifetime = NumberRange.new(0.12, 0.25)
 	emitter.Rate = 22
 	emitter.Speed = NumberRange.new(3, 8)
@@ -203,7 +208,7 @@ local function playBuildingDestroyFx(position: Vector3)
 
 	local dust = Instance.new("ParticleEmitter")
 	dust.Texture = "rbxasset://textures/particles/smoke_main.dds"
-	dust.Color = ColorSequence.new(Color3.fromRGB(150, 130, 100))
+	dust.Color = ColorSequence.new(VisualManifest.VFX.DestroyDustColor)
 	dust.Lifetime = NumberRange.new(0.8, 1.5)
 	dust.Speed = NumberRange.new(3, 8)
 	dust.SpreadAngle = Vector2.new(90, 90)
@@ -218,7 +223,7 @@ local function playBuildingDestroyFx(position: Vector3)
 
 	local debris = Instance.new("ParticleEmitter")
 	debris.Texture = "rbxasset://textures/particles/sparkles_main.dds"
-	debris.Color = ColorSequence.new(Color3.fromRGB(120, 100, 70), Color3.fromRGB(80, 70, 50))
+	debris.Color = ColorSequence.new(VisualManifest.VFX.DestroyDebrisA, VisualManifest.VFX.DestroyDebrisB)
 	debris.Lifetime = NumberRange.new(0.3, 0.6)
 	debris.Speed = NumberRange.new(8, 16)
 	debris.SpreadAngle = Vector2.new(120, 120)
@@ -268,7 +273,7 @@ local function ensureDrillSmoke(drill: BasePart): ParticleEmitter
 	local emitter = Instance.new("ParticleEmitter")
 	emitter.Name = "DrillSmoke"
 	emitter.Texture = "rbxasset://textures/particles/smoke_main.dds"
-	emitter.Color = ColorSequence.new(Color3.fromRGB(70, 70, 70), Color3.fromRGB(30, 30, 30))
+	emitter.Color = ColorSequence.new(VisualManifest.VFX.DrillSmokeA, VisualManifest.VFX.DrillSmokeB)
 	emitter.Lifetime = NumberRange.new(1.2, 1.8)
 	emitter.Speed = NumberRange.new(0.5, 1.3)
 	emitter.SpreadAngle = Vector2.new(20, 35)
@@ -317,7 +322,7 @@ local function refreshOverclockGlow(drill: BasePart)
 		if overclockGlows[drill] == nil then
 			local light = Instance.new("PointLight")
 			light.Name = "OverclockGlow"
-			light.Color = Color3.fromRGB(255, 200, 50)
+			light.Color = VisualManifest.VFX.OverclockLightColor
 			light.Range = 12
 			light.Brightness = 2
 			light.Parent = drill
@@ -353,7 +358,7 @@ local function refreshDrillRateLabel(drill: BasePart, rateLabel: TextLabel)
 	local isClogged = drill:GetAttribute("IsClogged")
 	if isClogged == true then
 		rateLabel.Text = "+0.0/s"
-		rateLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
+		rateLabel.TextColor3 = VisualManifest.VFX.HealthBad
 		return
 	end
 
@@ -367,10 +372,10 @@ local function refreshDrillRateLabel(drill: BasePart, rateLabel: TextLabel)
 	local rate = Constants.MAINTENANCE.DrillBaseOutput * efficiency * overclockMult / Constants.MAINTENANCE.ResourceTickSeconds
 	if rate > 0 then
 		rateLabel.Text = ("+%.1f/s"):format(rate)
-		rateLabel.TextColor3 = Color3.fromRGB(80, 220, 90)
+		rateLabel.TextColor3 = VisualManifest.VFX.HealthGood
 	else
 		rateLabel.Text = "+0.0/s"
-		rateLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
+		rateLabel.TextColor3 = VisualManifest.VFX.HealthBad
 	end
 end
 
@@ -406,7 +411,7 @@ local function bindDrillFx(drill: BasePart)
 	rateLabel.Font = Enum.Font.GothamBold
 	rateLabel.TextScaled = true
 	rateLabel.TextStrokeTransparency = 0.4
-	rateLabel.TextColor3 = Color3.fromRGB(80, 220, 90)
+	rateLabel.TextColor3 = VisualManifest.VFX.HealthGood
 	rateLabel.Parent = rateGui
 
 	refreshDrillRateLabel(drill, rateLabel)
@@ -426,8 +431,8 @@ local function playBuildFlash(position: Vector3)
 	local ring = Instance.new("Part")
 	ring.Name = "BuildFlashRing"
 	ring.Shape = Enum.PartType.Cylinder
-	ring.Material = Enum.Material.Neon
-	ring.Color = Color3.fromRGB(255, 170, 60)
+	ring.Material = VisualManifest.VFX.BuildFlashMaterial
+	ring.Color = VisualManifest.VFX.BuildFlashColor
 	ring.Anchored = true
 	ring.CanCollide = false
 	ring.Size = Vector3.new(0.3, 5, 5)
@@ -467,8 +472,8 @@ local function playBuildFlash(position: Vector3)
 end
 
 local function startStormFx()
-	local ambientTarget = Color3.fromRGB(30, 20, 10)
-	local brightnessTarget = 0.5
+	local ambientTarget = VisualManifest.Storm.Ambient
+	local brightnessTarget = VisualManifest.Storm.Brightness
 	local lightingTween = TweenService:Create(Lighting, TweenInfo.new(2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 		Ambient = ambientTarget,
 		Brightness = brightnessTarget,
@@ -481,16 +486,16 @@ local function startStormFx()
 		stormBlur.Size = 0
 		stormBlur.Parent = Lighting
 	end
-	TweenService:Create(stormBlur, TweenInfo.new(1.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Size = 3 }):Play()
+	TweenService:Create(stormBlur, TweenInfo.new(1.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Size = VisualManifest.Storm.BlurSize }):Play()
 
 	if stormColor == nil then
 		stormColor = Instance.new("ColorCorrectionEffect")
 		stormColor.Name = "StormColor"
-		stormColor.TintColor = Color3.fromRGB(255, 255, 255)
+		stormColor.TintColor = VisualManifest.Storm.ClearTintColor
 		stormColor.Parent = Lighting
 	end
 	TweenService:Create(stormColor, TweenInfo.new(1.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-		TintColor = Color3.fromRGB(180, 160, 140),
+		TintColor = VisualManifest.Storm.TintColor,
 	}):Play()
 
 	if stormWindSound == nil then
@@ -536,7 +541,7 @@ local function stopStormFx()
 	if stormColor ~= nil then
 		local colorRef = stormColor
 		local tween = TweenService:Create(colorRef, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-			TintColor = Color3.fromRGB(255, 255, 255),
+			TintColor = VisualManifest.Storm.ClearTintColor,
 		})
 		tween:Play()
 		tween.Completed:Connect(function()
@@ -575,7 +580,7 @@ local function playRepairSuccessFx(position: Vector3)
 
 	local burst = Instance.new("ParticleEmitter")
 	burst.Texture = "rbxasset://textures/particles/sparkles_main.dds"
-	burst.Color = ColorSequence.new(Color3.fromRGB(255, 255, 255), Color3.fromRGB(255, 215, 130))
+	burst.Color = ColorSequence.new(VisualManifest.VFX.RepairBurstA, VisualManifest.VFX.RepairBurstB)
 	burst.Lifetime = NumberRange.new(0.2, 0.35)
 	burst.Speed = NumberRange.new(4, 8)
 	burst.SpreadAngle = Vector2.new(60, 60)
@@ -625,7 +630,7 @@ local function playEnemyDeathFx(position: Vector3)
 
 	local burst = Instance.new("ParticleEmitter")
 	burst.Texture = "rbxasset://textures/particles/sparkles_main.dds"
-	burst.Color = ColorSequence.new(Color3.fromRGB(255, 100, 60), Color3.fromRGB(200, 200, 200))
+	burst.Color = ColorSequence.new(VisualManifest.VFX.EnemyDeathA, VisualManifest.VFX.EnemyDeathB)
 	burst.Lifetime = NumberRange.new(0.15, 0.4)
 	burst.Speed = NumberRange.new(5, 12)
 	burst.SpreadAngle = Vector2.new(180, 180)
@@ -688,11 +693,104 @@ end
 
 local function healthColor(percent: number): Color3
 	if percent >= 0.66 then
-		return Color3.fromRGB(80, 220, 90)
+		return VisualManifest.VFX.HealthGood
 	elseif percent >= 0.33 then
-		return Color3.fromRGB(255, 200, 70)
+		return VisualManifest.VFX.HealthWarning
 	end
-	return Color3.fromRGB(255, 80, 80)
+	return VisualManifest.VFX.HealthBad
+end
+
+local function showDamageNumber(position: Vector3, amount: number)
+	local marker = Instance.new("Part")
+	marker.Name = "DamageNumberMarker"
+	marker.Anchored = true
+	marker.CanCollide = false
+	marker.Transparency = 1
+	marker.Size = Vector3.new(0.2, 0.2, 0.2)
+	marker.Position = position
+	marker.Parent = Workspace
+
+	local gui = Instance.new("BillboardGui")
+	gui.Name = "DamageNumber"
+	gui.Size = UDim2.fromOffset(90, 34)
+	gui.StudsOffset = Vector3.new(0, 1.6, 0)
+	gui.AlwaysOnTop = true
+	gui.Adornee = marker
+	gui.Parent = marker
+
+	local text = Instance.new("TextLabel")
+	text.Size = UDim2.fromScale(1, 1)
+	text.BackgroundTransparency = 1
+	text.Font = Enum.Font.GothamBlack
+	text.TextScaled = true
+	text.TextStrokeTransparency = 0.45
+	text.TextColor3 = VisualManifest.VFX.DamageNumberColor
+	text.Text = ("-%d"):format(math.max(1, amount))
+	text.Parent = gui
+
+	TweenService:Create(gui, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		StudsOffset = Vector3.new(0, 3.2, 0),
+	}):Play()
+	TweenService:Create(text, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		TextTransparency = 1,
+		TextStrokeTransparency = 1,
+	}):Play()
+	task.delay(0.4, function()
+		if marker.Parent ~= nil then
+			marker:Destroy()
+		end
+	end)
+end
+
+local function showScrapCombo(combo: number)
+	local playerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
+	if playerGui == nil then
+		return
+	end
+	local hud = playerGui:FindFirstChild("MainHUDGui")
+	if hud == nil or not hud:IsA("ScreenGui") then
+		return
+	end
+
+	local existing = hud:FindFirstChild("ScrapCombo")
+	if existing ~= nil then
+		existing:Destroy()
+	end
+
+	local label = Instance.new("TextLabel")
+	label.Name = "ScrapCombo"
+	label.AnchorPoint = Vector2.new(0.5, 0)
+	label.Position = UDim2.new(0.5, 0, 0.125, 0)
+	label.Size = UDim2.fromOffset(240, 32)
+	label.BackgroundTransparency = 1
+	label.Font = Enum.Font.GothamBlack
+	label.TextScaled = true
+	label.TextColor3 = VisualManifest.VFX.ScrapComboColor
+	label.TextStrokeTransparency = 0.5
+	label.Text = ("SCRAP x%d COMBO"):format(combo)
+	label.Parent = hud
+
+	local sound = Instance.new("Sound")
+	sound.SoundId = AudioManifest.LootCombo
+	sound.Volume = 0.2
+	sound.Parent = SoundService
+	sound:Play()
+	sound.Ended:Connect(function()
+		if sound.Parent ~= nil then
+			sound:Destroy()
+		end
+	end)
+
+	TweenService:Create(label, TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		Position = UDim2.new(0.5, 0, 0.095, 0),
+		TextTransparency = 1,
+		TextStrokeTransparency = 1,
+	}):Play()
+	task.delay(0.5, function()
+		if label.Parent ~= nil then
+			label:Destroy()
+		end
+	end)
 end
 
 local function bindRatHealthBar(ratModel: Model)
@@ -737,16 +835,18 @@ local function bindRatHealthBar(ratModel: Model)
 	local bg = Instance.new("Frame")
 	bg.Name = "BG"
 	bg.Size = UDim2.fromScale(1, 1)
-	bg.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+	bg.BackgroundColor3 = VisualManifest.VFX.HealthBarBackground
 	bg.BorderSizePixel = 0
 	bg.Parent = gui
 
 	local fill = Instance.new("Frame")
 	fill.Name = "Fill"
 	fill.Size = UDim2.fromScale(1, 1)
-	fill.BackgroundColor3 = Color3.fromRGB(80, 220, 90)
+	fill.BackgroundColor3 = VisualManifest.VFX.HealthGood
 	fill.BorderSizePixel = 0
 	fill.Parent = bg
+
+	local previousHealth = humanoid.Health
 
 	local function refresh()
 		if humanoid.Parent == nil then
@@ -754,6 +854,10 @@ local function bindRatHealthBar(ratModel: Model)
 		end
 		local maxHealth = math.max(1, humanoid.MaxHealth)
 		local percent = math.clamp(humanoid.Health / maxHealth, 0, 1)
+		if humanoid.Health < previousHealth then
+			showDamageNumber(root.Position + Vector3.new(0, 2, 0), math.floor(previousHealth - humanoid.Health + 0.5))
+		end
+		previousHealth = humanoid.Health
 		gui.Enabled = humanoid.Health < maxHealth
 		fill.Size = UDim2.fromScale(percent, 1)
 		fill.BackgroundColor3 = healthColor(percent)
@@ -816,7 +920,7 @@ local function refreshBaseRadiusMarker()
 		segment.Anchored = true
 		segment.CanCollide = false
 		segment.Material = Enum.Material.Neon
-		segment.Color = Color3.fromRGB(100, 170, 255)
+		segment.Color = VisualManifest.VFX.BaseRadiusMarkerColor
 		segment.Transparency = 0.2
 		segment.Size = Vector3.new(segmentThickness, segmentHeight, length + 0.04)
 		segment.CFrame = CFrame.lookAt(mid, p1)
@@ -825,6 +929,44 @@ local function refreshBaseRadiusMarker()
 
 	ring.Parent = Workspace
 	baseRadiusMarker = ring
+end
+
+local function ensureAmbientDust()
+	if ambientDustPart ~= nil and ambientDustPart.Parent ~= nil then
+		return
+	end
+	local part = Instance.new("Part")
+	part.Name = "AmbientDustEmitter"
+	part.Anchored = true
+	part.CanCollide = false
+	part.Transparency = 1
+	part.Size = Vector3.new(1, 1, 1)
+	part.Position = Vector3.new(0, 8, 0)
+	part.Parent = Workspace
+
+	local attachment = Instance.new("Attachment")
+	attachment.Parent = part
+
+	local dust = Instance.new("ParticleEmitter")
+	dust.Name = "AmbientDust"
+	dust.Texture = "rbxasset://textures/particles/smoke_main.dds"
+	dust.Color = ColorSequence.new(VisualManifest.VFX.AmbientDustA, VisualManifest.VFX.AmbientDustB)
+	dust.Lifetime = NumberRange.new(4, 6)
+	dust.Speed = NumberRange.new(16, 22)
+	dust.Acceleration = Vector3.new(2, 0.2, 0)
+	dust.Rate = 3
+	dust.SpreadAngle = Vector2.new(10, 10)
+	dust.Size = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 3),
+		NumberSequenceKeypoint.new(1, 7),
+	})
+	dust.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.75),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	dust.Parent = attachment
+
+	ambientDustPart = part
 end
 
 function VFXController.Init()
@@ -836,6 +978,8 @@ function VFXController.Init()
 	for _ = 1, POOL_SIZE do
 		table.insert(gearPool, createGearPart())
 	end
+
+	ensureAmbientDust()
 
 	for _, instance in CollectionService:GetTagged("DismantlableBuilding") do
 		if instance:IsA("BasePart") then
@@ -884,6 +1028,16 @@ function VFXController.Init()
 		local delta = newValue - lastScrap
 		if delta > 0 then
 			playLootFountain(delta)
+			local now = os.clock()
+			if now - lastScrapPickupAt <= 1.2 then
+				scrapComboCount += 1
+			else
+				scrapComboCount = 1
+			end
+			lastScrapPickupAt = now
+			if scrapComboCount >= 3 then
+				showScrapCombo(scrapComboCount)
+			end
 			local ching = Instance.new("Sound")
 			ching.SoundId = AudioManifest.LootCollect
 			ching.Volume = 0.25
@@ -921,7 +1075,7 @@ function VFXController.Init()
 				ring.Name = "SteelPickupFlash"
 				ring.Shape = Enum.PartType.Ball
 				ring.Material = Enum.Material.Neon
-				ring.Color = Color3.fromRGB(80, 180, 255)
+				ring.Color = VisualManifest.VFX.SteelPickupFlashColor
 				ring.Anchored = true
 				ring.CanCollide = false
 				ring.Size = Vector3.new(2, 2, 2)
@@ -974,7 +1128,7 @@ function VFXController.Init()
 		sphere.Name = "VictoryShockwave"
 		sphere.Shape = Enum.PartType.Ball
 		sphere.Material = Enum.Material.Neon
-		sphere.Color = Color3.fromRGB(255, 230, 100)
+		sphere.Color = VisualManifest.VFX.VictoryShockwaveColor
 		sphere.Anchored = true
 		sphere.CanCollide = false
 		sphere.Size = Vector3.new(4, 4, 4)
@@ -999,6 +1153,45 @@ function VFXController.Init()
 
 	remotes.WaveStarted.OnClientEvent:Connect(function()
 		waveIntensityActive = true
+		local splashGui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
+		if splashGui ~= nil then
+			local hud = splashGui:FindFirstChild("MainHUDGui")
+			if hud ~= nil and hud:IsA("ScreenGui") then
+				local splash = Instance.new("TextLabel")
+				splash.Name = "WaveSplash"
+				splash.AnchorPoint = Vector2.new(0.5, 0.5)
+				splash.Position = UDim2.new(0.5, 0, 0.2, 0)
+				splash.Size = UDim2.fromOffset(460, 72)
+				splash.BackgroundTransparency = 1
+				splash.Font = Enum.Font.GothamBlack
+				splash.TextScaled = true
+				splash.TextStrokeTransparency = 0.45
+				splash.TextColor3 = VisualManifest.VFX.WaveSplashColor
+				splash.Text = "WAVE INCOMING"
+				splash.Parent = hud
+				TweenService:Create(splash, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+					TextTransparency = 1,
+					TextStrokeTransparency = 1,
+					Position = UDim2.new(0.5, 0, 0.14, 0),
+				}):Play()
+				task.delay(0.52, function()
+					if splash.Parent ~= nil then
+						splash:Destroy()
+					end
+				end)
+			end
+		end
+		local slam = Instance.new("Sound")
+		slam.SoundId = AudioManifest.WaveSlam
+		slam.Volume = 0.25
+		slam.PlaybackSpeed = 1.12
+		slam.Parent = SoundService
+		slam:Play()
+		slam.Ended:Connect(function()
+			if slam.Parent ~= nil then
+				slam:Destroy()
+			end
+		end)
 		if ambientMusic and ambientMusic.Parent then
 			TweenService:Create(ambientMusic, TweenInfo.new(1.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 				Volume = 0.25,

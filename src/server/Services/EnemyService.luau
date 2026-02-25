@@ -9,6 +9,7 @@ local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Constants = require(Shared:WaitForChild("Constants"))
+local VisualManifest = require(Shared:WaitForChild("VisualManifest"))
 local RemotesModule = require(Shared:WaitForChild("Remotes"))
 local TheftComponent = require(Shared:WaitForChild("TheftComponent"))
 local EconomyService = require(script.Parent:WaitForChild("EconomyService"))
@@ -75,14 +76,38 @@ end
 local function spawnCollectableBundle(atPosition: Vector3, scrapValue: number)
 	local bundle = Instance.new("Part")
 	bundle.Name = "RatCache"
-	bundle.Size = Vector3.new(1.2, 1.2, 1.2)
-	bundle.Shape = Enum.PartType.Ball
-	bundle.Material = Enum.Material.Metal
-	bundle.Color = Color3.fromRGB(210, 150, 80)
+	bundle.Size = Vector3.new(1.1, 1.1, 1.1)
+	bundle.Shape = Enum.PartType.Block
+	bundle.Material = VisualManifest.Loot.RatCache.material
+	bundle.Color = VisualManifest.Loot.RatCache.color
 	bundle.Anchored = false
 	bundle.CanCollide = true
 	bundle.Position = atPosition + Vector3.new(0, 2, 0)
 	bundle.Parent = Workspace
+
+	local cogA = Instance.new("Part")
+	cogA.Name = "CogA"
+	cogA.Size = Vector3.new(0.25, 1.5, 0.55)
+	cogA.Material = VisualManifest.Loot.RatCache.cogMaterial
+	cogA.Color = VisualManifest.Loot.RatCache.cogColor
+	cogA.Anchored = false
+	cogA.CanCollide = false
+	cogA.CFrame = bundle.CFrame
+	cogA.Parent = bundle
+	local weldA = Instance.new("WeldConstraint")
+	weldA.Part0 = bundle
+	weldA.Part1 = cogA
+	weldA.Parent = bundle
+
+	local cogB = cogA:Clone()
+	cogB.Name = "CogB"
+	cogB.Size = Vector3.new(0.55, 1.5, 0.25)
+	cogB.Parent = bundle
+	local weldB = Instance.new("WeldConstraint")
+	weldB.Part0 = bundle
+	weldB.Part1 = cogB
+	weldB.Parent = bundle
+
 	table.insert(activeRatCaches, bundle)
 	ratCacheValues[bundle] = scrapValue
 
@@ -163,16 +188,91 @@ local function createScrapRatModel(spawnPosition: Vector3, isElite: boolean?, is
 	root.Position = spawnPosition
 	root.Parent = rat
 
+	root.Size = VisualManifest.Rats.Standard.bodySize
+	root.Color = VisualManifest.Rats.Standard.bodyColor
+	root.Material = VisualManifest.Rats.Standard.bodyMaterial
 	if isElite then
-		root.Size = Vector3.new(2.5, 2.5, 2.5)
-		root.Color = Color3.fromRGB(180, 50, 50)
-		root.Material = Enum.Material.Metal
+		root.Size = VisualManifest.Rats.Elite.bodySize
+		root.Color = VisualManifest.Rats.Elite.bodyColor
+		root.Material = VisualManifest.Rats.Elite.bodyMaterial
 	elseif isThief then
-		root.Size = Vector3.new(1.9, 1.9, 1.9)
-		root.Color = Color3.fromRGB(120, 90, 55)
-		root.Material = Enum.Material.Slate
-	else
-		root.Size = Vector3.new(2, 2, 2)
+		root.Size = VisualManifest.Rats.Thief.bodySize
+		root.Color = VisualManifest.Rats.Thief.bodyColor
+		root.Material = VisualManifest.Rats.Thief.bodyMaterial
+	end
+
+	local head = Instance.new("Part")
+	head.Name = "Head"
+	head.Size = Vector3.new(root.Size.X * 0.6, root.Size.Y * 0.7, root.Size.Z * 0.5)
+	head.Material = root.Material
+	head.Color = root.Color
+	head.CanCollide = false
+	head.Massless = true
+	head.CFrame = root.CFrame * CFrame.new(0, root.Size.Y * 0.18, -root.Size.Z * 0.45)
+	head.Parent = rat
+
+	local tail = Instance.new("Part")
+	tail.Name = "Tail"
+	tail.Shape = Enum.PartType.Cylinder
+	tail.Size = Vector3.new(1.4, 0.25, 0.25)
+	tail.Material = VisualManifest.Rats.TailMaterial
+	tail.Color = VisualManifest.Rats.TailColor
+	tail.CanCollide = false
+	tail.Massless = true
+	tail.CFrame = root.CFrame * CFrame.new(0, -root.Size.Y * 0.1, root.Size.Z * 0.58) * CFrame.Angles(0, 0, math.rad(90))
+	tail.Parent = rat
+
+	local eyeL = Instance.new("Part")
+	eyeL.Name = "EyeL"
+	eyeL.Size = Vector3.new(0.14, 0.14, 0.14)
+	eyeL.Material = VisualManifest.Rats.EyeMaterial
+	eyeL.Color = if isElite then VisualManifest.Rats.EliteEyeColor else VisualManifest.Rats.EyeColor
+	eyeL.CanCollide = false
+	eyeL.Massless = true
+	eyeL.CFrame = head.CFrame * CFrame.new(-0.15, 0.02, -head.Size.Z * 0.42)
+	eyeL.Parent = rat
+
+	local eyeR = eyeL:Clone()
+	eyeR.Name = "EyeR"
+	eyeR.CFrame = head.CFrame * CFrame.new(0.15, 0.02, -head.Size.Z * 0.42)
+	eyeR.Parent = rat
+
+	local weldHead = Instance.new("WeldConstraint")
+	weldHead.Part0 = root
+	weldHead.Part1 = head
+	weldHead.Parent = root
+
+	local weldTail = Instance.new("WeldConstraint")
+	weldTail.Part0 = root
+	weldTail.Part1 = tail
+	weldTail.Parent = root
+
+	local weldEyeL = Instance.new("WeldConstraint")
+	weldEyeL.Part0 = head
+	weldEyeL.Part1 = eyeL
+	weldEyeL.Parent = head
+
+	local weldEyeR = Instance.new("WeldConstraint")
+	weldEyeR.Part0 = head
+	weldEyeR.Part1 = eyeR
+	weldEyeR.Parent = head
+
+	if isThief then
+		local bag = Instance.new("Part")
+		bag.Name = "LootBag"
+		bag.Shape = Enum.PartType.Ball
+		bag.Size = Vector3.new(0.9, 1.1, 0.9)
+		bag.Material = VisualManifest.Rats.Thief.bagMaterial
+		bag.Color = VisualManifest.Rats.Thief.bagColor
+		bag.CanCollide = false
+		bag.Massless = true
+		bag.CFrame = root.CFrame * CFrame.new(0, root.Size.Y * 0.35, root.Size.Z * 0.2)
+		bag.Parent = rat
+
+		local weldBag = Instance.new("WeldConstraint")
+		weldBag.Part0 = root
+		weldBag.Part1 = bag
+		weldBag.Parent = root
 	end
 
 	local humanoid = Instance.new("Humanoid")
@@ -293,8 +393,8 @@ local function attachStolenScrapVisual(ratModel: Model): BasePart?
 	visual.Name = "StolenScrapVisual"
 	visual.Size = Vector3.new(0.7, 0.7, 0.7)
 	visual.Shape = Enum.PartType.Ball
-	visual.Material = Enum.Material.Metal
-	visual.Color = Color3.fromRGB(170, 170, 170)
+	visual.Material = VisualManifest.Rats.StolenScrapVisualMaterial
+	visual.Color = VisualManifest.Rats.StolenScrapVisualColor
 	visual.CanCollide = false
 	visual.Massless = true
 	visual.CFrame = root.CFrame * CFrame.new(0, 0.8, -0.7)
@@ -313,8 +413,8 @@ local function ensureBurrowHole(position: Vector3): BasePart
 	hole.Name = "ScrapRatHole"
 	hole.Anchored = true
 	hole.CanCollide = false
-	hole.Material = Enum.Material.Slate
-	hole.Color = Color3.fromRGB(25, 25, 25)
+	hole.Material = VisualManifest.Rats.BurrowHoleMaterial
+	hole.Color = VisualManifest.Rats.BurrowHoleColor
 	hole.Transparency = 0.15
 	hole.Size = Vector3.new(5, 0.2, 5)
 	hole.Position = position
@@ -812,6 +912,32 @@ local function resolveRatModel(ratModelOrPart: Instance): Model?
 	return ratModel
 end
 
+local function findNearestPunchTarget(player: Player): Model?
+	local character = player.Character
+	local playerRoot = if character then character:FindFirstChild("HumanoidRootPart") else nil
+	if playerRoot == nil or not playerRoot:IsA("BasePart") then
+		return nil
+	end
+
+	local nearest: Model? = nil
+	local maxRange = Constants.COMBAT.PunchRange + 2
+	local nearestDistance = maxRange
+	for _, instance in CollectionService:GetTagged("ScrapRatEnemy") do
+		if instance:IsA("Model") and instance.Parent ~= nil then
+			local humanoid = instance:FindFirstChildOfClass("Humanoid")
+			local root = instance.PrimaryPart
+			if humanoid ~= nil and humanoid.Health > 0 and root ~= nil then
+				local dist = (playerRoot.Position - root.Position).Magnitude
+				if dist < nearestDistance then
+					nearestDistance = dist
+					nearest = instance
+				end
+			end
+		end
+	end
+	return nearest
+end
+
 local function collectRatCache(cachePart: BasePart)
 	if pickedRatCaches[cachePart] then
 		return
@@ -827,7 +953,7 @@ end
 
 function EnemyService.Init(): ()
 	RemoteGuard.Register("HitEnemy", 5, 1)
-	RemoteGuard.Register("PunchEnemy", 5, 1)
+	RemoteGuard.Register("PunchEnemy", 20, 1)
 
 	remotes.HitEnemy.OnServerEvent:Connect(function(player: Player, ratModelOrPart: Instance)
 		if not gameActive then
@@ -868,16 +994,35 @@ function EnemyService.Init(): ()
 		humanoid:TakeDamage(damage)
 	end)
 
-	remotes.PunchEnemy.OnServerEvent:Connect(function(player: Player, ratModelOrPart: Instance)
+	remotes.PunchEnemy.OnServerEvent:Connect(function(player: Player, ...)
+		local args = { ... }
+		local ratModelOrPart: Instance? = if #args > 0 and typeof(args[1]) == "Instance" then args[1] else nil
+
 		if not gameActive then
+			warn("[PunchEnemy] rejected: game not active")
 			return
 		end
 		if not RemoteGuard.Check("PunchEnemy", player) then
+			warn("[PunchEnemy] rejected: rate limited for", player.Name)
 			return
 		end
 
-		local ratModel = resolveRatModel(ratModelOrPart)
+		local char = player.Character
+		local playerRoot = if char then char:FindFirstChild("HumanoidRootPart") else nil
+		if playerRoot == nil or not playerRoot:IsA("BasePart") then
+			warn("[PunchEnemy] rejected: no player root for", player.Name)
+			return
+		end
+
+		local ratModel: Model? = nil
+		if ratModelOrPart ~= nil then
+			ratModel = resolveRatModel(ratModelOrPart)
+		end
 		if ratModel == nil then
+			ratModel = findNearestPunchTarget(player)
+		end
+		if ratModel == nil then
+			warn("[PunchEnemy] rejected: no rat found near", player.Name)
 			return
 		end
 
@@ -886,21 +1031,18 @@ function EnemyService.Init(): ()
 			return
 		end
 
-		local root = ratModel.PrimaryPart
-		local char = player.Character
-		local playerRoot = if char then char:FindFirstChild("HumanoidRootPart") else nil
-		if root == nil or playerRoot == nil or not playerRoot:IsA("BasePart") then
+		local ratRoot = ratModel.PrimaryPart
+		if ratRoot == nil then
 			return
 		end
-
-		if (playerRoot.Position - root.Position).Magnitude > Constants.COMBAT.PunchRange then
+		if (playerRoot.Position - ratRoot.Position).Magnitude > Constants.COMBAT.PunchRange + 2 then
 			return
 		end
 
 		local damageMultAttr = player:GetAttribute("DamageMult")
 		local damageMult = if typeof(damageMultAttr) == "number" then (damageMultAttr :: number) else 1
-		local damage = Constants.COMBAT.PunchDamage * damageMult
-		humanoid:TakeDamage(damage)
+		local damage = math.max(1, Constants.COMBAT.PunchDamage * damageMult)
+		humanoid.Health = math.max(0, humanoid.Health - damage)
 	end)
 
 	TheftComponent.ConnectCompleted(function(dismantledPart: BasePart, ratModel: Model?)

@@ -6,6 +6,7 @@ local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Constants = require(Shared:WaitForChild("Constants"))
+local VisualManifest = require(Shared:WaitForChild("VisualManifest"))
 local RemotesModule = require(Shared:WaitForChild("Remotes"))
 local TheftComponent = require(Shared:WaitForChild("TheftComponent"))
 local EconomyService = require(script.Parent:WaitForChild("EconomyService"))
@@ -30,13 +31,7 @@ local currentStage = 0
 local gameState = "playing"
 local sessionStartTime = 0
 
-local STAGE_VISUALS = {
-	[0] = { color = Color3.fromRGB(100, 110, 125), material = Enum.Material.DiamondPlate },
-	[1] = { color = Color3.fromRGB(120, 135, 160), material = Enum.Material.DiamondPlate },
-	[2] = { color = Color3.fromRGB(150, 170, 200), material = Enum.Material.Metal },
-	[3] = { color = Color3.fromRGB(185, 200, 230), material = Enum.Material.SmoothPlastic },
-	[4] = { color = Color3.fromRGB(220, 230, 255), material = Enum.Material.Neon },
-}
+local STAGE_VISUALS = VisualManifest.Titan.StageVisuals
 
 local function resolveMapCenterY(): number
 	local rayResult = Workspace:Raycast(Vector3.new(0, 200, 0), Vector3.new(0, -500, 0))
@@ -77,13 +72,24 @@ local function updateTitanVisuals(stage: number)
 	if stage >= 1 and light == nil then
 		local newLight = Instance.new("PointLight")
 		newLight.Name = "TitanGlow"
-		newLight.Color = Color3.fromRGB(200, 220, 255)
+		newLight.Color = VisualManifest.Titan.GlowColor
 		newLight.Parent = core
 		light = newLight
 	end
 	if light ~= nil then
 		light.Brightness = stage * 1.5
 		light.Range = 15 + stage * 5
+	end
+
+	local parentModel = core.Parent
+	if parentModel ~= nil and parentModel:IsA("Model") then
+		for ringIndex = 1, 4 do
+			local ring = parentModel:FindFirstChild(("StageRing%d"):format(ringIndex))
+			if ring ~= nil and ring:IsA("BasePart") then
+				ring.Material = if ringIndex <= stage then VisualManifest.Titan.StageRingActiveMaterial else VisualManifest.Titan.StageRingInactiveMaterial
+				ring.Color = if ringIndex <= stage then VisualManifest.Titan.StageRingActiveColor else VisualManifest.Titan.StageRingInactiveColor
+			end
+		end
 	end
 end
 
@@ -191,23 +197,54 @@ local function createTitan(): (Model, BasePart)
 
 	local base = Instance.new("Part")
 	base.Name = "TitanBase"
-	base.Size = Vector3.new(14, 2, 14)
+	base.Size = Vector3.new(20, 2.5, 20)
 	base.Anchored = true
 	base.CanCollide = true
-	base.Material = Enum.Material.Metal
-	base.Color = Color3.fromRGB(70, 70, 80)
-	base.Position = Vector3.new(0, centerY + 1, 0)
+	base.Material = VisualManifest.Titan.BaseMaterial
+	base.Color = VisualManifest.Titan.BaseColor
+	base.Position = Vector3.new(0, centerY + 1.25, 0)
 	base.Parent = model
 
 	local core = Instance.new("Part")
 	core.Name = TITAN_CORE_NAME
-	core.Size = Vector3.new(6, 8, 6)
+	core.Size = Vector3.new(6, 10, 6)
 	core.Anchored = true
 	core.CanCollide = true
-	core.Material = Enum.Material.DiamondPlate
-	core.Color = Color3.fromRGB(100, 110, 125)
-	core.Position = Vector3.new(0, centerY + 6, 0)
+	core.Material = VisualManifest.Titan.CoreMaterial
+	core.Color = VisualManifest.Titan.CoreColor
+	core.Position = Vector3.new(0, centerY + 7.2, 0)
 	core.Parent = model
+
+	local scaffoldOffsets = {
+		Vector3.new(7.5, 4, 0),
+		Vector3.new(-7.5, 4, 0),
+		Vector3.new(0, 4, 7.5),
+		Vector3.new(0, 4, -7.5),
+	}
+	for i, offset in scaffoldOffsets do
+		local strut = Instance.new("Part")
+		strut.Name = ("Scaffold%d"):format(i)
+		strut.Size = Vector3.new(1.1, 8, 1.1)
+		strut.Anchored = true
+		strut.CanCollide = false
+		strut.Material = VisualManifest.Titan.ScaffoldMaterial
+		strut.Color = VisualManifest.Titan.ScaffoldColor
+		strut.Position = Vector3.new(offset.X, centerY + 4, offset.Z)
+		strut.Parent = model
+	end
+
+	for ringIndex = 1, 4 do
+		local ring = Instance.new("Part")
+		ring.Name = ("StageRing%d"):format(ringIndex)
+		ring.Shape = Enum.PartType.Cylinder
+		ring.Size = Vector3.new(0.4, 8.2 + ringIndex * 0.4, 8.2 + ringIndex * 0.4)
+		ring.Anchored = true
+		ring.CanCollide = false
+		ring.Material = VisualManifest.Titan.StageRingInactiveMaterial
+		ring.Color = VisualManifest.Titan.StageRingInactiveColor
+		ring.CFrame = CFrame.new(0, centerY + 2.1 + ringIndex * 2.1, 0) * CFrame.Angles(math.rad(90), 0, 0)
+		ring.Parent = model
+	end
 
 	local prompt = Instance.new("ProximityPrompt")
 	prompt.ObjectText = "Titan Core"

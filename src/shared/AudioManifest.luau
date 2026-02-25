@@ -23,4 +23,7 @@ return {
 	AmbientBase = "rbxassetid://9043887091",
 	LootCollect = "rbxassetid://12221976",
 	SteelCollect = "rbxassetid://12221991",
+	HitConfirm = "rbxassetid://12222216",
+	WaveSlam = "rbxassetid://9114243152",
+	LootCombo = "rbxassetid://12221984",
 }

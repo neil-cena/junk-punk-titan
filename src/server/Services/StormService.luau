@@ -8,6 +8,7 @@ local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Constants = require(Shared:WaitForChild("Constants"))
+local VisualManifest = require(Shared:WaitForChild("VisualManifest"))
 local RemotesModule = require(Shared:WaitForChild("Remotes"))
 
 local TweenService = game:GetService("TweenService")
@@ -49,13 +50,35 @@ local function spawnTetherPads()
 		pad.Name = ("TetherPad%d"):format(index)
 		pad.Anchored = true
 		pad.CanCollide = false
-		pad.Material = Enum.Material.Neon
-		pad.Color = Color3.fromRGB(255, 175, 70)
+		pad.Material = VisualManifest.TetherPad.PadMaterial
+		pad.Color = VisualManifest.TetherPad.PadColor
 		pad.Size = Vector3.new(0.2, 0.05, 0.2)
 		pad.Position = center + offset
 		pad.Parent = Workspace
 		CollectionService:AddTag(pad, "TetherPad")
 		table.insert(tetherPads, pad)
+
+		local ring = Instance.new("Part")
+		ring.Name = "TetherRing"
+		ring.Shape = Enum.PartType.Cylinder
+		ring.Anchored = true
+		ring.CanCollide = false
+		ring.Material = VisualManifest.TetherPad.RingMaterial
+		ring.Color = VisualManifest.TetherPad.RingColor
+		ring.Transparency = 0.25
+		ring.Size = Vector3.new(0.18, 0.2, 0.2)
+		ring.CFrame = CFrame.new(pad.Position + Vector3.new(0, 0.16, 0)) * CFrame.Angles(math.rad(90), 0, 0)
+		ring.Parent = pad
+
+		local bolt = Instance.new("Part")
+		bolt.Name = "TetherBolt"
+		bolt.Anchored = true
+		bolt.CanCollide = false
+		bolt.Material = VisualManifest.TetherPad.BoltMaterial
+		bolt.Color = VisualManifest.TetherPad.BoltColor
+		bolt.Size = Vector3.new(0.8, 0.2, 0.8)
+		bolt.CFrame = CFrame.new(pad.Position + Vector3.new(0, 0.2, 0))
+		bolt.Parent = pad
 
 		local tween = TweenService:Create(pad, TweenInfo.new(0.6, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
 			Size = Vector3.new(8, 0.6, 8),
@@ -134,8 +157,8 @@ local function spawnStormSteelDuringStorm()
 		local drop = Instance.new("Part")
 		drop.Name = "StormHardenedSteel"
 		drop.Shape = Enum.PartType.Ball
-		drop.Material = Enum.Material.Metal
-		drop.Color = Color3.fromRGB(100, 160, 200)
+		drop.Material = VisualManifest.Loot.StormSteel.material
+		drop.Color = VisualManifest.Loot.StormSteel.color
 		drop.Size = Vector3.new(1.6, 1.6, 1.6)
 		drop.Position = Vector3.new(math.random(-radius, radius), 3, math.random(-radius, radius))
 		drop.Anchored = false
@@ -305,7 +328,7 @@ function StormService.Init(): ()
 					local sparkle = Instance.new("ParticleEmitter")
 					sparkle.Name = "SteelSparkle"
 					sparkle.Texture = "rbxasset://textures/particles/sparkles_main.dds"
-					sparkle.Color = ColorSequence.new(Color3.fromRGB(100, 200, 255), Color3.fromRGB(60, 140, 220))
+					sparkle.Color = ColorSequence.new(VisualManifest.VFX.SteelSparkleA, VisualManifest.VFX.SteelSparkleB)
 					sparkle.Lifetime = NumberRange.new(0.15, 0.3)
 					sparkle.Speed = NumberRange.new(2, 5)
 					sparkle.Rate = 40

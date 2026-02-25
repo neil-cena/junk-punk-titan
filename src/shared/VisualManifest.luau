@@ -1,0 +1,216 @@
+--!strict
+
+local VisualManifest = {
+	Lighting = {
+		Ambient = Color3.fromRGB(108, 104, 98),
+		OutdoorAmbient = Color3.fromRGB(132, 128, 121),
+		Brightness = 2.2,
+		ClockTime = 12,
+		ExposureCompensation = 0.12,
+		FogColor = Color3.fromRGB(176, 170, 160),
+		FogStart = 350,
+		FogEnd = 900,
+	},
+
+	Atmosphere = {
+		Color = Color3.fromRGB(188, 180, 168),
+		Decay = Color3.fromRGB(150, 141, 130),
+		Density = 0.18,
+		Glare = 0.08,
+		Haze = 1.2,
+	},
+
+	PostProcessing = {
+		Bloom = {
+			Intensity = 0.28,
+			Size = 20,
+			Threshold = 1.4,
+		},
+		ColorCorrection = {
+			Brightness = 0.01,
+			Contrast = 0.04,
+			Saturation = -0.04,
+			TintColor = Color3.fromRGB(245, 243, 238),
+		},
+		SunRays = {
+			Intensity = 0.04,
+			Spread = 0.72,
+		},
+	},
+
+	Storm = {
+		Ambient = Color3.fromRGB(62, 52, 44),
+		Brightness = 0.75,
+		BlurSize = 3,
+		TintColor = Color3.fromRGB(190, 172, 150),
+		ClearTintColor = Color3.fromRGB(255, 255, 255),
+	},
+
+	Titan = {
+		BaseColor = Color3.fromRGB(64, 62, 66),
+		BaseMaterial = Enum.Material.DiamondPlate,
+		CoreColor = Color3.fromRGB(100, 110, 125),
+		CoreMaterial = Enum.Material.DiamondPlate,
+		ScaffoldColor = Color3.fromRGB(79, 73, 69),
+		ScaffoldMaterial = Enum.Material.Metal,
+		StageRingActiveColor = Color3.fromRGB(255, 199, 117),
+		StageRingInactiveColor = Color3.fromRGB(81, 77, 73),
+		StageRingActiveMaterial = Enum.Material.Neon,
+		StageRingInactiveMaterial = Enum.Material.Metal,
+		GlowColor = Color3.fromRGB(200, 220, 255),
+		StageVisuals = {
+			[0] = { color = Color3.fromRGB(100, 110, 125), material = Enum.Material.DiamondPlate },
+			[1] = { color = Color3.fromRGB(120, 135, 160), material = Enum.Material.DiamondPlate },
+			[2] = { color = Color3.fromRGB(150, 170, 200), material = Enum.Material.Metal },
+			[3] = { color = Color3.fromRGB(185, 200, 230), material = Enum.Material.SmoothPlastic },
+			[4] = { color = Color3.fromRGB(220, 230, 255), material = Enum.Material.Neon },
+		},
+	},
+
+	Buildings = {
+		BaseColors = {
+			Turret = Color3.fromRGB(200, 180, 60),
+			Drill = Color3.fromRGB(120, 120, 120),
+			Wall = Color3.fromRGB(90, 80, 70),
+		},
+		GhostMaterial = Enum.Material.ForceField,
+		MainMaterial = Enum.Material.Metal,
+		TurretPlate = { color = Color3.fromRGB(90, 80, 65), material = Enum.Material.DiamondPlate },
+		TurretBarrel = { color = Color3.fromRGB(52, 52, 56), material = Enum.Material.Metal },
+		DrillLeg = { color = Color3.fromRGB(86, 83, 80), material = Enum.Material.Metal },
+		DrillBit = { color = Color3.fromRGB(126, 116, 99), material = Enum.Material.CorrodedMetal },
+		WallPlate = { color = Color3.fromRGB(112, 92, 76), material = Enum.Material.CorrodedMetal },
+		WallTopLip = { color = Color3.fromRGB(96, 89, 83), material = Enum.Material.Metal },
+		TurretMuzzleFlash = { color = Color3.fromRGB(255, 186, 92), material = Enum.Material.Neon },
+		DrillSparks = {
+			texture = "rbxasset://textures/particles/sparkles_main.dds",
+			colorA = Color3.fromRGB(255, 188, 103),
+			colorB = Color3.fromRGB(173, 119, 78),
+		},
+	},
+
+	Rats = {
+		Standard = {
+			bodySize = Vector3.new(1.8, 1.4, 2.2),
+			bodyColor = Color3.fromRGB(107, 95, 82),
+			bodyMaterial = Enum.Material.Slate,
+		},
+		Elite = {
+			bodySize = Vector3.new(2.4, 1.8, 2.8),
+			bodyColor = Color3.fromRGB(160, 66, 62),
+			bodyMaterial = Enum.Material.Metal,
+		},
+		Thief = {
+			bodySize = Vector3.new(1.95, 1.45, 2.35),
+			bodyColor = Color3.fromRGB(120, 90, 55),
+			bodyMaterial = Enum.Material.CorrodedMetal,
+			bagColor = Color3.fromRGB(81, 60, 41),
+			bagMaterial = Enum.Material.Fabric,
+		},
+		TailColor = Color3.fromRGB(146, 121, 98),
+		TailMaterial = Enum.Material.SmoothPlastic,
+		EyeColor = Color3.fromRGB(255, 217, 133),
+		EliteEyeColor = Color3.fromRGB(255, 90, 90),
+		EyeMaterial = Enum.Material.Neon,
+		StolenScrapVisualColor = Color3.fromRGB(170, 170, 170),
+		StolenScrapVisualMaterial = Enum.Material.Metal,
+		BurrowHoleColor = Color3.fromRGB(25, 25, 25),
+		BurrowHoleMaterial = Enum.Material.Slate,
+	},
+
+	Loot = {
+		JunkBlock = {
+			color = Color3.fromRGB(170, 146, 96),
+			material = Enum.Material.CorrodedMetal,
+			shardColor = Color3.fromRGB(112, 106, 98),
+			shardMaterial = Enum.Material.Metal,
+		},
+		RatCache = {
+			color = Color3.fromRGB(188, 132, 72),
+			material = Enum.Material.Metal,
+			cogColor = Color3.fromRGB(121, 102, 83),
+			cogMaterial = Enum.Material.CorrodedMetal,
+		},
+		StormSteel = {
+			color = Color3.fromRGB(100, 160, 200),
+			material = Enum.Material.Metal,
+		},
+	},
+
+	TetherPad = {
+		PadColor = Color3.fromRGB(96, 84, 74),
+		PadMaterial = Enum.Material.Metal,
+		RingColor = Color3.fromRGB(255, 168, 90),
+		RingMaterial = Enum.Material.Neon,
+		BoltColor = Color3.fromRGB(141, 120, 95),
+		BoltMaterial = Enum.Material.Metal,
+	},
+
+	Map = {
+		BoundaryColor = Color3.fromRGB(72, 61, 50),
+		BoundaryMaterial = Enum.Material.CorrodedMetal,
+		ScatterPropMaterialA = Enum.Material.CorrodedMetal,
+		ScatterPropMaterialB = Enum.Material.Concrete,
+		ScatterPropColorBase = Color3.fromRGB(95, 80, 65),
+		BurrowZoneColor = Color3.fromRGB(36, 28, 24),
+		BurrowZoneMaterial = Enum.Material.Slate,
+	},
+
+	BurrowMarker = {
+		CraterColor = Color3.fromRGB(34, 28, 24),
+		CraterMaterial = Enum.Material.Slate,
+		RimColor = Color3.fromRGB(152, 98, 62),
+		RimMaterial = Enum.Material.Neon,
+	},
+
+	VFX = {
+		BaseRadiusMarkerColor = Color3.fromRGB(100, 170, 255),
+		LootGearColor = Color3.fromRGB(184, 171, 94),
+		LootGearMaterial = Enum.Material.Metal,
+		OverclockLightColor = Color3.fromRGB(255, 200, 50),
+		BuildFlashColor = Color3.fromRGB(255, 170, 60),
+		BuildFlashMaterial = Enum.Material.Neon,
+		SteelPickupFlashColor = Color3.fromRGB(80, 180, 255),
+		VictoryShockwaveColor = Color3.fromRGB(255, 230, 100),
+		WaveSplashColor = Color3.fromRGB(255, 124, 92),
+		HealthGood = Color3.fromRGB(80, 220, 90),
+		HealthWarning = Color3.fromRGB(255, 200, 70),
+		HealthBad = Color3.fromRGB(255, 80, 80),
+		HealthBarBackground = Color3.fromRGB(30, 30, 30),
+		DamageNumberColor = Color3.fromRGB(255, 160, 120),
+		ScrapComboColor = Color3.fromRGB(255, 221, 130),
+		DismantleSparksA = Color3.fromRGB(255, 80, 60),
+		DismantleSparksB = Color3.fromRGB(255, 140, 50),
+		DestroyDustColor = Color3.fromRGB(150, 130, 100),
+		DestroyDebrisA = Color3.fromRGB(120, 100, 70),
+		DestroyDebrisB = Color3.fromRGB(80, 70, 50),
+		DrillSmokeA = Color3.fromRGB(70, 70, 70),
+		DrillSmokeB = Color3.fromRGB(30, 30, 30),
+		RepairBurstA = Color3.fromRGB(255, 255, 255),
+		RepairBurstB = Color3.fromRGB(255, 215, 130),
+		EnemyDeathA = Color3.fromRGB(255, 100, 60),
+		EnemyDeathB = Color3.fromRGB(200, 200, 200),
+		AmbientDustA = Color3.fromRGB(144, 120, 95),
+		AmbientDustB = Color3.fromRGB(92, 82, 71),
+		SteelSparkleA = Color3.fromRGB(100, 200, 255),
+		SteelSparkleB = Color3.fromRGB(60, 140, 220),
+	},
+
+	Tools = {
+		ShotTrailColor = Color3.fromRGB(255, 228, 120),
+		ShotTrailMaterial = Enum.Material.Neon,
+		MuzzleColor = Color3.fromRGB(255, 187, 89),
+		MuzzleMaterial = Enum.Material.Neon,
+		ImpactPunchColor = Color3.fromRGB(255, 214, 126),
+		ImpactShotColor = Color3.fromRGB(255, 170, 105),
+		GhostValidColor = Color3.fromRGB(90, 220, 90),
+		GhostInvalidColor = Color3.fromRGB(220, 80, 80),
+		WrenchHandleColor = Color3.fromRGB(87, 65, 47),
+		WrenchHeadColor = Color3.fromRGB(140, 140, 140),
+		WrenchHeadMaterial = Enum.Material.Metal,
+		ShotgunBarrelColor = Color3.fromRGB(120, 120, 120),
+		ShotgunBarrelMaterial = Enum.Material.Metal,
+	},
+}
+
+return VisualManifest

@@ -8,6 +8,7 @@ local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Constants = require(Shared:WaitForChild("Constants"))
+local VisualManifest = require(Shared:WaitForChild("VisualManifest"))
 local RemotesModule = require(Shared:WaitForChild("Remotes"))
 local Types = require(Shared:WaitForChild("Types"))
 local TheftComponent = require(Shared:WaitForChild("TheftComponent"))
@@ -93,8 +94,8 @@ local function createBlueprintGhost(buildingType: BuildingType, position: Vector
 	local ghost = Instance.new("Part")
 	ghost.Name = string.format("%sBlueprintGhost", buildingType)
 	ghost.Size = Constants.BUILDING.Sizes[buildingType]
-	ghost.Color = Constants.BUILDING.Colors[buildingType]
-	ghost.Material = Enum.Material.ForceField
+	ghost.Color = VisualManifest.Buildings.BaseColors[buildingType]
+	ghost.Material = VisualManifest.Buildings.GhostMaterial
 	ghost.Transparency = Constants.BUILDING.GhostTransparency
 	ghost.Anchored = true
 	ghost.CanCollide = false
@@ -108,8 +109,8 @@ local function createFinalBuilding(buildingType: BuildingType, position: Vector3
 	local part = Instance.new("Part")
 	part.Name = string.format("%sBuilding", buildingType)
 	part.Size = Constants.BUILDING.Sizes[buildingType]
-	part.Color = Constants.BUILDING.Colors[buildingType]
-	part.Material = Enum.Material.Metal
+	part.Color = VisualManifest.Buildings.BaseColors[buildingType]
+	part.Material = VisualManifest.Buildings.MainMaterial
 	part.Transparency = 0
 	part.Anchored = true
 	part.CanCollide = true
@@ -122,6 +123,73 @@ local function createFinalBuilding(buildingType: BuildingType, position: Vector3
 		CollectionService:AddTag(part, "Drill")
 	end
 	TheftComponent.Attach(part)
+	if buildingType == "Turret" then
+		local basePlate = Instance.new("Part")
+		basePlate.Name = "TurretPlate"
+		basePlate.Size = Vector3.new(3.2, 0.6, 3.2)
+		basePlate.Anchored = true
+		basePlate.CanCollide = false
+		basePlate.Material = VisualManifest.Buildings.TurretPlate.material
+		basePlate.Color = VisualManifest.Buildings.TurretPlate.color
+		basePlate.CFrame = part.CFrame * CFrame.new(0, part.Size.Y * 0.35, 0)
+		basePlate.Parent = part
+
+		local barrel = Instance.new("Part")
+		barrel.Name = "TurretBarrel"
+		barrel.Size = Vector3.new(0.7, 0.7, 3.4)
+		barrel.Anchored = true
+		barrel.CanCollide = false
+		barrel.Material = VisualManifest.Buildings.TurretBarrel.material
+		barrel.Color = VisualManifest.Buildings.TurretBarrel.color
+		barrel.CFrame = part.CFrame * CFrame.new(0, part.Size.Y * 0.1, -1.4)
+		barrel.Parent = part
+	elseif buildingType == "Drill" then
+		local tripodA = Instance.new("Part")
+		tripodA.Name = "DrillLegA"
+		tripodA.Size = Vector3.new(0.45, 4, 0.45)
+		tripodA.Anchored = true
+		tripodA.CanCollide = false
+		tripodA.Material = VisualManifest.Buildings.DrillLeg.material
+		tripodA.Color = VisualManifest.Buildings.DrillLeg.color
+		tripodA.CFrame = part.CFrame * CFrame.new(1.4, -0.7, 1.2)
+		tripodA.Parent = part
+
+		local tripodB = tripodA:Clone()
+		tripodB.Name = "DrillLegB"
+		tripodB.CFrame = part.CFrame * CFrame.new(-1.4, -0.7, 1.2)
+		tripodB.Parent = part
+
+		local bit = Instance.new("Part")
+		bit.Name = "DrillBit"
+		bit.Shape = Enum.PartType.Cylinder
+		bit.Size = Vector3.new(3.2, 0.8, 0.8)
+		bit.Anchored = true
+		bit.CanCollide = false
+		bit.Material = VisualManifest.Buildings.DrillBit.material
+		bit.Color = VisualManifest.Buildings.DrillBit.color
+		bit.CFrame = part.CFrame * CFrame.new(0, -part.Size.Y * 0.42, 0) * CFrame.Angles(0, 0, math.rad(90))
+		bit.Parent = part
+	elseif buildingType == "Wall" then
+		local panel = Instance.new("Part")
+		panel.Name = "WallPlate"
+		panel.Size = Vector3.new(part.Size.X * 0.9, part.Size.Y * 0.75, 0.35)
+		panel.Anchored = true
+		panel.CanCollide = false
+		panel.Material = VisualManifest.Buildings.WallPlate.material
+		panel.Color = VisualManifest.Buildings.WallPlate.color
+		panel.CFrame = part.CFrame * CFrame.new(0, 0.5, 0)
+		panel.Parent = part
+
+		local lip = Instance.new("Part")
+		lip.Name = "WallTopLip"
+		lip.Size = Vector3.new(part.Size.X * 0.95, 0.35, 0.6)
+		lip.Anchored = true
+		lip.CanCollide = false
+		lip.Material = VisualManifest.Buildings.WallTopLip.material
+		lip.Color = VisualManifest.Buildings.WallTopLip.color
+		lip.CFrame = part.CFrame * CFrame.new(0, part.Size.Y * 0.5 - 0.4, 0)
+		lip.Parent = part
+	end
 	return part
 end
 
@@ -135,8 +203,8 @@ local function playTurretMuzzleFlash(turretPart: BasePart, targetPosition: Vecto
 	flash.Name = "TurretMuzzleFlash"
 	flash.Anchored = true
 	flash.CanCollide = false
-	flash.Material = Enum.Material.Neon
-	flash.Color = Color3.fromRGB(255, 186, 92)
+	flash.Material = VisualManifest.Buildings.TurretMuzzleFlash.material
+	flash.Color = VisualManifest.Buildings.TurretMuzzleFlash.color
 	flash.Size = Vector3.new(0.25, 0.25, 0.25)
 	flash.CFrame = CFrame.lookAt(turretPart.Position + Vector3.new(0, turretPart.Size.Y * 0.35, 0), targetPosition) * CFrame.new(0, 0, -1.8)
 	flash.Parent = Workspace
@@ -161,8 +229,8 @@ local function ensureDrillFx(drillPart: BasePart): Attachment
 
 	local emitter = Instance.new("ParticleEmitter")
 	emitter.Name = "DrillSparks"
-	emitter.Texture = "rbxasset://textures/particles/sparkles_main.dds"
-	emitter.Color = ColorSequence.new(Color3.fromRGB(255, 188, 103), Color3.fromRGB(173, 119, 78))
+	emitter.Texture = VisualManifest.Buildings.DrillSparks.texture
+	emitter.Color = ColorSequence.new(VisualManifest.Buildings.DrillSparks.colorA, VisualManifest.Buildings.DrillSparks.colorB)
 	emitter.Lifetime = NumberRange.new(0.12, 0.22)
 	emitter.Speed = NumberRange.new(1, 3)
 	emitter.Rate = 10

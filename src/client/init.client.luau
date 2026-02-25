@@ -5,16 +5,45 @@ pcall(function()
 	StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, false)
 end)
 
-local BlueprintController = require(script:WaitForChild("Controllers"):WaitForChild("BlueprintController"))
-local ToolController = require(script:WaitForChild("Controllers"):WaitForChild("ToolController"))
-local VFXController = require(script:WaitForChild("Controllers"):WaitForChild("VFXController"))
-local MainHUD = require(script:WaitForChild("UI"):WaitForChild("MainHUD"))
+local Controllers = script:WaitForChild("Controllers")
+local UI = script:WaitForChild("UI")
 
 local initOrder: { { name: string, fn: () -> () } } = {
-	{ name = "BlueprintController", fn = function() BlueprintController.Init() end },
-	{ name = "ToolController", fn = function() ToolController.Init() end },
-	{ name = "VFXController", fn = function() VFXController.Init() end },
-	{ name = "MainHUD", fn = function() MainHUD.Init() end },
+	{
+		name = "BlueprintController",
+		fn = function()
+			local module = require(Controllers:WaitForChild("BlueprintController"))
+			module.Init()
+		end,
+	},
+	{
+		name = "ToolController",
+		fn = function()
+			local module = require(Controllers:WaitForChild("ToolController"))
+			module.Init()
+		end,
+	},
+	{
+		name = "EnvironmentController",
+		fn = function()
+			local module = require(Controllers:WaitForChild("EnvironmentController"))
+			module.Init()
+		end,
+	},
+	{
+		name = "VFXController",
+		fn = function()
+			local module = require(Controllers:WaitForChild("VFXController"))
+			module.Init()
+		end,
+	},
+	{
+		name = "MainHUD",
+		fn = function()
+			local module = require(UI:WaitForChild("MainHUD"))
+			module.Init()
+		end,
+	},
 }
 
 for _, entry in initOrder do

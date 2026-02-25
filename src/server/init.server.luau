@@ -13,6 +13,7 @@ local EnemyService = require(script:WaitForChild("Services"):WaitForChild("Enemy
 local RoleService = require(script:WaitForChild("Services"):WaitForChild("RoleService"))
 local StormService = require(script:WaitForChild("Services"):WaitForChild("StormService"))
 local ScrapSpawnService = require(script:WaitForChild("Services"):WaitForChild("ScrapSpawnService"))
+local MapDressingService = require(script:WaitForChild("Services"):WaitForChild("MapDressingService"))
 local DebugService = require(script:WaitForChild("Services"):WaitForChild("DebugService"))
 
 Remotes.Get()
@@ -27,6 +28,7 @@ local initOrder: { { name: string, fn: () -> () } } = {
 	{ name = "EnemyService", fn = function() EnemyService.Init() end },
 	{ name = "StormService", fn = function() StormService.Init() end },
 	{ name = "ScrapSpawnService", fn = function() ScrapSpawnService.Init() end },
+	{ name = "MapDressingService", fn = function() MapDressingService.Init() end },
 	{ name = "DebugService", fn = function() DebugService.Init() end },
 }
 

@@ -53,14 +53,83 @@
     "Lighting": {
       "$properties": {
         "Ambient": [
-          0,
-          0,
-          0
+          0.17647,
+          0.13725,
+          0.09804
         ],
-        "Brightness": 2,
+        "OutdoorAmbient": [
+          0.22353,
+          0.17647,
+          0.12549
+        ],
+        "Brightness": 1.35,
+        "ClockTime": 16.5,
+        "ExposureCompensation": -0.1,
         "GlobalShadows": true,
         "Outlines": false,
         "Technology": "Voxel"
+      },
+      "Sky": {
+        "$className": "Sky",
+        "$properties": {
+          "CelestialBodiesShown": true,
+          "MoonTextureId": "rbxassetid://6444320592",
+          "SkyboxBk": "rbxassetid://159454299",
+          "SkyboxDn": "rbxassetid://159454296",
+          "SkyboxFt": "rbxassetid://159454293",
+          "SkyboxLf": "rbxassetid://159454286",
+          "SkyboxRt": "rbxassetid://159454300",
+          "SkyboxUp": "rbxassetid://159454288",
+          "StarCount": 0,
+          "SunAngularSize": 16
+        }
+      },
+      "Atmosphere": {
+        "$className": "Atmosphere",
+        "$properties": {
+          "Color": [
+            0.5098,
+            0.43137,
+            0.35294
+          ],
+          "Decay": [
+            0.2902,
+            0.23529,
+            0.18431
+          ],
+          "Density": 0.28,
+          "Glare": 0.15,
+          "Haze": 2.2
+        }
+      },
+      "Bloom": {
+        "$className": "BloomEffect",
+        "$properties": {
+          "Enabled": true,
+          "Intensity": 0.35,
+          "Size": 22,
+          "Threshold": 1.15
+        }
+      },
+      "BaseColorCorrection": {
+        "$className": "ColorCorrectionEffect",
+        "$properties": {
+          "Brightness": -0.02,
+          "Contrast": 0.06,
+          "Saturation": -0.12,
+          "TintColor": [
+            0.92549,
+            0.88235,
+            0.80784
+          ]
+        }
+      },
+      "BaseSunRays": {
+        "$className": "SunRaysEffect",
+        "$properties": {
+          "Intensity": 0.06,
+          "Spread": 0.78
+        }
       }
     },
     "SoundService": {

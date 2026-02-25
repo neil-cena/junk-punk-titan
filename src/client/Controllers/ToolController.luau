@@ -12,9 +12,9 @@ local LocalPlayer = Players.LocalPlayer
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Constants = require(Shared:WaitForChild("Constants"))
 local AudioManifest = require(Shared:WaitForChild("AudioManifest"))
+local VisualManifest = require(Shared:WaitForChild("VisualManifest"))
 local Remotes = require(Shared:WaitForChild("Remotes"))
 local BlueprintController = require(script.Parent:WaitForChild("BlueprintController"))
-local MainHUD = require(script.Parent.Parent:WaitForChild("UI"):WaitForChild("MainHUD"))
 
 local ToolController = {}
 
@@ -27,6 +27,21 @@ local WRENCH_TOOL_NAME = "RustyWrench"
 local activeShotgun: Tool? = nil
 local activeWrench: Tool? = nil
 local boundTools: { [Tool]: boolean } = {}
+local cachedMainHUD: any = nil
+
+local function getMainHUD(): any?
+	if cachedMainHUD ~= nil then
+		return cachedMainHUD
+	end
+	local ok, module = pcall(function()
+		return require(script.Parent.Parent:WaitForChild("UI"):WaitForChild("MainHUD"))
+	end)
+	if ok then
+		cachedMainHUD = module
+		return module
+	end
+	return nil
+end
 
 local function canFireNow(): boolean
 	return os.clock() - lastShotAt >= Constants.COMBAT.ShotgunCooldown
@@ -61,6 +76,57 @@ local function canPunchNow(): boolean
 	return os.clock() - lastPunchAt >= Constants.COMBAT.PunchCooldown
 end
 
+local function playImpactFx(position: Vector3, color: Color3)
+	local pulse = Instance.new("Part")
+	pulse.Name = "HitPulse"
+	pulse.Shape = Enum.PartType.Ball
+	pulse.Anchored = true
+	pulse.CanCollide = false
+	pulse.Material = Enum.Material.Neon
+	pulse.Color = color
+	pulse.Size = Vector3.new(0.3, 0.3, 0.3)
+	pulse.CFrame = CFrame.new(position)
+	pulse.Parent = Workspace
+
+	TweenService:Create(pulse, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		Size = Vector3.new(1.8, 1.8, 1.8),
+		Transparency = 1,
+	}):Play()
+	task.delay(0.2, function()
+		if pulse.Parent ~= nil then
+			pulse:Destroy()
+		end
+	end)
+end
+
+local PUNCH_ANIM_ID = "rbxassetid://148840371"
+local cachedPunchTrack: AnimationTrack? = nil
+local cachedPunchAnimHumanoid: Humanoid? = nil
+
+local function getPunchTrack(humanoid: Humanoid): AnimationTrack?
+	if cachedPunchTrack ~= nil and cachedPunchAnimHumanoid == humanoid then
+		return cachedPunchTrack
+	end
+	local animator = humanoid:FindFirstChildOfClass("Animator")
+	if animator == nil then
+		animator = Instance.new("Animator")
+		animator.Parent = humanoid
+	end
+	local anim = Instance.new("Animation")
+	anim.AnimationId = PUNCH_ANIM_ID
+	local ok, track = pcall(function()
+		return (animator :: Animator):LoadAnimation(anim)
+	end)
+	if not ok or track == nil then
+		return nil
+	end
+	track.Priority = Enum.AnimationPriority.Action
+	track.Looped = false
+	cachedPunchTrack = track
+	cachedPunchAnimHumanoid = humanoid
+	return track
+end
+
 local function playPunchEffects()
 	local character = LocalPlayer.Character
 	local humanoid = if character then character:FindFirstChildOfClass("Humanoid") else nil
@@ -71,6 +137,11 @@ local function playPunchEffects()
 				humanoid.CameraOffset = Vector3.zero
 			end
 		end)
+
+		local track = getPunchTrack(humanoid)
+		if track ~= nil then
+			track:Play(0.05, 1, 2.5)
+		end
 	end
 end
 
@@ -105,18 +176,27 @@ local function tryPunch()
 	lastPunchAt = os.clock()
 	playPunchEffects()
 
+	local root = character:FindFirstChild("HumanoidRootPart")
+	if root == nil or not root:IsA("BasePart") then
+		return
+	end
+
+	local punchRange = Constants.COMBAT.PunchRange
 	local ratModel: Model? = nil
+
 	if result ~= nil then
-		ratModel = findRatModel(result.Instance)
+		local candidate = findRatModel(result.Instance)
+		if candidate ~= nil then
+			local candidateRoot = candidate.PrimaryPart
+			if candidateRoot ~= nil and (candidateRoot.Position - root.Position).Magnitude <= punchRange then
+				ratModel = candidate
+			end
+		end
 	end
 
 	if ratModel == nil then
-		local root = character:FindFirstChild("HumanoidRootPart")
-		if root == nil or not root:IsA("BasePart") then
-			return
-		end
 		local nearest: Model? = nil
-		local nearestDist = Constants.COMBAT.PunchRange + 0.1
+		local nearestDist = punchRange + 0.5
 		for _, rat in CollectionService:GetTagged("ScrapRatEnemy") do
 			if rat:IsA("Model") and rat.Parent ~= nil then
 				local ratRoot = rat.PrimaryPart
@@ -130,11 +210,16 @@ local function tryPunch()
 			end
 		end
 		ratModel = nearest
-		if ratModel == nil then
-			return
-		end
 	end
 
+	if ratModel == nil then
+		return
+	end
+
+	local ratRoot = ratModel.PrimaryPart
+	if ratRoot ~= nil then
+		playImpactFx(ratRoot.Position + Vector3.new(0, 0.8, 0), VisualManifest.Tools.ImpactPunchColor)
+	end
 	remotes.PunchEnemy:FireServer(ratModel)
 end
 
@@ -145,11 +230,21 @@ local function playShotEffects(rayOrigin: Vector3, rayDirection: Vector3)
 	muzzle.Name = "MuzzleFlash"
 	muzzle.Anchored = true
 	muzzle.CanCollide = false
-	muzzle.Material = Enum.Material.Neon
-	muzzle.Color = Color3.fromRGB(255, 187, 89)
+	muzzle.Material = VisualManifest.Tools.MuzzleMaterial
+	muzzle.Color = VisualManifest.Tools.MuzzleColor
 	muzzle.Size = Vector3.new(0.25, 0.25, 0.25)
 	muzzle.CFrame = CFrame.new(muzzlePos)
 	muzzle.Parent = Workspace
+
+	local trail = Instance.new("Part")
+	trail.Name = "ShotTrail"
+	trail.Anchored = true
+	trail.CanCollide = false
+	trail.Material = VisualManifest.Tools.ShotTrailMaterial
+	trail.Color = VisualManifest.Tools.ShotTrailColor
+	trail.Size = Vector3.new(0.12, 0.12, 8)
+	trail.CFrame = CFrame.lookAt(muzzlePos, muzzlePos + rayDirection.Unit * 8) * CFrame.new(0, 0, -4)
+	trail.Parent = Workspace
 
 	local fade = TweenService:Create(muzzle, TweenInfo.new(0.05, Enum.EasingStyle.Linear), {
 		Transparency = 1,
@@ -158,6 +253,16 @@ local function playShotEffects(rayOrigin: Vector3, rayDirection: Vector3)
 	fade:Play()
 	fade.Completed:Connect(function()
 		muzzle:Destroy()
+	end)
+	local trailFade = TweenService:Create(trail, TweenInfo.new(0.08, Enum.EasingStyle.Linear), {
+		Transparency = 1,
+		Size = Vector3.new(0.03, 0.03, 10),
+	})
+	trailFade:Play()
+	trailFade.Completed:Connect(function()
+		if trail.Parent ~= nil then
+			trail:Destroy()
+		end
 	end)
 
 	local shotSound = Instance.new("Sound")
@@ -227,6 +332,10 @@ local function fireShotgun()
 		return
 	end
 
+	local ratRoot = ratModel.PrimaryPart
+	if ratRoot ~= nil then
+		playImpactFx(ratRoot.Position + Vector3.new(0, 0.8, 0), VisualManifest.Tools.ImpactShotColor)
+	end
 	remotes.HitEnemy:FireServer(ratModel)
 end
 
@@ -287,7 +396,10 @@ local function useWrench()
 	end
 
 	if response.allowed == true then
-		MainHUD.ShowRepairMinigame(drillPart)
+		local mainHUD = getMainHUD()
+		if mainHUD ~= nil and type(mainHUD.ShowRepairMinigame) == "function" then
+			mainHUD.ShowRepairMinigame(drillPart)
+		end
 	end
 end
 
@@ -351,21 +463,6 @@ local function bindWrenchTool(tool: Tool)
 	end)
 end
 
-local function tryAutoEquip(tool: Tool)
-	local character = LocalPlayer.Character
-	if character == nil then
-		return
-	end
-	local humanoid = character:FindFirstChildOfClass("Humanoid")
-	if humanoid == nil then
-		return
-	end
-	if tool.Parent == character then
-		return
-	end
-	humanoid:EquipTool(tool)
-end
-
 local function getRoleToolName(): string?
 	local role = LocalPlayer:GetAttribute("Role")
 	if role == "Enforcer" then
@@ -397,33 +494,19 @@ local function getToolInstance(toolName: string): Tool?
 end
 
 local function bindContainer(container: Instance)
-	local isBackpack = container:IsA("Backpack")
-
 	for _, child in container:GetChildren() do
 		if child:IsA("Tool") and child.Name == SHOTGUN_TOOL_NAME then
 			bindShotgunTool(child)
-			if isBackpack then
-				tryAutoEquip(child)
-			end
 		elseif child:IsA("Tool") and child.Name == WRENCH_TOOL_NAME then
 			bindWrenchTool(child)
-			if isBackpack then
-				tryAutoEquip(child)
-			end
 		end
 	end
 
 	container.ChildAdded:Connect(function(child)
 		if child:IsA("Tool") and child.Name == SHOTGUN_TOOL_NAME then
 			bindShotgunTool(child)
-			if isBackpack then
-				tryAutoEquip(child)
-			end
 		elseif child:IsA("Tool") and child.Name == WRENCH_TOOL_NAME then
 			bindWrenchTool(child)
-			if isBackpack then
-				tryAutoEquip(child)
-			end
 		end
 	end)
 end
@@ -441,18 +524,6 @@ function ToolController.Init()
 		activeShotgun = nil
 		activeWrench = nil
 		bindContainer(character)
-
-		task.defer(function()
-			local bp = LocalPlayer:FindFirstChild("Backpack")
-			if bp then
-				for _, child in bp:GetChildren() do
-					if child:IsA("Tool") and (child.Name == SHOTGUN_TOOL_NAME or child.Name == WRENCH_TOOL_NAME) then
-						tryAutoEquip(child)
-						break
-					end
-				end
-			end
-		end)
 	end)
 
 	local currentCharacter = LocalPlayer.Character

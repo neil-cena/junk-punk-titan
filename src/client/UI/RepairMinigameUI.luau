@@ -10,6 +10,7 @@ local UserInputService = game:GetService("UserInputService")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Constants = require(Shared:WaitForChild("Constants"))
 local AudioManifest = require(Shared:WaitForChild("AudioManifest"))
+local Theme = require(script.Parent:WaitForChild("Theme"))
 
 local RepairMinigameUI = {}
 
@@ -53,10 +54,11 @@ function RepairMinigameUI.Show(drillPart: BasePart, rootGui: ScreenGui, remotes:
 	frame.AnchorPoint = Vector2.new(0.5, 1)
 	frame.Position = UDim2.new(0.5, 0, 0.86, 0)
 	frame.Size = UDim2.fromOffset(360, 92)
-	frame.BackgroundColor3 = Color3.fromRGB(24, 24, 28)
+	frame.BackgroundColor3 = Theme.Colors.Panel
 	frame.BackgroundTransparency = 0.15
 	frame.Parent = rootGui
 	activeFrame = frame
+	Theme.StylePanel(frame, 8)
 
 	local title = Instance.new("TextLabel")
 	title.Name = "Title"
@@ -64,7 +66,7 @@ function RepairMinigameUI.Show(drillPart: BasePart, rootGui: ScreenGui, remotes:
 	title.Position = UDim2.fromOffset(5, 6)
 	title.BackgroundTransparency = 1
 	title.Font = Enum.Font.GothamBold
-	title.TextColor3 = Color3.fromRGB(220, 240, 255)
+	title.TextColor3 = Theme.Colors.TextPrimary
 	title.TextScaled = true
 	title.Text = "Pressure Hiss - Click / Press E"
 	title.Parent = frame
@@ -74,7 +76,7 @@ function RepairMinigameUI.Show(drillPart: BasePart, rootGui: ScreenGui, remotes:
 	barBg.AnchorPoint = Vector2.new(0.5, 0)
 	barBg.Position = UDim2.new(0.5, 0, 0, 42)
 	barBg.Size = UDim2.fromOffset(320, 28)
-	barBg.BackgroundColor3 = Color3.fromRGB(70, 70, 75)
+	barBg.BackgroundColor3 = Theme.Colors.MinigameBarBg
 	barBg.BorderSizePixel = 0
 	barBg.Parent = frame
 
@@ -85,7 +87,7 @@ function RepairMinigameUI.Show(drillPart: BasePart, rootGui: ScreenGui, remotes:
 	successZone.Name = "SuccessZone"
 	successZone.Size = UDim2.new(successWidth, 0, 1, 0)
 	successZone.Position = UDim2.new(successStart, 0, 0, 0)
-	successZone.BackgroundColor3 = Color3.fromRGB(90, 205, 115)
+	successZone.BackgroundColor3 = Theme.Colors.Good
 	successZone.BorderSizePixel = 0
 	successZone.Parent = barBg
 
@@ -94,7 +96,7 @@ function RepairMinigameUI.Show(drillPart: BasePart, rootGui: ScreenGui, remotes:
 	needle.AnchorPoint = Vector2.new(0.5, 0)
 	needle.Size = UDim2.new(0.02, 0, 1, 0)
 	needle.Position = UDim2.new(0, 0, 0, 0)
-	needle.BackgroundColor3 = Color3.fromRGB(255, 210, 70)
+	needle.BackgroundColor3 = Theme.Colors.Accent
 	needle.BorderSizePixel = 0
 	needle.Parent = barBg
 
@@ -131,11 +133,11 @@ function RepairMinigameUI.Show(drillPart: BasePart, rootGui: ScreenGui, remotes:
 		remotes.RepairMinigameResult:FireServer(drillPart, success)
 		if success then
 			feedback.Text = ("+%d Stability!"):format(Constants.MAINTENANCE.WrenchSuccessRestore)
-			feedback.TextColor3 = Color3.fromRGB(120, 245, 120)
+			feedback.TextColor3 = Theme.Colors.MinigameSuccess
 			playUISound(AudioManifest.MinigameSuccess, 0.4)
 		else
 			feedback.Text = "CLOGGED!"
-			feedback.TextColor3 = Color3.fromRGB(255, 110, 110)
+			feedback.TextColor3 = Theme.Colors.MinigameFail
 			playUISound(AudioManifest.MinigameFail, 0.35)
 		end
 

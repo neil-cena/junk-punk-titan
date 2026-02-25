@@ -5,6 +5,7 @@ local TeleportService = game:GetService("TeleportService")
 local TweenService = game:GetService("TweenService")
 
 local LocalPlayer = Players.LocalPlayer
+local Theme = require(script.Parent:WaitForChild("Theme"))
 
 local EndScreenUI = {}
 
@@ -41,10 +42,11 @@ function EndScreenUI.ShowGameOver(rootGui: ScreenGui, remotes: any)
 	local overlay = Instance.new("Frame")
 	overlay.Name = "GameOverOverlay"
 	overlay.Size = UDim2.fromScale(1, 1)
-	overlay.BackgroundColor3 = Color3.fromRGB(10, 5, 5)
+	overlay.BackgroundColor3 = Theme.Colors.GameOverOverlay
 	overlay.BackgroundTransparency = 0.2
 	overlay.Parent = rootGui
 	gameOverGui = overlay
+	Theme.StylePanel(overlay, 0)
 
 	local title = Instance.new("TextLabel")
 	title.Size = UDim2.fromScale(1, 0.2)
@@ -52,7 +54,7 @@ function EndScreenUI.ShowGameOver(rootGui: ScreenGui, remotes: any)
 	title.BackgroundTransparency = 1
 	title.Font = Enum.Font.GothamBlack
 	title.TextScaled = true
-	title.TextColor3 = Color3.fromRGB(255, 70, 70)
+	title.TextColor3 = Theme.Colors.Bad
 	title.TextStrokeTransparency = 0.4
 	title.Text = "THE TITAN HAS COLLAPSED"
 	title.Parent = overlay
@@ -62,7 +64,7 @@ function EndScreenUI.ShowGameOver(rootGui: ScreenGui, remotes: any)
 	statsLabel.Position = UDim2.new(0.25, 0, 0.5, 0)
 	statsLabel.BackgroundTransparency = 1
 	statsLabel.Font = Enum.Font.GothamSemibold
-	statsLabel.TextColor3 = Color3.fromRGB(220, 200, 200)
+	statsLabel.TextColor3 = Theme.Colors.TextPrimary
 	statsLabel.TextScaled = true
 	statsLabel.TextWrapped = true
 	statsLabel.Text = buildStatsText(remotes)
@@ -88,10 +90,11 @@ function EndScreenUI.ShowVictory(rootGui: ScreenGui, remotes: any)
 	local overlay = Instance.new("Frame")
 	overlay.Name = "VictoryOverlay"
 	overlay.Size = UDim2.fromScale(1, 1)
-	overlay.BackgroundColor3 = Color3.fromRGB(5, 5, 15)
+	overlay.BackgroundColor3 = Theme.Colors.VictoryOverlay
 	overlay.BackgroundTransparency = 0.15
 	overlay.Parent = rootGui
 	victoryGui = overlay
+	Theme.StylePanel(overlay, 0)
 
 	local title = Instance.new("TextLabel")
 	title.Size = UDim2.fromScale(0.8, 0.15)
@@ -99,7 +102,7 @@ function EndScreenUI.ShowVictory(rootGui: ScreenGui, remotes: any)
 	title.BackgroundTransparency = 1
 	title.Font = Enum.Font.GothamBlack
 	title.TextScaled = true
-	title.TextColor3 = Color3.fromRGB(255, 230, 80)
+	title.TextColor3 = Theme.Colors.Accent
 	title.TextStrokeTransparency = 0.3
 	title.Text = "VICTORY"
 	title.Parent = overlay
@@ -110,7 +113,7 @@ function EndScreenUI.ShowVictory(rootGui: ScreenGui, remotes: any)
 	subtitle.BackgroundTransparency = 1
 	subtitle.Font = Enum.Font.GothamBold
 	subtitle.TextScaled = true
-	subtitle.TextColor3 = Color3.fromRGB(200, 220, 180)
+	subtitle.TextColor3 = Theme.Colors.TextPrimary
 	subtitle.Text = "The Titan stands."
 	subtitle.Parent = overlay
 
@@ -119,7 +122,7 @@ function EndScreenUI.ShowVictory(rootGui: ScreenGui, remotes: any)
 	statsLabel.Position = UDim2.new(0.25, 0, 0.44, 0)
 	statsLabel.BackgroundTransparency = 1
 	statsLabel.Font = Enum.Font.GothamSemibold
-	statsLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
+	statsLabel.TextColor3 = Theme.Colors.TextPrimary
 	statsLabel.TextScaled = true
 	statsLabel.TextWrapped = true
 	statsLabel.Text = buildStatsText(remotes)
@@ -145,10 +148,10 @@ function EndScreenUI.ShowFinalStandBanner(rootGui: ScreenGui)
 	banner.AnchorPoint = Vector2.new(0.5, 0)
 	banner.Position = UDim2.new(0.5, 0, 0.13, 0)
 	banner.Size = UDim2.new(0.3, 0, 0, 40)
-	banner.BackgroundColor3 = Color3.fromRGB(160, 40, 40)
+	banner.BackgroundColor3 = Theme.Colors.FinalStandBanner
 	banner.BackgroundTransparency = 0.15
 	banner.Font = Enum.Font.GothamBlack
-	banner.TextColor3 = Color3.fromRGB(255, 230, 100)
+	banner.TextColor3 = Theme.Colors.FinalStandPulseB
 	banner.TextScaled = true
 	banner.Text = "FINAL STAND - DEFEND THE TITAN"
 	banner.Parent = rootGui
@@ -157,14 +160,14 @@ function EndScreenUI.ShowFinalStandBanner(rootGui: ScreenGui)
 	task.spawn(function()
 		while finalStandBanner ~= nil and finalStandBanner.Parent ~= nil do
 			TweenService:Create(finalStandBanner, TweenInfo.new(0.6, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
-				TextColor3 = Color3.fromRGB(255, 100, 100),
+				TextColor3 = Theme.Colors.FinalStandPulseA,
 			}):Play()
 			task.wait(0.6)
 			if finalStandBanner == nil then
 				break
 			end
 			TweenService:Create(finalStandBanner, TweenInfo.new(0.6, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
-				TextColor3 = Color3.fromRGB(255, 230, 100),
+				TextColor3 = Theme.Colors.FinalStandPulseB,
 			}):Play()
 			task.wait(0.6)
 		end

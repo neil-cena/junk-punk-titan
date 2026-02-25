@@ -7,6 +7,7 @@ local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Constants = require(Shared:WaitForChild("Constants"))
+local VisualManifest = require(Shared:WaitForChild("VisualManifest"))
 local EconomyService = require(script.Parent:WaitForChild("EconomyService"))
 
 local ScrapSpawnService = {}
@@ -45,13 +46,29 @@ local function spawnScrapPile()
 
 	local pile = Instance.new("Part")
 	pile.Name = "JunkBlock"
-	pile.Size = Vector3.new(1.8, 1.0, 1.8)
-	pile.Material = Enum.Material.CorrodedMetal
-	pile.Color = Color3.fromRGB(180, 160, 100)
+	pile.Size = Vector3.new(1.7, 1.0, 1.7)
+	pile.Material = VisualManifest.Loot.JunkBlock.material
+	pile.Color = VisualManifest.Loot.JunkBlock.color
 	pile.Anchored = true
 	pile.CanCollide = false
 	pile.Position = Vector3.new(x, yPos, z)
 	pile.Parent = Workspace
+
+	local shardA = Instance.new("Part")
+	shardA.Name = "ScrapShardA"
+	shardA.Size = Vector3.new(0.9, 0.5, 0.35)
+	shardA.Material = VisualManifest.Loot.JunkBlock.shardMaterial
+	shardA.Color = VisualManifest.Loot.JunkBlock.shardColor
+	shardA.Anchored = true
+	shardA.CanCollide = false
+	shardA.CFrame = pile.CFrame * CFrame.new(-0.35, 0.6, 0.25) * CFrame.Angles(0, math.rad(22), math.rad(10))
+	shardA.Parent = pile
+
+	local shardB = shardA:Clone()
+	shardB.Name = "ScrapShardB"
+	shardB.CFrame = pile.CFrame * CFrame.new(0.3, 0.45, -0.2) * CFrame.Angles(0, math.rad(-28), math.rad(-14))
+	shardB.Parent = pile
+
 	table.insert(activeScrapPiles, pile)
 end
 
