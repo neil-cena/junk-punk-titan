@@ -170,6 +170,9 @@ local function spawnCollectableBundle(atPosition: Vector3, scrapValue: number): 
 	bundle.Anchored = false
 	bundle.CanCollide = false
 	bundle.CFrame = CFrame.new(atPosition + Vector3.new(0, 2, 0))
+	bundle:SetAttribute("MagnetTarget", nil)
+	bundle:SetAttribute("InstantPickup", nil)
+	bundle:SetAttribute("CriticalHarvest", nil)
 	bundle.Parent = Workspace
 
 	table.insert(activeRatCaches, bundle)
@@ -210,12 +213,12 @@ local function triggerDrillBonusShower()
 				if instance.Parent == nil then
 					return
 				end
-				local offset = Vector3.new(math.random(-2, 2), math.random(2, 4), math.random(-2, 2))
+				local offset = Vector3.new(math.random(-4, 4), math.random(4, 8), math.random(-4, 4))
 				local bundle = spawnCollectableBundle(instance.Position + offset, Constants.DRILL_SWARM_BONUS.BlockValue)
 				bundle.AssemblyLinearVelocity = Vector3.new(
-					math.random(-16, 16),
-					math.random(20, 30),
-					math.random(-16, 16)
+					math.random(-20, 20),
+					math.random(36, 52),
+					math.random(-20, 20)
 				)
 			end)
 		end

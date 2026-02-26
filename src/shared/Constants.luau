@@ -102,8 +102,8 @@ local Constants = {
 	},
 
 	WAVES = {
-		IntervalSeconds = 80,
-		FirstWaveDelaySeconds = 100,
+		IntervalSeconds = 55,
+		FirstWaveDelaySeconds = 90,
 		SwarmDurationSeconds = 25,
 		BaseEnemyCount = 16,
 		EnemiesPerWave = 18,
@@ -149,8 +149,8 @@ local Constants = {
 	},
 
 	DRILL_SWARM_BONUS = {
-		MinBlocks = 10,
-		MaxBlocks = 20,
+		MinBlocks = 20,
+		MaxBlocks = 40,
 		BlockValue = 1,
 	},
 
