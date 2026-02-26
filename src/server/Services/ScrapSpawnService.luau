@@ -114,7 +114,12 @@ function ScrapSpawnService.Init(): ()
 				if isInstant then
 					pile:SetAttribute("InstantPickup", true)
 				end
-				EconomyService.AddScrap(Constants.LOOT.JunkBlockValue)
+				local scrapValue = Constants.LOOT.JunkBlockValue
+				if math.random() < Constants.LOOT.CriticalHarvestChance then
+					scrapValue = scrapValue * Constants.LOOT.CriticalHarvestMultiplier
+					pile:SetAttribute("CriticalHarvest", true)
+				end
+				EconomyService.AddScrap(scrapValue)
 				if isInstant then
 					task.defer(function()
 						if pile.Parent ~= nil then

@@ -1102,6 +1102,10 @@ local function collectRatCache(cachePart: BasePart)
 	pickedRatCaches[cachePart] = true
 	local scrapValue = ratCacheValues[cachePart] or Constants.LOOT.RatCacheValue
 	ratCacheValues[cachePart] = nil
+	if math.random() < Constants.LOOT.CriticalHarvestChance then
+		scrapValue = scrapValue * Constants.LOOT.CriticalHarvestMultiplier
+		cachePart:SetAttribute("CriticalHarvest", true)
+	end
 	EconomyService.AddScrap(scrapValue)
 	if cachePart.Parent ~= nil then
 		returnRatCacheToPool(cachePart)
@@ -1221,7 +1225,7 @@ function EnemyService.Init(): ()
 	ObjectiveService.ConnectGameStateChanged(function(state: string)
 		if state == "final_stand" then
 			startFinalStandSpawning()
-		elseif state == "victory" or state == "defeat" then
+		elseif state == "victory" or state == "defeat" or state == "sandbox" then
 			EnemyService.StopAll()
 		end
 	end)
@@ -1321,6 +1325,10 @@ function EnemyService.Init(): ()
 				end
 				local scrapValue = ratCacheValues[cache] or Constants.LOOT.RatCacheValue
 				ratCacheValues[cache] = nil
+				if math.random() < Constants.LOOT.CriticalHarvestChance then
+					scrapValue = scrapValue * Constants.LOOT.CriticalHarvestMultiplier
+					cache:SetAttribute("CriticalHarvest", true)
+				end
 				EconomyService.AddScrap(scrapValue)
 				if isInstant then
 					task.defer(function()

@@ -37,6 +37,9 @@ local RemoteNames = {
 	BuildProgress = "BuildProgress",
 	CancelBlueprint = "CancelBlueprint",
 	PunchEnemy = "PunchEnemy",
+	BuildingUpgraded = "BuildingUpgraded",
+	SandboxStarted = "SandboxStarted",
+	UpgradeTierUnlocked = "UpgradeTierUnlocked",
 }
 
 local function getOrCreateRemoteFolder(): Folder
@@ -128,6 +131,9 @@ function Remotes.Get()
 			BuildProgress = getOrCreateRemoteEvent(folder, RemoteNames.BuildProgress),
 			CancelBlueprint = getOrCreateRemoteEvent(folder, RemoteNames.CancelBlueprint),
 			PunchEnemy = getOrCreateRemoteEvent(folder, RemoteNames.PunchEnemy),
+			BuildingUpgraded = getOrCreateRemoteEvent(folder, RemoteNames.BuildingUpgraded),
+			SandboxStarted = getOrCreateRemoteEvent(folder, RemoteNames.SandboxStarted),
+			UpgradeTierUnlocked = getOrCreateRemoteEvent(folder, RemoteNames.UpgradeTierUnlocked),
 		}
 	end
 
@@ -166,6 +172,9 @@ function Remotes.Get()
 		BuildProgress = waitForRemoteEvent(folder, RemoteNames.BuildProgress),
 		CancelBlueprint = waitForRemoteEvent(folder, RemoteNames.CancelBlueprint),
 		PunchEnemy = waitForRemoteEvent(folder, RemoteNames.PunchEnemy),
+		BuildingUpgraded = waitForRemoteEvent(folder, RemoteNames.BuildingUpgraded),
+		SandboxStarted = waitForRemoteEvent(folder, RemoteNames.SandboxStarted),
+		UpgradeTierUnlocked = waitForRemoteEvent(folder, RemoteNames.UpgradeTierUnlocked),
 	}
 end
 

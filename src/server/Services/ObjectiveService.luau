@@ -11,6 +11,14 @@ local RemotesModule = require(Shared:WaitForChild("Remotes"))
 local TheftComponent = require(Shared:WaitForChild("TheftComponent"))
 local EconomyService = require(script.Parent:WaitForChild("EconomyService"))
 
+local BuildingServiceRef: any = nil
+local function getBuildingService()
+	if BuildingServiceRef == nil then
+		BuildingServiceRef = require(script.Parent:WaitForChild("BuildingService"))
+	end
+	return BuildingServiceRef
+end
+
 local ObjectiveService = {}
 
 local TITAN_TAG = "TitanObjective"
@@ -126,6 +134,11 @@ local function triggerVictory()
 	end
 	setGameState("victory")
 	remotes.GlobalVictory:FireAllClients()
+
+	task.delay(8, function()
+		setGameState("sandbox")
+		remotes.SandboxStarted:FireAllClients()
+	end)
 end
 
 local function startFinalStand()
@@ -174,6 +187,11 @@ function ObjectiveService.CompleteStage(stageNumber: number): boolean
 	updateTitanVisuals(currentStage)
 	updatePromptText()
 	remotes.TitanStageCompleted:FireAllClients(currentStage)
+	remotes.UpgradeTierUnlocked:FireAllClients(currentStage)
+
+	pcall(function()
+		getBuildingService().RefreshAllUpgradePrompts()
+	end)
 
 	if currentStage >= 4 then
 		task.defer(startFinalStand)
@@ -248,7 +266,7 @@ local function createTitan(): (Model, BasePart)
 
 	local prompt = Instance.new("ProximityPrompt")
 	prompt.ObjectText = "Titan Core"
-	prompt.ActionText = "Stage 1: 200 Scrap"
+	prompt.ActionText = ("Stage 1: %d Scrap"):format(Constants.TITAN.Stages[1].scrap)
 	prompt.HoldDuration = 1.5
 	prompt.MaxActivationDistance = Constants.TITAN.DepositRange
 	prompt.RequiresLineOfSight = false

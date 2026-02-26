@@ -394,7 +394,14 @@ local function refreshDrillRateLabel(drill: BasePart, rateLabel: TextLabel)
 	local isOverclocked = drill:GetAttribute("IsOverclocked")
 	local overclockMult = if isOverclocked == true then Constants.MAINTENANCE.OverclockMultiplier else 1
 
-	local rate = Constants.MAINTENANCE.DrillBaseOutput * efficiency * overclockMult / Constants.MAINTENANCE.ResourceTickSeconds
+	local drillLevel = drill:GetAttribute("BuildingLevel") or 1
+	local levelStats = Constants.BUILDING_UPGRADES.Drill[drillLevel]
+	local lv1Stats = Constants.BUILDING_UPGRADES.Drill[1]
+	local levelMult = 1
+	if levelStats ~= nil and lv1Stats ~= nil then
+		levelMult = (levelStats.scrapPerTick / levelStats.tickInterval) / (lv1Stats.scrapPerTick / lv1Stats.tickInterval)
+	end
+	local rate = Constants.MAINTENANCE.DrillBaseOutput * levelMult * efficiency * overclockMult / Constants.MAINTENANCE.ResourceTickSeconds
 	if rate > 0 then
 		rateLabel.Text = ("+%.1f/s"):format(rate)
 		rateLabel.TextColor3 = VisualManifest.VFX.HealthGood
@@ -1066,6 +1073,9 @@ local function runMagnetHeartbeat(dt: number)
 		local dist = (root.Position - flight.part.Position).Magnitude
 		if dist < 0.5 then
 			flight.part.Transparency = 1
+			if flight.part:GetAttribute("CriticalHarvest") then
+				playCritHarvestVFX(root.Position)
+			end
 			continue
 		end
 		local totalDist = (root.Position - flight.startPos).Magnitude
@@ -1083,6 +1093,68 @@ local function runMagnetHeartbeat(dt: number)
 		table.insert(alive, flight)
 	end
 	activeMagnetFlights = alive
+end
+
+local function playUpgradeVFX(buildingPart: BasePart, newLevel: number, buildingType: string)
+	if buildingPart.Parent == nil then
+		return
+	end
+
+	local tintTable = VisualManifest.Buildings.UpgradeTints
+	local tint = tintTable[newLevel] or tintTable[1]
+	local baseColor = VisualManifest.Buildings.BaseColors[buildingType]
+	if baseColor ~= nil then
+		local t = math.clamp((newLevel - 1) / math.max(1, Constants.BUILDING.MaxLevel - 1), 0, 1) * 0.4
+		buildingPart.Color = baseColor:Lerp(tint, t)
+	end
+
+	local flash = Instance.new("Part")
+	flash.Name = "UpgradeFlash"
+	flash.Shape = Enum.PartType.Ball
+	flash.Material = Enum.Material.Neon
+	flash.Color = VisualManifest.Buildings.UpgradeFlashColor
+	flash.Anchored = true
+	flash.CanCollide = false
+	flash.Size = Vector3.new(2, 2, 2)
+	flash.Position = buildingPart.Position
+	flash.Transparency = 0.3
+	flash.Parent = Workspace
+
+	TweenService:Create(flash, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		Size = Vector3.new(12, 12, 12),
+		Transparency = 1,
+	}):Play()
+
+	task.delay(0.55, function()
+		if flash.Parent ~= nil then
+			flash:Destroy()
+		end
+	end)
+end
+
+local function playCritHarvestVFX(position: Vector3)
+	local flash = Instance.new("Part")
+	flash.Name = "CritFlash"
+	flash.Shape = Enum.PartType.Ball
+	flash.Material = Enum.Material.Neon
+	flash.Color = VisualManifest.VFX.CritHarvestFlashA
+	flash.Anchored = true
+	flash.CanCollide = false
+	flash.Size = Vector3.new(1.5, 1.5, 1.5)
+	flash.Position = position
+	flash.Transparency = 0.2
+	flash.Parent = Workspace
+
+	TweenService:Create(flash, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		Size = Vector3.new(8, 8, 8),
+		Transparency = 1,
+	}):Play()
+
+	task.delay(0.45, function()
+		if flash.Parent ~= nil then
+			flash:Destroy()
+		end
+	end)
 end
 
 local function bindDrillRotation(drill: BasePart)
@@ -1425,6 +1497,12 @@ function VFXController.Init()
 
 	remotes.BlueprintFinished.OnClientEvent:Connect(function(_blueprintId: string, position: Vector3)
 		playBuildFlash(position)
+	end)
+
+	remotes.BuildingUpgraded.OnClientEvent:Connect(function(buildingPart: BasePart, newLevel: number, buildingType: string)
+		if typeof(buildingPart) == "Instance" and buildingPart:IsA("BasePart") then
+			playUpgradeVFX(buildingPart, newLevel, buildingType)
+		end
 	end)
 	remotes.StormStarted.OnClientEvent:Connect(function()
 		startStormFx()

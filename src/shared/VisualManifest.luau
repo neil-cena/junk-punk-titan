@@ -81,6 +81,13 @@ local VisualManifest = {
 		DrillBit = { color = Color3.fromRGB(126, 116, 99), material = Enum.Material.CorrodedMetal },
 		WallPlate = { color = Color3.fromRGB(112, 92, 76), material = Enum.Material.CorrodedMetal },
 		WallTopLip = { color = Color3.fromRGB(96, 89, 83), material = Enum.Material.Metal },
+		UpgradeTints = {
+			[1] = Color3.fromRGB(255, 255, 255),
+			[2] = Color3.fromRGB(255, 240, 200),
+			[3] = Color3.fromRGB(255, 220, 140),
+			[4] = Color3.fromRGB(255, 200, 80),
+		},
+		UpgradeFlashColor = Color3.fromRGB(255, 210, 80),
 		TurretMuzzleFlash = { color = Color3.fromRGB(255, 186, 92), material = Enum.Material.Neon },
 		DrillSparks = {
 			texture = "rbxasset://textures/particles/sparkles_main.dds",
@@ -194,6 +201,8 @@ local VisualManifest = {
 		AmbientDustB = Color3.fromRGB(92, 82, 71),
 		SteelSparkleA = Color3.fromRGB(100, 200, 255),
 		SteelSparkleB = Color3.fromRGB(60, 140, 220),
+		CritHarvestFlashA = Color3.fromRGB(255, 230, 80),
+		CritHarvestFlashB = Color3.fromRGB(255, 190, 40),
 	},
 
 	Tools = {

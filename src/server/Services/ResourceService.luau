@@ -154,7 +154,14 @@ local function runResourceLoop()
 				end
 
 				local stability = getClampedStability(drill)
-				local output = Constants.MAINTENANCE.DrillBaseOutput * computeEfficiency(stability)
+				local drillLevel = drill:GetAttribute("BuildingLevel") or 1
+				local levelStats = Constants.BUILDING_UPGRADES.Drill[drillLevel]
+				local lv1Stats = Constants.BUILDING_UPGRADES.Drill[1]
+				local levelMult = 1
+				if levelStats ~= nil and lv1Stats ~= nil then
+					levelMult = (levelStats.scrapPerTick / levelStats.tickInterval) / (lv1Stats.scrapPerTick / lv1Stats.tickInterval)
+				end
+				local output = Constants.MAINTENANCE.DrillBaseOutput * levelMult * computeEfficiency(stability)
 				if output <= 0 then
 					continue
 				end

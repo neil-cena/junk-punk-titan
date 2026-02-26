@@ -56,6 +56,9 @@ local buildProgressLabel: TextLabel? = nil
 local toolPanelFrame: Frame? = nil
 local toolPanelButton: TextButton? = nil
 local hudWatchdogStarted = false
+local upgradeBanner: TextLabel? = nil
+local sandboxMode = false
+local currentMaxBuildLevel = 1
 
 local SHOTGUN_TOOL_NAME = "RustyShotgun"
 local WRENCH_TOOL_NAME = "RustyWrench"
@@ -71,6 +74,67 @@ local function playUISound(soundId: string, volume: number?)
 			sound:Destroy()
 		end
 	end)
+end
+
+local function showUpgradeBanner(stage: number)
+	local gui = PlayerGui:FindFirstChild("MainHUDGui")
+	if gui == nil or not gui:IsA("ScreenGui") then
+		return
+	end
+
+	local maxLevel = math.clamp(stage + 1, 1, Constants.BUILDING.MaxLevel)
+	currentMaxBuildLevel = maxLevel
+
+	if maxLevel <= 1 then
+		return
+	end
+
+	local banner = Instance.new("TextLabel")
+	banner.Name = "UpgradeBanner"
+	banner.AnchorPoint = Vector2.new(0.5, 0.5)
+	banner.Position = UDim2.new(0.5, 0, 0.35, 0)
+	banner.Size = UDim2.new(0.5, 0, 0, 44)
+	banner.BackgroundColor3 = Theme.Colors.Accent
+	banner.BackgroundTransparency = 0.15
+	banner.Font = Enum.Font.GothamBold
+	banner.TextScaled = true
+	banner.TextColor3 = Theme.Colors.TextPrimary
+	banner.Text = ("BUILDING UPGRADES Lv.%d UNLOCKED!"):format(maxLevel)
+	banner.TextStrokeTransparency = 0.4
+	banner.Parent = gui
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 6)
+	corner.Parent = banner
+
+	local fadeIn = TweenService:Create(banner, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+		Size = UDim2.new(0.55, 0, 0, 50),
+	})
+	fadeIn:Play()
+
+	task.delay(3.5, function()
+		if banner.Parent ~= nil then
+			local fadeOut = TweenService:Create(banner, TweenInfo.new(0.5), {
+				BackgroundTransparency = 1,
+				TextTransparency = 1,
+				TextStrokeTransparency = 1,
+			})
+			fadeOut:Play()
+			task.delay(0.55, function()
+				if banner.Parent ~= nil then
+					banner:Destroy()
+				end
+			end)
+		end
+	end)
+end
+
+local function enterSandboxMode()
+	sandboxMode = true
+	if waveTimerLabel ~= nil then
+		waveTimerLabel.Text = "FREE ROAM"
+		waveTimerLabel.TextColor3 = Theme.Colors.Accent
+	end
 end
 
 local function animateScrapPop(label: TextLabel)
@@ -209,6 +273,9 @@ local function pulseWaveTimer()
 end
 
 local function updateWaveTimer(secondsRemaining: number)
+	if sandboxMode then
+		return
+	end
 	local abs = math.abs(secondsRemaining)
 	local seconds = math.max(0, math.floor(abs + 0.5))
 	local isSwarmActive = secondsRemaining < 0
@@ -1366,7 +1433,7 @@ function MainHUD.Init()
 			waveTimerLabel.Visible = false
 		end
 	end)
-	remotes.TitanStageCompleted.OnClientEvent:Connect(function(_stage: number)
+	remotes.TitanStageCompleted.OnClientEvent:Connect(function(stage: number)
 		playUISound(AudioManifest.StageComplete, 0.5)
 		if titanStageLabel ~= nil then
 			local original = titanStageLabel.TextColor3
@@ -1377,6 +1444,12 @@ function MainHUD.Init()
 				end
 			end)
 		end
+		showUpgradeBanner(stage)
+		refreshBuildCosts()
+	end)
+
+	remotes.SandboxStarted.OnClientEvent:Connect(function()
+		enterSandboxMode()
 	end)
 
 	local ok, snapshot = pcall(function()

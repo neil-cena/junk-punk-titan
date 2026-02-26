@@ -4,9 +4,9 @@ local Constants = {
 	GROWTH_RATE = 1.15,
 
 	BASE_COSTS = {
-		Turret = 100,
-		Drill = 250,
-		Wall = 30,
+		Turret = 80,
+		Drill = 180,
+		Wall = 25,
 	},
 
 	ROLE_DEFINITIONS = {
@@ -45,10 +45,32 @@ local Constants = {
 		DrillTickInterval = 2,
 		DefaultHP = 100,
 		BaseBuildTimeSeconds = 3,
+		MaxLevel = 4,
 		Sizes = {
 			Turret = Vector3.new(4, 4, 4),
 			Drill = Vector3.new(4, 6, 4),
 			Wall = Vector3.new(8, 8, 2),
+		},
+	},
+
+	BUILDING_UPGRADES = {
+		Turret = {
+			[1] = { damage = 7.5, range = 45, fireInterval = 1.5, hp = 100, cost = 0 },
+			[2] = { damage = 12, range = 48, fireInterval = 1.3, hp = 140, cost = 75 },
+			[3] = { damage = 18, range = 52, fireInterval = 1.1, hp = 190, cost = 140 },
+			[4] = { damage = 25, range = 56, fireInterval = 0.85, hp = 250, cost = 220 },
+		},
+		Drill = {
+			[1] = { scrapPerTick = 8, tickInterval = 2, hp = 100, cost = 0 },
+			[2] = { scrapPerTick = 14, tickInterval = 2, hp = 140, cost = 100 },
+			[3] = { scrapPerTick = 22, tickInterval = 1.8, hp = 190, cost = 180 },
+			[4] = { scrapPerTick = 32, tickInterval = 1.5, hp = 250, cost = 280 },
+		},
+		Wall = {
+			[1] = { hp = 100, cost = 0 },
+			[2] = { hp = 180, cost = 20 },
+			[3] = { hp = 300, cost = 45 },
+			[4] = { hp = 450, cost = 80 },
 		},
 	},
 
@@ -74,11 +96,11 @@ local Constants = {
 	},
 
 	WAVES = {
-		IntervalSeconds = 120,
-		FirstWaveDelaySeconds = 150,
-		SwarmDurationSeconds = 30,
-		BaseEnemyCount = 6,
-		EnemiesPerWave = 3,
+		IntervalSeconds = 75,
+		FirstWaveDelaySeconds = 60,
+		SwarmDurationSeconds = 25,
+		BaseEnemyCount = 5,
+		EnemiesPerWave = 4,
 		MinSpawnDistanceFromCenter = 50,
 		SpawnRadius = 60,
 		RetreatBurrowDistance = 400,
@@ -88,13 +110,13 @@ local Constants = {
 	},
 
 	COMBAT = {
-		ShotgunBaseDamage = 20,
+		ShotgunBaseDamage = 25,
 		ShotgunRange = 30,
 		ShotgunCooldown = 0.27,
-		PunchDamage = 5,
+		PunchDamage = 7,
 		PunchRange = 6,
 		PunchCooldown = 0.33,
-		RatBaseHealth = 50,
+		RatBaseHealth = 35,
 		RatFleeSpeedMultiplier = 1.2,
 		ScrapBundleDespawnSeconds = 30,
 	},
@@ -110,21 +132,23 @@ local Constants = {
 
 	LOOT = {
 		JunkBlockValue = 5,
-		RatCacheValue = 2,
+		RatCacheValue = 3,
 		RatCacheMinDrops = 2,
 		RatCacheMaxDrops = 3,
 		RatCacheBonusDivisor = 75,
 		RatCacheBonusMax = 5,
+		CriticalHarvestChance = 0.12,
+		CriticalHarvestMultiplier = 3,
 	},
 
 	ECONOMY = {
-		InitialScrap = 200,
+		InitialScrap = 250,
 		DeathPenaltyPercent = 0.15,
 		DeathPenaltyCooldownSeconds = 10,
 	},
 
 	STORM = {
-		IntervalSeconds = 450,
+		IntervalSeconds = 420,
 		DurationSeconds = 20,
 		WindDamagePerSecond = 2,
 		TetherPadRadius = 6,
@@ -135,8 +159,8 @@ local Constants = {
 	},
 
 	SCRAP_SPAWNS = {
-		IntervalSeconds = 6,
-		CountPerSpawn = 5,
+		IntervalSeconds = 4,
+		CountPerSpawn = 7,
 		MinSpawnRadius = 30,
 		MaxSpawnRadius = 180,
 		RadiusRampCycles = 20,
@@ -147,10 +171,10 @@ local Constants = {
 
 	TITAN = {
 		Stages = {
-			[1] = { scrap = 300, steel = 0 },
-			[2] = { scrap = 600, steel = 2 },
-			[3] = { scrap = 900, steel = 5 },
-			[4] = { scrap = 1200, steel = 10 },
+			[1] = { scrap = 150, steel = 0 },
+			[2] = { scrap = 350, steel = 1 },
+			[3] = { scrap = 600, steel = 3 },
+			[4] = { scrap = 900, steel = 6 },
 		},
 		IntegrityDrainPerSecond = 1.67,
 		IntegrityRepairPerStage = 25,

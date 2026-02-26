@@ -25,6 +25,14 @@ local function getEnemyService()
 	return EnemyServiceRef
 end
 
+local ObjectiveServiceRef: any = nil
+local function getObjectiveService()
+	if ObjectiveServiceRef == nil then
+		ObjectiveServiceRef = require(script.Parent:WaitForChild("ObjectiveService"))
+	end
+	return ObjectiveServiceRef
+end
+
 type BuildingType = Types.BuildingType
 type BlueprintData = Types.BlueprintData
 type PurchaseResponse = Types.PurchaseResponse
@@ -48,6 +56,68 @@ local builtCounts: { [BuildingType]: number } = {
 	Wall = 0,
 }
 local buildingsLostCount = 0
+local finishedBuildings: { [BasePart]: true } = {}
+
+local upgradeBuilding: (player: Player, part: BasePart) -> ()
+
+local function getMaxUnlockedLevel(): number
+	local ok, stage = pcall(function()
+		return getObjectiveService().GetCurrentStage()
+	end)
+	if not ok or typeof(stage) ~= "number" then
+		return 1
+	end
+	return math.clamp(stage + 1, 1, Constants.BUILDING.MaxLevel)
+end
+
+local function getUpgradeStats(buildingType: string, level: number): { [string]: number }?
+	local tiers = Constants.BUILDING_UPGRADES[buildingType]
+	if tiers == nil then
+		return nil
+	end
+	return tiers[level]
+end
+
+local function refreshUpgradePrompt(part: BasePart)
+	local buildingType = part:GetAttribute("BuildingType")
+	local level = part:GetAttribute("BuildingLevel") or 1
+	if typeof(buildingType) ~= "string" then
+		return
+	end
+
+	local maxLevel = getMaxUnlockedLevel()
+	local nextLevel = level + 1
+	local prompt = part:FindFirstChild("UpgradePrompt") :: ProximityPrompt?
+
+	if nextLevel > maxLevel or nextLevel > Constants.BUILDING.MaxLevel then
+		if prompt ~= nil then
+			prompt.Enabled = false
+		end
+		return
+	end
+
+	local stats = getUpgradeStats(buildingType, nextLevel)
+	if stats == nil then
+		return
+	end
+
+	if prompt == nil then
+		prompt = Instance.new("ProximityPrompt")
+		prompt.Name = "UpgradePrompt"
+		prompt.HoldDuration = 1.0
+		prompt.MaxActivationDistance = 10
+		prompt.RequiresLineOfSight = false
+		prompt.Parent = part
+
+		prompt.Triggered:Connect(function(player: Player)
+			upgradeBuilding(player, part)
+		end)
+	end
+
+	prompt.ObjectText = ("%s Lv.%d"):format(buildingType, level)
+	prompt.ActionText = ("Upgrade to Lv.%d ($%d)"):format(nextLevel, stats.cost)
+	prompt.Enabled = true
+end
 
 local function isPositionValid(player: Player, requestedPosition: Vector3): (boolean, Vector3?)
 	local character = player.Character
@@ -124,8 +194,10 @@ local function createFinalBuilding(buildingType: BuildingType, position: Vector3
 	part.CanCollide = true
 	part.CFrame = CFrame.new(position + Vector3.new(0, part.Size.Y * 0.5, 0)) * CFrame.Angles(0, math.rad(rotation), 0)
 	part:SetAttribute("BuildingType", buildingType)
+	part:SetAttribute("BuildingLevel", 1)
 	part:SetAttribute("BuildingHP", Constants.BUILDING.DefaultHP)
 	part.Parent = Workspace
+	finishedBuildings[part] = true
 	CollectionService:AddTag(part, DISMANTLABLE_TAG)
 	if buildingType == "Drill" then
 		CollectionService:AddTag(part, "Drill")
@@ -198,6 +270,17 @@ local function createFinalBuilding(buildingType: BuildingType, position: Vector3
 		lip.CFrame = part.CFrame * CFrame.new(0, part.Size.Y * 0.5 - 0.4, 0)
 		lip.Parent = part
 	end
+
+	task.defer(function()
+		refreshUpgradePrompt(part)
+	end)
+
+	part.AncestryChanged:Connect(function(_, parent)
+		if parent == nil then
+			finishedBuildings[part] = nil
+		end
+	end)
+
 	return part
 end
 
@@ -233,23 +316,34 @@ local function getNearestRat(position: Vector3, maxRange: number): Model?
 	return nearest
 end
 
+local function getTurretStatsForPart(part: BasePart): (number, number, number)
+	local level = part:GetAttribute("BuildingLevel") or 1
+	local stats = getUpgradeStats("Turret", level)
+	if stats ~= nil then
+		return stats.damage, stats.range, stats.fireInterval
+	end
+	return Constants.BUILDING.TurretDamage, Constants.BUILDING.TurretRange, Constants.BUILDING.TurretFireInterval
+end
+
 local function activateBuildingBehavior(part: BasePart, buildingType: BuildingType)
 	local existing = activeBuildingTasks[part]
 	if existing ~= nil then
-		return
+		task.cancel(existing)
+		activeBuildingTasks[part] = nil
 	end
 
 	if buildingType == "Turret" then
 		activeBuildingTasks[part] = task.spawn(function()
 			while part.Parent ~= nil do
-				task.wait(Constants.BUILDING.TurretFireInterval)
-				local targetRat = getNearestRat(part.Position, Constants.BUILDING.TurretRange)
+				local damage, range, fireInterval = getTurretStatsForPart(part)
+				task.wait(fireInterval)
+				local targetRat = getNearestRat(part.Position, range)
 				if targetRat ~= nil then
 					local humanoid = targetRat:FindFirstChildOfClass("Humanoid")
 					local root = targetRat.PrimaryPart
 					if humanoid ~= nil and root ~= nil and humanoid.Health > 0 then
 						signalTurretFire(part, root.Position)
-						humanoid:TakeDamage(Constants.BUILDING.TurretDamage)
+						humanoid:TakeDamage(damage)
 						local aggroVal = targetRat:FindFirstChild("AggroTarget")
 						if aggroVal == nil then
 							aggroVal = Instance.new("ObjectValue")
@@ -278,6 +372,43 @@ local function activateBuildingBehavior(part: BasePart, buildingType: BuildingTy
 			activeBuildingTasks[part] = nil
 		end
 	end)
+end
+
+upgradeBuilding = function(player: Player, part: BasePart)
+	if part.Parent == nil then
+		return
+	end
+
+	local buildingType = part:GetAttribute("BuildingType")
+	local currentLevel = part:GetAttribute("BuildingLevel") or 1
+	if typeof(buildingType) ~= "string" then
+		return
+	end
+
+	local nextLevel = currentLevel + 1
+	local maxLevel = getMaxUnlockedLevel()
+	if nextLevel > maxLevel or nextLevel > Constants.BUILDING.MaxLevel then
+		return
+	end
+
+	local stats = getUpgradeStats(buildingType, nextLevel)
+	if stats == nil then
+		return
+	end
+
+	if not EconomyService.DeductScrap(stats.cost) then
+		return
+	end
+
+	part:SetAttribute("BuildingLevel", nextLevel)
+	part:SetAttribute("BuildingHP", stats.hp)
+
+	if buildingType == "Turret" then
+		activateBuildingBehavior(part, "Turret")
+	end
+
+	refreshUpgradePrompt(part)
+	remotes.BuildingUpgraded:FireAllClients(part, nextLevel, buildingType)
 end
 
 local function positionSlotKey(position: Vector3): string
@@ -426,6 +557,14 @@ end
 
 function BuildingService.GetBuildingsLost(): number
 	return buildingsLostCount
+end
+
+function BuildingService.RefreshAllUpgradePrompts()
+	for part in finishedBuildings do
+		if part.Parent ~= nil then
+			refreshUpgradePrompt(part)
+		end
+	end
 end
 
 local function cancelBlueprint(player: Player, blueprintId: string)
