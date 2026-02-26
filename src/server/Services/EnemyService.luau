@@ -1,11 +1,15 @@
 --!strict
 
 local Players = game:GetService("Players")
+local PhysicsService = game:GetService("PhysicsService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local PathfindingService = game:GetService("PathfindingService")
 local CollectionService = game:GetService("CollectionService")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
+
+local COLLISION_GROUP_PLAYERS = "Players"
+local COLLISION_GROUP_LOOT_DROPS = "LootDrops"
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Constants = require(Shared:WaitForChild("Constants"))
@@ -52,6 +56,10 @@ local ratStates: { [Model]: RatState } = {}
 local activeRatCaches: { BasePart } = {}
 local pickedRatCaches: { [BasePart]: boolean } = {}
 local ratCacheValues: { [BasePart]: number } = {}
+-- Intent-based pickup: only award scrap after touch or radius-entry when LootPickupRequireIntent is true.
+local bundleHasIntent: { [BasePart]: boolean } = {}
+local playersInRadiusLastTick: { [BasePart]: { [Player]: true } } = {}
+local bundleTouchConnections: { [BasePart]: RBXScriptConnection } = {}
 type PowerUpType = "Lightning" | "Shockwave" | "RepairAura" | "TitanPush" | "LootVacuum"
 local activePowerUps: { BasePart } = {}
 local pickedPowerUps: { [BasePart]: boolean } = {}
@@ -70,6 +78,17 @@ local RAT_POOL_INITIAL = 30
 local ratCachePool: { BasePart } = {}
 local RAT_CACHE_POOL_INITIAL = 50
 local POOL_HIDE_POS = Vector3.new(0, -500, 0)
+
+local function initCollisionGroups()
+	pcall(function()
+		PhysicsService:RegisterCollisionGroup(COLLISION_GROUP_PLAYERS)
+	end)
+	pcall(function()
+		PhysicsService:RegisterCollisionGroup(COLLISION_GROUP_LOOT_DROPS)
+	end)
+	PhysicsService:CollisionGroupSetCollidable(COLLISION_GROUP_PLAYERS, COLLISION_GROUP_LOOT_DROPS, false)
+	PhysicsService:CollisionGroupSetCollidable(COLLISION_GROUP_LOOT_DROPS, "Default", true)
+end
 
 local function publishNextWaveTimer(secondsRemaining: number)
 	local remaining = math.max(0, math.floor(secondsRemaining + 0.5))
@@ -119,6 +138,7 @@ local function createRatCachePart(): BasePart
 	bundle.Color = VisualManifest.Loot.RatCache.color
 	bundle.Anchored = true
 	bundle.CanCollide = true
+	bundle.CollisionGroup = COLLISION_GROUP_LOOT_DROPS
 	bundle.CFrame = CFrame.new(POOL_HIDE_POS)
 
 	local cogA = Instance.new("Part")
@@ -161,19 +181,64 @@ local function returnRatCacheToPool(cachePart: BasePart)
 	if cachePart:GetAttribute("MagnetTarget") ~= nil then
 		cachePart:SetAttribute("MagnetTarget", nil)
 	end
+	local conn = bundleTouchConnections[cachePart]
+	if conn ~= nil then
+		conn:Disconnect()
+		bundleTouchConnections[cachePart] = nil
+	end
+	bundleHasIntent[cachePart] = nil
+	playersInRadiusLastTick[cachePart] = nil
 	cachePart.Parent = nil
 	table.insert(ratCachePool, cachePart)
+end
+
+local function isBundleArmed(cache: BasePart): boolean
+	local spawnedAt = cache:GetAttribute("SpawnedAt")
+	if typeof(spawnedAt) ~= "number" then
+		return true
+	end
+	return (os.clock() - (spawnedAt :: number)) >= Constants.LOOT.LootPickupArmDelaySeconds
+end
+
+local function getPlayerFromTouch(other: BasePart): Player?
+	local character = other:FindFirstAncestorOfClass("Model")
+	if character == nil or not character:IsA("Model") then
+		return nil
+	end
+	if character:FindFirstChildOfClass("Humanoid") == nil then
+		return nil
+	end
+	for _, player in Players:GetPlayers() do
+		if player.Character == character then
+			return player
+		end
+	end
+	return nil
 end
 
 local function spawnCollectableBundle(atPosition: Vector3, scrapValue: number): BasePart
 	local bundle = acquireRatCache()
 	bundle.Anchored = false
-	bundle.CanCollide = false
+	bundle.CanCollide = true
 	bundle.CFrame = CFrame.new(atPosition + Vector3.new(0, 2, 0))
 	bundle:SetAttribute("MagnetTarget", nil)
 	bundle:SetAttribute("InstantPickup", nil)
 	bundle:SetAttribute("CriticalHarvest", nil)
+	bundle:SetAttribute("SpawnedAt", os.clock())
 	bundle.Parent = Workspace
+
+	bundleHasIntent[bundle] = false
+	playersInRadiusLastTick[bundle] = {}
+	local conn = bundle.Touched:Connect(function(other: BasePart)
+		if bundle.Parent == nil or pickedRatCaches[bundle] then
+			return
+		end
+		local player = getPlayerFromTouch(other)
+		if player ~= nil then
+			bundleHasIntent[bundle] = true
+		end
+	end)
+	bundleTouchConnections[bundle] = conn
 
 	table.insert(activeRatCaches, bundle)
 	ratCacheValues[bundle] = scrapValue
@@ -184,6 +249,13 @@ local function spawnCollectableBundle(atPosition: Vector3, scrapValue: number): 
 		end
 		pickedRatCaches[bundle] = nil
 		ratCacheValues[bundle] = nil
+		bundleHasIntent[bundle] = nil
+		playersInRadiusLastTick[bundle] = nil
+		local conn = bundleTouchConnections[bundle]
+		if conn ~= nil then
+			conn:Disconnect()
+			bundleTouchConnections[bundle] = nil
+		end
 	end)
 
 	return bundle
@@ -200,6 +272,13 @@ local function spawnRatCacheDrops(atPosition: Vector3, dropCount: number, scrapP
 end
 
 local function triggerDrillBonusShower()
+	local cfg = Constants.DRILL_SWARM_BONUS
+	local mult = typeof(cfg.CountMultiplier) == "number" and (cfg.CountMultiplier :: number) or 2
+	local velYMin = typeof(cfg.VelocityYMin) == "number" and (cfg.VelocityYMin :: number) or 52
+	local velYMax = typeof(cfg.VelocityYMax) == "number" and (cfg.VelocityYMax :: number) or 76
+	local offYMin = typeof(cfg.SpawnOffsetYMin) == "number" and (cfg.SpawnOffsetYMin :: number) or 6
+	local offYMax = typeof(cfg.SpawnOffsetYMax) == "number" and (cfg.SpawnOffsetYMax :: number) or 12
+
 	local drillPositions: { Vector3 } = {}
 	for _, instance in CollectionService:GetTagged("Drill") do
 		if not instance:IsA("BasePart") or instance.Parent == nil then
@@ -207,17 +286,18 @@ local function triggerDrillBonusShower()
 		end
 		table.insert(drillPositions, instance.Position)
 
-		local dropCount = math.random(Constants.DRILL_SWARM_BONUS.MinBlocks, Constants.DRILL_SWARM_BONUS.MaxBlocks)
+		local baseCount = math.random(cfg.MinBlocks, cfg.MaxBlocks)
+		local dropCount = math.max(1, math.floor(baseCount * mult))
 		for i = 1, dropCount do
 			task.delay((i - 1) * 0.02, function()
 				if instance.Parent == nil then
 					return
 				end
-				local offset = Vector3.new(math.random(-4, 4), math.random(4, 8), math.random(-4, 4))
-				local bundle = spawnCollectableBundle(instance.Position + offset, Constants.DRILL_SWARM_BONUS.BlockValue)
+				local offset = Vector3.new(math.random(-4, 4), math.random(offYMin, offYMax), math.random(-4, 4))
+				local bundle = spawnCollectableBundle(instance.Position + offset, cfg.BlockValue)
 				bundle.AssemblyLinearVelocity = Vector3.new(
 					math.random(-20, 20),
-					math.random(36, 52),
+					math.random(velYMin, velYMax),
 					math.random(-20, 20)
 				)
 			end)
@@ -392,6 +472,9 @@ local function executePowerUp(player: Player, powerUpType: PowerUpType): { Vecto
 		local origin = playerRoot.Position
 		for _, cache in activeRatCaches do
 			if cache.Parent == nil or pickedRatCaches[cache] then
+				continue
+			end
+			if not isBundleArmed(cache) then
 				continue
 			end
 			if (cache.Position - origin).Magnitude <= radius then
@@ -1452,7 +1535,36 @@ collectRatCache = function(cachePart: BasePart)
 	end
 end
 
+local function assignCharacterToPlayersGroup(character: Model)
+	for _, desc in character:GetDescendants() do
+		if desc:IsA("BasePart") then
+			desc.CollisionGroup = COLLISION_GROUP_PLAYERS
+		end
+	end
+	character.DescendantAdded:Connect(function(desc)
+		if desc:IsA("BasePart") then
+			desc.CollisionGroup = COLLISION_GROUP_PLAYERS
+		end
+	end)
+end
+
 function EnemyService.Init(): ()
+	initCollisionGroups()
+
+	local function wirePlayerCollisionGroup(player: Player)
+		if player.Character then
+			assignCharacterToPlayersGroup(player.Character)
+		end
+		player.CharacterAdded:Connect(function(character)
+			assignCharacterToPlayersGroup(character)
+		end)
+	end
+
+	for _, player in Players:GetPlayers() do
+		wirePlayerCollisionGroup(player)
+	end
+	Players.PlayerAdded:Connect(wirePlayerCollisionGroup)
+
 	for _ = 1, RAT_CACHE_POOL_INITIAL do
 		table.insert(ratCachePool, createRatCachePart())
 	end
@@ -1659,15 +1771,24 @@ function EnemyService.Init(): ()
 		local alive: { BasePart } = {}
 		local collectedThisTick = 0
 
+		local requireIntent = (typeof(Constants.LOOT.LootPickupRequireIntent) == "boolean" and Constants.LOOT.LootPickupRequireIntent) or false
+
 		for _, cache in activeRatCaches do
 			if cache.Parent == nil or pickedRatCaches[cache] then
 				pickedRatCaches[cache] = nil
 				ratCacheValues[cache] = nil
+				bundleHasIntent[cache] = nil
+				playersInRadiusLastTick[cache] = nil
+				continue
+			end
+			if not isBundleArmed(cache) then
+				table.insert(alive, cache)
 				continue
 			end
 
 			local nearestPlayer: Player? = nil
 			local nearestDist = magnetRadius + 1
+			local playersInRadiusNow: { [Player]: true } = {}
 
 			for _, player in Players:GetPlayers() do
 				local character = player.Character
@@ -1679,13 +1800,31 @@ function EnemyService.Init(): ()
 					continue
 				end
 				local pDist = (root.Position - cache.Position).Magnitude
+				if pDist <= magnetRadius then
+					playersInRadiusNow[player] = true
+				end
 				if pDist < nearestDist then
 					nearestDist = pDist
 					nearestPlayer = player
 				end
 			end
 
-			if nearestPlayer ~= nil and nearestDist <= magnetRadius then
+			-- Radius-entry: if requireIntent, set intent when a player enters radius (was not in radius last tick).
+			if requireIntent then
+				local lastTick = playersInRadiusLastTick[cache] or {}
+				for player, _ in playersInRadiusNow do
+					if lastTick[player] ~= true then
+						bundleHasIntent[cache] = true
+						break
+					end
+				end
+			end
+			playersInRadiusLastTick[cache] = playersInRadiusNow
+
+			local mayCollect = (nearestPlayer ~= nil and nearestDist <= magnetRadius)
+				and (not requireIntent or bundleHasIntent[cache] == true)
+
+			if mayCollect then
 				if collectedThisTick >= RATCACHE_MAX_COLLECTS_PER_TICK then
 					table.insert(alive, cache)
 					continue

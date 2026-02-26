@@ -146,12 +146,22 @@ local Constants = {
 		RatCacheBonusMax = 5,
 		CriticalHarvestChance = 0.12,
 		CriticalHarvestMultiplier = 3,
+		-- Time after spawn before dropped loot (rat/driller) can be picked up; prevents instant grant when player is on top of spawn.
+		LootPickupArmDelaySeconds = 0.8,
+		-- If true, scrap is only awarded after player touch or newly entering pickup radius (no passive auto-credit for already-nearby players).
+		LootPickupRequireIntent = true,
 	},
 
 	DRILL_SWARM_BONUS = {
 		MinBlocks = 20,
 		MaxBlocks = 40,
+		CountMultiplier = 2,
 		BlockValue = 1,
+		-- Higher launch: vertical velocity and spawn offset (shoot scraps higher).
+		VelocityYMin = 52,
+		VelocityYMax = 76,
+		SpawnOffsetYMin = 6,
+		SpawnOffsetYMax = 12,
 	},
 
 	POWERUPS = {
