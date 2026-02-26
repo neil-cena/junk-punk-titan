@@ -468,12 +468,12 @@ local function playBuildFlash(position: Vector3)
 	ring.Color = VisualManifest.VFX.BuildFlashColor
 	ring.Anchored = true
 	ring.CanCollide = false
-	ring.Size = Vector3.new(0.3, 5, 5)
+	ring.Size = Vector3.new(0.3, 7.5, 7.5)
 	ring.CFrame = CFrame.new(position + Vector3.new(0, 0.2, 0)) * CFrame.Angles(math.rad(90), 0, 0)
 	ring.Parent = Workspace
 
 	local expandTween = TweenService:Create(ring, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-		Size = Vector3.new(0.3, 16, 16),
+		Size = Vector3.new(0.3, 24, 24),
 		Transparency = 1,
 	})
 	expandTween:Play()
@@ -500,6 +500,27 @@ local function playBuildFlash(position: Vector3)
 	buildSound.Ended:Connect(function()
 		if buildSound.Parent ~= nil then
 			buildSound:Destroy()
+		end
+	end)
+
+	local burst = Instance.new("Part")
+	burst.Name = "BuildFlashBurst"
+	burst.Shape = Enum.PartType.Ball
+	burst.Material = Enum.Material.Neon
+	burst.Color = VisualManifest.VFX.BuildFlashColor
+	burst.Anchored = true
+	burst.CanCollide = false
+	burst.Size = Vector3.new(1.2, 1.2, 1.2)
+	burst.Position = position + Vector3.new(0, 1.4, 0)
+	burst.Transparency = 0.25
+	burst.Parent = Workspace
+	TweenService:Create(burst, TweenInfo.new(0.28, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		Size = Vector3.new(4.5, 4.5, 4.5),
+		Transparency = 1,
+	}):Play()
+	task.delay(0.32, function()
+		if burst.Parent ~= nil then
+			burst:Destroy()
 		end
 	end)
 end
@@ -1116,13 +1137,13 @@ local function playUpgradeVFX(buildingPart: BasePart, newLevel: number, building
 	flash.Color = VisualManifest.Buildings.UpgradeFlashColor
 	flash.Anchored = true
 	flash.CanCollide = false
-	flash.Size = Vector3.new(2, 2, 2)
+	flash.Size = Vector3.new(3, 3, 3)
 	flash.Position = buildingPart.Position
 	flash.Transparency = 0.3
 	flash.Parent = Workspace
 
 	TweenService:Create(flash, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-		Size = Vector3.new(12, 12, 12),
+		Size = Vector3.new(18, 18, 18),
 		Transparency = 1,
 	}):Play()
 

@@ -11,6 +11,7 @@ local LocalPlayer = Players.LocalPlayer
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Platform = require(Shared:WaitForChild("Platform"))
 local Remotes = require(Shared:WaitForChild("Remotes"))
+local Constants = require(Shared:WaitForChild("Constants"))
 
 local BlueprintController = require(script.Parent.Parent:WaitForChild("Controllers"):WaitForChild("BlueprintController"))
 local ToolController = require(script.Parent.Parent:WaitForChild("Controllers"):WaitForChild("ToolController"))
@@ -37,12 +38,32 @@ local removeButton: TextButton? = nil
 local upgradeButton: TextButton? = nil
 local gridModeButton: TextButton? = nil
 local shiftLockButton: ImageButton? = nil
+local buildHoldFill: Frame? = nil
+local upgradeHoldFill: Frame? = nil
 local activeSlotName: string? = nil
 local SLOT_BASE_SIZE = UDim2.fromOffset(44, 44)
 local SLOT_ACTIVE_SIZE = UDim2.fromOffset(48, 48)
 local SHIFT_LOCK_OFF_ICON = "rbxasset://textures/ui/mouseLock_off@2x.png"
 local SHIFT_LOCK_ON_ICON = "rbxasset://textures/ui/mouseLock_on@2x.png"
 local trackedPromptParts: { [BasePart]: true } = {}
+local buttonShakes: { [GuiObject]: boolean } = {}
+local buildCosts: { [string]: number } = {}
+local currentScrap = 0
+local currentUpgradePrompt: ProximityPrompt? = nil
+local currentUpgradeCost: number? = nil
+local currentBuildCost: number? = nil
+local canBuild = false
+local canUpgrade = false
+local upgradeHoldPrompt: ProximityPrompt? = nil
+local upgradeHoldStart = 0
+local upgradeHoldDuration = 1
+local lastBuildCostRefresh = -math.huge
+local BUILD_BUTTON_COLOR = Theme.Colors.Good
+local UPGRADE_BUTTON_COLOR = Theme.Colors.Accent
+local DISABLED_BUTTON_COLOR = Theme.Colors.ToolUnequipped
+local BUTTON_DISABLED_TEXT_ALPHA = 0.35
+local BUILD_INTERACT_RANGE = 16
+local UPGRADE_INTERACT_RANGE = 14
 
 local function makeButton(
 	parent: Instance,
@@ -125,6 +146,131 @@ local function updateShiftLockButtonVisual()
 	local rotationType = userGameSettings.RotationType
 	local enabled = rotationType == Enum.RotationType.CameraRelative
 	shiftLockButton.Image = if enabled then SHIFT_LOCK_ON_ICON else SHIFT_LOCK_OFF_ICON
+end
+
+local function shakeButton(button: GuiObject)
+	if buttonShakes[button] then
+		return
+	end
+	buttonShakes[button] = true
+	task.spawn(function()
+		local sequence = { -8, 7, -6, 5, -3, 2, 0 }
+		for _, rot in sequence do
+			if button.Parent == nil then
+				break
+			end
+			(button :: any).Rotation = rot
+			task.wait(0.03)
+		end
+		(button :: any).Rotation = 0
+		buttonShakes[button] = nil
+	end)
+end
+
+local function setActionButtonState(button: TextButton?, enabled: boolean, enabledColor: Color3)
+	if button == nil then
+		return
+	end
+	button.AutoButtonColor = enabled
+	button.BackgroundColor3 = if enabled then enabledColor else DISABLED_BUTTON_COLOR
+	button.TextTransparency = if enabled then 0 else BUTTON_DISABLED_TEXT_ALPHA
+end
+
+local function parseUpgradeCost(prompt: ProximityPrompt?): number?
+	if prompt == nil then
+		return nil
+	end
+	local actionText = prompt.ActionText
+	local raw = string.match(actionText, "%$([0-9]+)")
+	if raw == nil then
+		return nil
+	end
+	return tonumber(raw)
+end
+
+local function getBuildCostForBlueprint(blueprint: BasePart?): number?
+	if blueprint == nil then
+		return nil
+	end
+	local buildType = blueprint:GetAttribute("BlueprintBuildingType")
+	if typeof(buildType) ~= "string" then
+		return nil
+	end
+	return buildCosts[buildType]
+end
+
+local function refreshBuildCosts(force: boolean?)
+	local now = os.clock()
+	if not force and (now - lastBuildCostRefresh) < 0.8 then
+		return
+	end
+	lastBuildCostRefresh = now
+	local ok, response = pcall(function()
+		return remotes.RequestBuildCosts:InvokeServer()
+	end)
+	if not ok or type(response) ~= "table" then
+		return
+	end
+	for buildType, cost in response do
+		if type(buildType) == "string" and type(cost) == "number" then
+			buildCosts[buildType] = math.floor(cost + 0.5)
+		end
+	end
+end
+
+local function beginUpgradeHold(prompt: ProximityPrompt)
+	upgradeHoldPrompt = prompt
+	upgradeHoldStart = os.clock()
+	upgradeHoldDuration = math.max(0.05, prompt.HoldDuration)
+	if upgradeHoldFill ~= nil then
+		upgradeHoldFill.Size = UDim2.fromScale(0, 1)
+		upgradeHoldFill.Visible = true
+	end
+end
+
+local function clearUpgradeHold()
+	upgradeHoldPrompt = nil
+	if upgradeHoldFill ~= nil then
+		upgradeHoldFill.Visible = false
+		upgradeHoldFill.Size = UDim2.fromScale(0, 1)
+	end
+end
+
+local function isPromptInRange(prompt: ProximityPrompt, range: number): boolean
+	local root = getRootPart()
+	local parent = prompt.Parent
+	if root == nil or parent == nil or not parent:IsA("BasePart") then
+		return false
+	end
+	return (parent.Position - root.Position).Magnitude <= range + 0.5
+end
+
+local function createHoldBar(parentButton: TextButton, fillColor: Color3): Frame
+	local track = Instance.new("Frame")
+	track.Name = "HoldTrack"
+	track.AnchorPoint = Vector2.new(0.5, 1)
+	track.Position = UDim2.new(0.5, 0, 1, -2)
+	track.Size = UDim2.new(1, -8, 0, 5)
+	track.BackgroundColor3 = Theme.Colors.Panel
+	track.BackgroundTransparency = 0.25
+	track.Visible = false
+	track.ZIndex = parentButton.ZIndex + 1
+	track.Parent = parentButton
+	local trackCorner = Instance.new("UICorner")
+	trackCorner.CornerRadius = UDim.new(0, 4)
+	trackCorner.Parent = track
+
+	local fill = Instance.new("Frame")
+	fill.Name = "Fill"
+	fill.Size = UDim2.fromScale(0, 1)
+	fill.BackgroundColor3 = fillColor
+	fill.BorderSizePixel = 0
+	fill.ZIndex = track.ZIndex + 1
+	fill.Parent = track
+	local fillCorner = Instance.new("UICorner")
+	fillCorner.CornerRadius = UDim.new(0, 4)
+	fillCorner.Parent = fill
+	return fill
 end
 
 local function updateGridModeText()
@@ -349,9 +495,13 @@ local function createUI(parentGui: ScreenGui)
 	buildButton = makeButton(actionFrame, "BuildButton", "BUILD", UDim2.fromOffset(80, 40), UDim2.fromOffset(0, 0), Theme.Colors.Good)
 	buildButton.TextColor3 = Theme.Colors.Panel
 	buildButton.TextScaled = false
-	buildButton.TextSize = 12
+	buildButton.TextSize = 11
 	buildButton.InputBegan:Connect(function(input: InputObject)
 		if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+			if not canBuild then
+				shakeButton(buildButton)
+				return
+			end
 			BlueprintController.StartInteractHold()
 		end
 	end)
@@ -360,6 +510,7 @@ local function createUI(parentGui: ScreenGui)
 			BlueprintController.EndInteractHold()
 		end
 	end)
+	buildHoldFill = createHoldBar(buildButton, Theme.Colors.BuildProgressFill)
 
 	removeButton = makeButton(actionFrame, "RemoveButton", "DEL", UDim2.fromOffset(40, 40), UDim2.fromOffset(0, 0))
 	removeButton.TextScaled = false
@@ -368,19 +519,26 @@ local function createUI(parentGui: ScreenGui)
 		BlueprintController.CancelNearestBlueprint()
 	end)
 
-	upgradeButton = makeButton(actionFrame, "UpgradeButton", "UP", UDim2.fromOffset(40, 40), UDim2.fromOffset(0, 0))
+	upgradeButton = makeButton(actionFrame, "UpgradeButton", "UPGRADE", UDim2.fromOffset(80, 40), UDim2.fromOffset(0, 0), UPGRADE_BUTTON_COLOR)
 	upgradeButton.TextScaled = false
-	upgradeButton.TextSize = 12
-	upgradeButton.MouseButton1Click:Connect(function()
-		local prompt = getNearestUpgradePrompt(14)
-		if prompt == nil then
+	upgradeButton.TextSize = 10
+	upgradeButton.TextColor3 = Theme.Colors.Panel
+	upgradeButton.InputBegan:Connect(function(input: InputObject)
+		if input.UserInputType ~= Enum.UserInputType.Touch and input.UserInputType ~= Enum.UserInputType.MouseButton1 then
 			return
 		end
-		local buildingPart = prompt.Parent
-		if buildingPart ~= nil and buildingPart:IsA("BasePart") then
-			remotes.RequestUpgrade:FireServer(buildingPart)
+		if not canUpgrade or currentUpgradePrompt == nil then
+			shakeButton(upgradeButton)
+			return
+		end
+		beginUpgradeHold(currentUpgradePrompt)
+	end)
+	upgradeButton.InputEnded:Connect(function(input: InputObject)
+		if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+			clearUpgradeHold()
 		end
 	end)
+	upgradeHoldFill = createHoldBar(upgradeButton, Theme.Colors.Accent)
 
 	gridModeButton = makeButton(actionFrame, "GridModeButton", "[x] GRID", UDim2.fromOffset(40, 40), UDim2.fromOffset(0, 0))
 	gridModeButton.TextScaled = false
@@ -393,7 +551,7 @@ local function createUI(parentGui: ScreenGui)
 	shiftLockButton = Instance.new("ImageButton")
 	shiftLockButton.Name = "ShiftLockButton"
 	shiftLockButton.AnchorPoint = Vector2.new(1, 1)
-	shiftLockButton.Position = UDim2.new(1, -60, 1, -12)
+	shiftLockButton.Position = UDim2.new(1, -4, 1, -4)
 	shiftLockButton.Size = UDim2.fromOffset(36, 36)
 	shiftLockButton.BackgroundColor3 = Theme.Colors.PanelAlt
 	shiftLockButton.BackgroundTransparency = 0.1
@@ -444,6 +602,36 @@ function MobileControls.Init()
 	local playerGui = LocalPlayer:WaitForChild("PlayerGui") :: PlayerGui
 	rootGui = playerGui:WaitForChild("MainHUDGui") :: ScreenGui
 	createUI(rootGui)
+	refreshBuildCosts(true)
+
+	local economyOk, economyState = pcall(function()
+		return remotes.RequestEconomyState:InvokeServer()
+	end)
+	if economyOk and type(economyState) == "table" and type(economyState.scrap) == "number" then
+		currentScrap = economyState.scrap
+	end
+
+	BlueprintController.ConnectBuildProgress(function(progress: number)
+		if buildHoldFill == nil then
+			return
+		end
+		local visible = progress > 0
+		local track = buildHoldFill.Parent
+		if track ~= nil and track:IsA("Frame") then
+			track.Visible = visible
+		end
+		buildHoldFill.Size = UDim2.fromScale(math.clamp(progress, 0, 1), 1)
+	end)
+
+	remotes.ScrapUpdated.OnClientEvent:Connect(function(newScrap: number)
+		currentScrap = newScrap
+	end)
+	remotes.BlueprintFinished.OnClientEvent:Connect(function()
+		refreshBuildCosts(true)
+	end)
+	remotes.BuildingUpgraded.OnClientEvent:Connect(function()
+		refreshBuildCosts(true)
+	end)
 
 	for _, tagged in CollectionService:GetTagged("DismantlableBuilding") do
 		if tagged:IsA("BasePart") and trackedPromptParts[tagged] ~= true then
@@ -465,10 +653,19 @@ function MobileControls.Init()
 
 		local mode = BlueprintController.GetMode()
 		local placing = mode == "Placing"
-		local nearestBlueprint, nearestBlueprintDist = getNearestBlueprintDistance(16)
-		local nearestUpgradePrompt, nearestUpgradeDist = getNearestUpgradePrompt(14)
+		local nearestBlueprint, nearestBlueprintDist = getNearestBlueprintDistance(BUILD_INTERACT_RANGE)
+		local nearestUpgradePrompt, nearestUpgradeDist = getNearestUpgradePrompt(UPGRADE_INTERACT_RANGE)
 		local showBuildActions = not placing and nearestBlueprint ~= nil and nearestBlueprintDist <= nearestUpgradeDist
 		local showUpgradeAction = not placing and nearestUpgradePrompt ~= nil and not showBuildActions
+		currentUpgradePrompt = if showUpgradeAction then nearestUpgradePrompt else nil
+		currentBuildCost = if showBuildActions then getBuildCostForBlueprint(nearestBlueprint) else nil
+		currentUpgradeCost = if showUpgradeAction then parseUpgradeCost(currentUpgradePrompt) else nil
+		canBuild = currentBuildCost ~= nil and currentScrap >= (currentBuildCost :: number)
+		canUpgrade = currentUpgradeCost ~= nil and currentScrap >= (currentUpgradeCost :: number)
+
+		if (os.clock() - lastBuildCostRefresh) > 2.5 then
+			refreshBuildCosts(false)
+		end
 
 		if placeButton ~= nil then
 			placeButton.Visible = placing
@@ -481,15 +678,45 @@ function MobileControls.Init()
 		end
 		if buildButton ~= nil then
 			buildButton.Visible = showBuildActions
+			local buildCostText = if currentBuildCost ~= nil then ("$%d"):format(currentBuildCost :: number) else "$?"
+			buildButton.Text = ("BUILD\n%s"):format(buildCostText)
+			setActionButtonState(buildButton, canBuild, BUILD_BUTTON_COLOR)
 		end
 		if removeButton ~= nil then
 			removeButton.Visible = showBuildActions
 		end
 		if upgradeButton ~= nil then
 			upgradeButton.Visible = showUpgradeAction
+			local upgradeCostText = if currentUpgradeCost ~= nil then ("$%d"):format(currentUpgradeCost :: number) else "$?"
+			upgradeButton.Text = ("UPGRADE\n%s"):format(upgradeCostText)
+			setActionButtonState(upgradeButton, canUpgrade, UPGRADE_BUTTON_COLOR)
 		end
 		if gridModeButton ~= nil then
 			gridModeButton.Visible = placing
+		end
+
+		if upgradeHoldPrompt ~= nil then
+			local prompt = upgradeHoldPrompt :: ProximityPrompt
+			local validPrompt = prompt.Parent ~= nil and prompt.Enabled and isPromptInRange(prompt, UPGRADE_INTERACT_RANGE)
+			if not validPrompt or not showUpgradeAction or prompt ~= currentUpgradePrompt or not canUpgrade then
+				clearUpgradeHold()
+			else
+				local progress = math.clamp((os.clock() - upgradeHoldStart) / upgradeHoldDuration, 0, 1)
+				if upgradeHoldFill ~= nil then
+					local track = upgradeHoldFill.Parent
+					if track ~= nil and track:IsA("Frame") then
+						track.Visible = true
+					end
+					upgradeHoldFill.Size = UDim2.fromScale(progress, 1)
+				end
+				if progress >= 1 then
+					local buildingPart = prompt.Parent
+					clearUpgradeHold()
+					if buildingPart ~= nil and buildingPart:IsA("BasePart") then
+						remotes.RequestUpgrade:FireServer(buildingPart)
+					end
+				end
+			end
 		end
 
 		updateGridModeText()

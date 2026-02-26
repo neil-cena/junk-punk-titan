@@ -66,21 +66,12 @@ local sandboxMode = false
 local currentMaxBuildLevel = 1
 local currentWaveNumber = 0
 
-local function waveSeasonText(patternIdx: number): string
-	if patternIdx == 1 then
-		return "BREATHER"
-	elseif patternIdx == 2 then
-		return "NORMAL"
-	end
-	return "SURGE"
-end
-
-local function updateWaveSeasonLabel(waveNumber: number, patternIdx: number)
+local function updateWaveSeasonLabel(waveNumber: number, _patternIdx: number)
 	currentWaveNumber = waveNumber
 	if waveSeasonLabel == nil then
 		return
 	end
-	waveSeasonLabel.Text = ("WAVE %d -- %s"):format(currentWaveNumber, waveSeasonText(patternIdx))
+	waveSeasonLabel.Text = ""
 end
 
 local SHOTGUN_TOOL_NAME = "RustyShotgun"
@@ -875,7 +866,7 @@ local function createSettingsPanel(parent: Instance)
 	local toggleBtn = Instance.new("TextButton")
 	toggleBtn.Name = "SettingsToggle"
 	toggleBtn.AnchorPoint = if isMobile then Vector2.new(1, 0) else Vector2.new(1, 1)
-	toggleBtn.Position = if isMobile then UDim2.new(1, -10, 0, 138) else UDim2.new(1, -10, 1, -10)
+	toggleBtn.Position = if isMobile then UDim2.new(1, -2, 0, 10) else UDim2.new(1, -10, 1, -10)
 	toggleBtn.Size = if isMobile then UDim2.fromOffset(24, 24) else UDim2.fromOffset(36, 36)
 	toggleBtn.BackgroundColor3 = Theme.Colors.PanelAlt
 	toggleBtn.Font = Enum.Font.GothamBold
@@ -891,7 +882,7 @@ local function createSettingsPanel(parent: Instance)
 	local panel = Instance.new("Frame")
 	panel.Name = "SettingsPanel"
 	panel.AnchorPoint = if isMobile then Vector2.new(1, 0) else Vector2.new(1, 1)
-	panel.Position = if isMobile then UDim2.new(1, -10, 0, 166) else UDim2.new(1, -10, 1, -52)
+	panel.Position = if isMobile then UDim2.new(1, -2, 0, 38) else UDim2.new(1, -10, 1, -52)
 	panel.Size = if isMobile then UDim2.new(0.35, 0, 0, 260) else UDim2.new(0.16, 0, 0, 190)
 	panel.BackgroundColor3 = Theme.Colors.Panel
 	panel.BackgroundTransparency = 0.1
@@ -1307,7 +1298,8 @@ local function createMainHUD()
 	seasonLabel.TextColor3 = Theme.Colors.TextMuted
 	seasonLabel.Font = Enum.Font.GothamBold
 	seasonLabel.TextScaled = true
-	seasonLabel.Text = "WAVE 0 -- NORMAL"
+	seasonLabel.Text = ""
+	seasonLabel.Visible = false
 	seasonLabel.Parent = gui
 	waveSeasonLabel = seasonLabel
 
@@ -1599,7 +1591,7 @@ function MainHUD.Init()
 			{
 				delay = 12,
 				text = if isMobile
-					then "Walk near a blueprint and touch-hold it to build."
+					then "Walk near a blueprint, then hold BUILD to construct it."
 					else "Walk to the Titan Core and hold [E] to deposit resources",
 			},
 			{

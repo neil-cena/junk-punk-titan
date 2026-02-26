@@ -13,6 +13,39 @@ local gameOverGui: Frame? = nil
 local victoryGui: Frame? = nil
 local finalStandBanner: TextLabel? = nil
 
+local function createActionButton(parent: Instance, text: string, position: UDim2, color: Color3, callback: () -> ())
+	local button = Instance.new("TextButton")
+	button.Size = UDim2.fromOffset(150, 42)
+	button.AnchorPoint = Vector2.new(0.5, 0)
+	button.Position = position
+	button.BackgroundColor3 = color
+	button.TextColor3 = Theme.Colors.TextPrimary
+	button.Font = Enum.Font.GothamBold
+	button.TextScaled = true
+	button.Text = text
+	button.AutoButtonColor = true
+	button.Parent = parent
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 8)
+	corner.Parent = button
+
+	button.Activated:Connect(callback)
+end
+
+local function restartSession()
+	local ok = pcall(function()
+		TeleportService:Teleport(game.PlaceId, LocalPlayer)
+	end)
+	if not ok then
+		LocalPlayer:Kick("Could not restart session.")
+	end
+end
+
+local function leaveSession()
+	LocalPlayer:Kick("Left session.")
+end
+
 local function buildStatsText(remotes: any): string
 	local ok, stats = pcall(function()
 		return remotes.RequestSessionStats:InvokeServer()
@@ -70,14 +103,8 @@ function EndScreenUI.ShowGameOver(rootGui: ScreenGui, remotes: any)
 	statsLabel.Text = buildStatsText(remotes)
 	statsLabel.Parent = overlay
 
-	task.delay(5, function()
-		local ok = pcall(function()
-			TeleportService:Teleport(game.PlaceId, LocalPlayer)
-		end)
-		if not ok then
-			LocalPlayer:Kick("Titan collapsed. Session reset.")
-		end
-	end)
+	createActionButton(overlay, "RESTART", UDim2.new(0.42, 0, 0.8, 0), Theme.Colors.Accent, restartSession)
+	createActionButton(overlay, "LEAVE", UDim2.new(0.58, 0, 0.8, 0), Theme.Colors.Bad, leaveSession)
 end
 
 function EndScreenUI.ShowVictory(rootGui: ScreenGui, remotes: any)
@@ -128,14 +155,8 @@ function EndScreenUI.ShowVictory(rootGui: ScreenGui, remotes: any)
 	statsLabel.Text = buildStatsText(remotes)
 	statsLabel.Parent = overlay
 
-	task.delay(6, function()
-		local teleOk = pcall(function()
-			TeleportService:Teleport(game.PlaceId, LocalPlayer)
-		end)
-		if not teleOk then
-			LocalPlayer:Kick("Victory! Session complete.")
-		end
-	end)
+	createActionButton(overlay, "RESTART", UDim2.new(0.42, 0, 0.8, 0), Theme.Colors.Accent, restartSession)
+	createActionButton(overlay, "LEAVE", UDim2.new(0.58, 0, 0.8, 0), Theme.Colors.Bad, leaveSession)
 end
 
 function EndScreenUI.ShowFinalStandBanner(rootGui: ScreenGui)

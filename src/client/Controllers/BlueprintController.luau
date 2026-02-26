@@ -38,7 +38,7 @@ local holdTarget: BasePart? = nil
 local holdStartTime: number = 0
 local holdDuration: number = 0
 local holdRenderConn: RBXScriptConnection? = nil
-local buildProgressCallback: ((number) -> ())? = nil
+local buildProgressCallbacks: { (number) -> () } = {}
 local activeHighlight: Highlight? = nil
 local activeSelectionBox: SelectionBox? = nil
 local highlightedBlueprint: BasePart? = nil
@@ -83,6 +83,12 @@ end
 local function stopBuildAnim()
 	if cachedBuildTrack ~= nil and cachedBuildTrack.IsPlaying then
 		cachedBuildTrack:Stop(0.15)
+	end
+end
+
+local function emitBuildProgress(progress: number)
+	for _, callback in buildProgressCallbacks do
+		callback(progress)
 	end
 end
 
@@ -348,9 +354,7 @@ local function cancelHold()
 	end
 	holdTarget = nil
 	stopBuildAnim()
-	if buildProgressCallback ~= nil then
-		buildProgressCallback(0)
-	end
+	emitBuildProgress(0)
 	if mode == "Interacting" then
 		mode = "Idle"
 	end
@@ -392,9 +396,7 @@ local function startHold(targetOverride: BasePart?)
 		local elapsed = os.clock() - holdStartTime
 		local progress = math.clamp(elapsed / holdDuration, 0, 1)
 
-		if buildProgressCallback ~= nil then
-			buildProgressCallback(progress)
-		end
+		emitBuildProgress(progress)
 
 		if progress >= 1 then
 			local bpId = holdTarget:GetAttribute("BlueprintId")
@@ -416,7 +418,15 @@ local function startHold(targetOverride: BasePart?)
 end
 
 function BlueprintController.ConnectBuildProgress(callback: (number) -> ())
-	buildProgressCallback = callback
+	table.insert(buildProgressCallbacks, callback)
+	return function()
+		for index, existing in buildProgressCallbacks do
+			if existing == callback then
+				table.remove(buildProgressCallbacks, index)
+				break
+			end
+		end
+	end
 end
 
 function BlueprintController.RotatePlacement(): boolean
