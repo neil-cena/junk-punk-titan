@@ -338,7 +338,7 @@ local function ensureBar(part: BasePart): BillboardGui
 
 	local bar = Instance.new("BillboardGui")
 	bar.Name = "DismantleBar"
-	bar.Size = UDim2.fromOffset(140, 30)
+	bar.Size = UDim2.fromOffset(80, 14)
 	bar.StudsOffset = Vector3.new(0, part.Size.Y * 0.8, 0)
 	bar.AlwaysOnTop = true
 	bar.Enabled = false

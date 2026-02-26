@@ -36,6 +36,18 @@ local holdStartTime: number = 0
 local holdDuration: number = 0
 local holdRenderConn: RBXScriptConnection? = nil
 local buildProgressCallback: ((number) -> ())? = nil
+local activeHighlight: Highlight? = nil
+local activeSelectionBox: SelectionBox? = nil
+local highlightedBlueprint: BasePart? = nil
+local highlightRenderConn: RBXScriptConnection? = nil
+local BLUEPRINT_INTERACT_RANGE = 16
+local HIGHLIGHT_PULSE_SPEED = 5
+local HIGHLIGHT_FILL_BASE = 0.35
+local HIGHLIGHT_FILL_AMPLITUDE = 0.12
+local HIGHLIGHT_OUTLINE_BASE = 0
+local HIGHLIGHT_OUTLINE_AMPLITUDE = 0.2
+local SELECTION_LINE_BASE = 0.04
+local SELECTION_LINE_AMPLITUDE = 0.03
 
 local BUILD_ANIM_ID = "rbxassetid://507768375"
 local cachedBuildTrack: AnimationTrack? = nil
@@ -68,6 +80,48 @@ end
 local function stopBuildAnim()
 	if cachedBuildTrack ~= nil and cachedBuildTrack.IsPlaying then
 		cachedBuildTrack:Stop(0.15)
+	end
+end
+
+local function setHighlightedBlueprint(target: BasePart?)
+	if activeHighlight == nil then
+		local highlight = Instance.new("Highlight")
+		highlight.Name = "NearestBlueprintHighlight"
+		highlight.FillColor = Color3.fromRGB(255, 205, 80)
+		highlight.FillTransparency = HIGHLIGHT_FILL_BASE
+		highlight.OutlineColor = Color3.fromRGB(255, 230, 120)
+		highlight.OutlineTransparency = HIGHLIGHT_OUTLINE_BASE
+		highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+		highlight.Enabled = false
+		highlight.Parent = Workspace
+		activeHighlight = highlight
+	end
+	if activeSelectionBox == nil then
+		local selection = Instance.new("SelectionBox")
+		selection.Name = "NearestBlueprintSelection"
+		selection.Color3 = Color3.fromRGB(255, 225, 120)
+		selection.SurfaceTransparency = 1
+		selection.LineThickness = SELECTION_LINE_BASE
+		selection.Visible = false
+		selection.Parent = Workspace
+		activeSelectionBox = selection
+	end
+
+	highlightedBlueprint = target
+	if activeHighlight == nil or activeSelectionBox == nil then
+		return
+	end
+
+	if target ~= nil and target.Parent ~= nil then
+		activeHighlight.Adornee = target
+		activeHighlight.Enabled = true
+		activeSelectionBox.Adornee = target
+		activeSelectionBox.Visible = true
+	else
+		activeHighlight.Adornee = nil
+		activeHighlight.Enabled = false
+		activeSelectionBox.Adornee = nil
+		activeSelectionBox.Visible = false
 	end
 end
 
@@ -168,6 +222,7 @@ function BlueprintController.StartPlacing(buildingType: BuildingType)
 
 	mode = "Placing"
 	currentType = buildingType
+	setHighlightedBlueprint(nil)
 
 	local ghost = Instance.new("Part")
 	ghost.Name = "LocalPlacementGhost"
@@ -251,7 +306,7 @@ local function cancelHold()
 end
 
 local function startHold()
-	local nearest = getNearestBlueprint(12)
+	local nearest = getNearestBlueprint(BLUEPRINT_INTERACT_RANGE)
 	if nearest == nil then
 		return
 	end
@@ -294,7 +349,7 @@ local function startHold()
 		local character = LocalPlayer.Character
 		local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
 		if root ~= nil and root:IsA("BasePart") then
-			if (root.Position - holdTarget.Position).Magnitude > 14 then
+			if (root.Position - holdTarget.Position).Magnitude > BLUEPRINT_INTERACT_RANGE + 2 then
 				cancelHold()
 			end
 		end
@@ -340,7 +395,7 @@ local function onInputBegan(input: InputObject, processed: boolean)
 			startHold()
 		end
 	elseif input.KeyCode == Enum.KeyCode.X then
-		local nearest = getNearestBlueprint(12)
+		local nearest = getNearestBlueprint(BLUEPRINT_INTERACT_RANGE)
 		if nearest ~= nil then
 			local bpId = nearest:GetAttribute("BlueprintId")
 			if typeof(bpId) == "string" then
@@ -364,6 +419,48 @@ function BlueprintController.Init()
 
 	UserInputService.InputBegan:Connect(onInputBegan)
 	UserInputService.InputEnded:Connect(onInputEnded)
+
+	highlightRenderConn = RunService.RenderStepped:Connect(function()
+		if mode == "Placing" then
+			if highlightedBlueprint ~= nil then
+				setHighlightedBlueprint(nil)
+			end
+			return
+		end
+
+		if mode == "Interacting" then
+			if holdTarget ~= nil and holdTarget.Parent ~= nil then
+				if highlightedBlueprint ~= holdTarget then
+					setHighlightedBlueprint(holdTarget)
+				end
+			elseif highlightedBlueprint ~= nil then
+				setHighlightedBlueprint(nil)
+			end
+			return
+		end
+
+		local nearest = getNearestBlueprint(BLUEPRINT_INTERACT_RANGE)
+		if nearest ~= highlightedBlueprint then
+			setHighlightedBlueprint(nearest)
+		end
+
+		if activeHighlight ~= nil and activeHighlight.Enabled then
+			local pulse = (math.sin(os.clock() * HIGHLIGHT_PULSE_SPEED) + 1) * 0.5
+			activeHighlight.FillTransparency = math.clamp(
+				HIGHLIGHT_FILL_BASE + pulse * HIGHLIGHT_FILL_AMPLITUDE,
+				0,
+				1
+			)
+			activeHighlight.OutlineTransparency = math.clamp(
+				HIGHLIGHT_OUTLINE_BASE + pulse * HIGHLIGHT_OUTLINE_AMPLITUDE,
+				0,
+				1
+			)
+			if activeSelectionBox ~= nil and activeSelectionBox.Visible then
+				activeSelectionBox.LineThickness = SELECTION_LINE_BASE + pulse * SELECTION_LINE_AMPLITUDE
+			end
+		end
+	end)
 end
 
 return BlueprintController

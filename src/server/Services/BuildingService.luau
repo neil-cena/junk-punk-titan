@@ -178,6 +178,26 @@ local function createBlueprintGhost(buildingType: BuildingType, position: Vector
 	ghost.Anchored = true
 	ghost.CanCollide = false
 	ghost.CFrame = CFrame.new(position + Vector3.new(0, ghost.Size.Y * 0.5, 0)) * CFrame.Angles(0, math.rad(rotation), 0)
+
+	local labelGui = Instance.new("BillboardGui")
+	labelGui.Name = "BlueprintLabel"
+	labelGui.Size = UDim2.fromOffset(80, 16)
+	labelGui.StudsOffset = Vector3.new(0, ghost.Size.Y * 0.7 + 1.2, 0)
+	labelGui.AlwaysOnTop = true
+	labelGui.MaxDistance = 60
+	labelGui.Parent = ghost
+
+	local label = Instance.new("TextLabel")
+	label.Name = "Name"
+	label.Size = UDim2.fromScale(1, 1)
+	label.BackgroundTransparency = 1
+	label.Font = Enum.Font.GothamBold
+	label.TextScaled = true
+	label.TextStrokeTransparency = 0.45
+	label.TextColor3 = Color3.fromRGB(240, 225, 160)
+	label.Text = string.upper(buildingType)
+	label.Parent = labelGui
+
 	ghost.Parent = Workspace
 	CollectionService:AddTag(ghost, BLUEPRINT_TAG)
 	return ghost

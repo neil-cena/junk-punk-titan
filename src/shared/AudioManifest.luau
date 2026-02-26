@@ -4,7 +4,7 @@ return {
 	ShotgunFire = "rbxassetid://12222216",
 	EnemyDeath = "rbxassetid://12222076",
 
-	BuildPlace = "rbxassetid://12222253",
+	BuildPlace = "rbxassetid://6042053626",
 	BuildDestroy = "rbxassetid://12222084",
 
 	RepairHiss = "rbxassetid://9118823107",

@@ -139,7 +139,7 @@ local function applyStormWindDamage()
 			local nextHP = currentHP - Constants.STORM.WindDamagePerSecond
 
 			if nextHP <= 0 then
-				local destroyedPos = instance.Position
+				local destroyedPos = instance.Position - Vector3.new(0, instance.Size.Y * 0.5, 0)
 				local buildingType = instance:GetAttribute("BuildingType")
 				local rotationAttr = instance:GetAttribute("BuildingRotation")
 				local buildingRotation = if typeof(rotationAttr) == "number"

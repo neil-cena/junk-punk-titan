@@ -835,7 +835,7 @@ local function retargetRat(ratModel: Model)
 end
 
 dismantleAndDestroyBuilding = function(dismantledPart: BasePart, ratModel: Model?)
-	local finalPosition = dismantledPart.Position
+	local finalPosition = dismantledPart.Position - Vector3.new(0, dismantledPart.Size.Y * 0.5, 0)
 	local buildingType = dismantledPart:GetAttribute("BuildingType")
 	local rotationAttr = dismantledPart:GetAttribute("BuildingRotation")
 	local buildingRotation = if typeof(rotationAttr) == "number"
