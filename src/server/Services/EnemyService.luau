@@ -161,7 +161,6 @@ local function returnRatCacheToPool(cachePart: BasePart)
 	if cachePart:GetAttribute("MagnetTarget") ~= nil then
 		cachePart:SetAttribute("MagnetTarget", nil)
 	end
-	cachePart:SetAttribute("DrillShowerAt", nil)
 	cachePart.Parent = nil
 	table.insert(ratCachePool, cachePart)
 end
@@ -211,14 +210,12 @@ local function triggerDrillBonusShower()
 				if instance.Parent == nil then
 					return
 				end
-				-- Spawn above drill and shoot high so loot lands around the area; player must run to collect (no auto-add)
-				local offset = Vector3.new(math.random(-3, 3), math.random(4, 7), math.random(-3, 3))
+				local offset = Vector3.new(math.random(-2, 2), math.random(2, 4), math.random(-2, 2))
 				local bundle = spawnCollectableBundle(instance.Position + offset, Constants.DRILL_SWARM_BONUS.BlockValue)
-				bundle:SetAttribute("DrillShowerAt", os.clock())
 				bundle.AssemblyLinearVelocity = Vector3.new(
-					math.random(-14, 14),
-					math.random(38, 52),
-					math.random(-14, 14)
+					math.random(-16, 16),
+					math.random(20, 30),
+					math.random(-16, 16)
 				)
 			end)
 		end
@@ -1684,13 +1681,6 @@ function EnemyService.Init(): ()
 					nearestDist = pDist
 					nearestPlayer = player
 				end
-			end
-
-			-- Drill shower loot: not collectible for 2s so it must be picked up after landing (no auto-add)
-			local showerAt = cache:GetAttribute("DrillShowerAt")
-			if typeof(showerAt) == "number" and (os.clock() - (showerAt :: number)) < 2 then
-				table.insert(alive, cache)
-				continue
 			end
 
 			if nearestPlayer ~= nil and nearestDist <= magnetRadius then

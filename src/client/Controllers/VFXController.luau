@@ -2096,15 +2096,12 @@ function VFXController.Init()
 	waveMusic.Volume = 0
 	waveMusic.Parent = SoundService
 	waveMusic:Play()
-
 	task.delay(3, function()
-		if dayMusic ~= nil and dayMusic.Parent ~= nil and not dayMusic.IsLoaded then
-			warn("[VFXController] Day BGM failed to load; using fallback track.")
-			dayMusic.SoundId = AudioManifest.AmbientBase
-			dayMusic:Play()
+		if waveMusic == nil or waveMusic.Parent == nil then
+			return
 		end
-		if waveMusic ~= nil and waveMusic.Parent ~= nil and not waveMusic.IsLoaded then
-			warn("[VFXController] Wave BGM failed to load; using fallback track.")
+		if not waveMusic.IsLoaded then
+			warn("[VFXController] WaveCombat failed to load; using fallback track.")
 			waveMusic.SoundId = AudioManifest.AmbientBase
 			waveMusic:Play()
 		end
