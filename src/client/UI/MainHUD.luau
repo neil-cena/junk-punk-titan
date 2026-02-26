@@ -34,7 +34,9 @@ local isInitialized = false
 local currentScrap = 0
 local currentStormSteel = 0
 local lastWaveSeconds = -1
-local scrapHistory: { { t: number, v: number } } = {}
+local pickupHistory: { { t: number, v: number } } = {}
+local pickupAccumulator = 0
+local lastScrapUpdateAt = os.clock()
 local scrapLabel: TextLabel? = nil
 local stormSteelLabel: TextLabel? = nil
 local waveTimerLabel: TextLabel? = nil
@@ -200,21 +202,62 @@ local function showScrapDelta(delta: number)
 	end)
 end
 
-local function getScrapRate(): number
+local function computeDrillRate(): number
+	local total = 0
+	local baseRate = Constants.MAINTENANCE.DrillBaseOutput / Constants.MAINTENANCE.ResourceTickSeconds
+	local lv1Stats = Constants.BUILDING_UPGRADES.Drill[1]
+	for _, drill in CollectionService:GetTagged("Drill") do
+		if drill:IsA("BasePart") and drill.Parent ~= nil then
+			local isClogged = drill:GetAttribute("IsClogged")
+			if isClogged == true then
+				continue
+			end
+
+			local stabilityAttr = drill:GetAttribute("Stability")
+			local stability = if typeof(stabilityAttr) == "number" then math.clamp(stabilityAttr :: number, 0, 100) else 100
+			local efficiency = if stability >= 80 then 1 elseif stability >= 20 then 0.5 else 0
+			if efficiency <= 0 then
+				continue
+			end
+
+			local overclockMult = if drill:GetAttribute("IsOverclocked") == true
+				then Constants.MAINTENANCE.OverclockMultiplier
+				else 1
+
+			local drillLevelAttr = drill:GetAttribute("BuildingLevel")
+			local drillLevel = if typeof(drillLevelAttr) == "number" then math.floor(drillLevelAttr :: number) else 1
+			local levelStats = Constants.BUILDING_UPGRADES.Drill[drillLevel]
+			local levelMult = 1
+			if levelStats ~= nil and lv1Stats ~= nil then
+				local currentRate = levelStats.scrapPerTick / levelStats.tickInterval
+				local lv1Rate = lv1Stats.scrapPerTick / lv1Stats.tickInterval
+				if lv1Rate > 0 then
+					levelMult = currentRate / lv1Rate
+				end
+			end
+
+			total += baseRate * levelMult * efficiency * overclockMult
+		end
+	end
+
+	return total
+end
+
+local function getPickupRate(): number
 	local now = os.clock()
 	local cutoff = now - 10
 	local pruned: { { t: number, v: number } } = {}
-	for _, entry in scrapHistory do
+	for _, entry in pickupHistory do
 		if entry.t >= cutoff then
 			table.insert(pruned, entry)
 		end
 	end
-	scrapHistory = pruned
-	if #scrapHistory < 2 then
+	pickupHistory = pruned
+	if #pickupHistory < 2 then
 		return 0
 	end
-	local oldest = scrapHistory[1]
-	local newest = scrapHistory[#scrapHistory]
+	local oldest = pickupHistory[1]
+	local newest = pickupHistory[#pickupHistory]
 	local elapsed = newest.t - oldest.t
 	if elapsed < 0.5 then
 		return 0
@@ -227,25 +270,33 @@ local function refreshScrapLabel()
 		return
 	end
 
-	local rate = getScrapRate()
-	if rate > 0.1 then
-		scrapLabel.Text = ("Scrap: %d (+%.1f/s)"):format(currentScrap, rate)
-	else
-		scrapLabel.Text = ("Scrap: %d"):format(currentScrap)
-	end
+	local pickupRate = getPickupRate()
+	local drillRate = computeDrillRate()
+	local totalRate = math.max(0, pickupRate + drillRate)
+	scrapLabel.Text = ("Scrap: %d (+%.1f/s)"):format(currentScrap, totalRate)
 end
 
 local function updateScrap(newScrap: number)
 	local previous = currentScrap
+	local now = os.clock()
+	local elapsed = math.max(0, now - lastScrapUpdateAt)
+	lastScrapUpdateAt = now
+
+	local predictedDrillGain = computeDrillRate() * elapsed
 	currentScrap = newScrap
-	table.insert(scrapHistory, { t = os.clock(), v = newScrap })
+	local delta = newScrap - previous
+	local pickupDelta = 0
+	if delta > 0 then
+		pickupDelta = math.max(0, delta - predictedDrillGain)
+	end
+	pickupAccumulator += pickupDelta
+	table.insert(pickupHistory, { t = now, v = pickupAccumulator })
 
 	if scrapLabel ~= nil then
 		refreshScrapLabel()
 		animateScrapPop(scrapLabel)
 	end
 
-	local delta = newScrap - previous
 	if delta ~= 0 then
 		showScrapDelta(delta)
 	end
@@ -823,9 +874,9 @@ end
 local function createSettingsPanel(parent: Instance)
 	local toggleBtn = Instance.new("TextButton")
 	toggleBtn.Name = "SettingsToggle"
-	toggleBtn.AnchorPoint = Vector2.new(1, 1)
-	toggleBtn.Position = UDim2.new(1, -10, 1, -10)
-	toggleBtn.Size = if isMobile then UDim2.fromOffset(48, 48) else UDim2.fromOffset(36, 36)
+	toggleBtn.AnchorPoint = if isMobile then Vector2.new(1, 0) else Vector2.new(1, 1)
+	toggleBtn.Position = if isMobile then UDim2.new(1, -10, 0, 138) else UDim2.new(1, -10, 1, -10)
+	toggleBtn.Size = if isMobile then UDim2.fromOffset(24, 24) else UDim2.fromOffset(36, 36)
 	toggleBtn.BackgroundColor3 = Theme.Colors.PanelAlt
 	toggleBtn.Font = Enum.Font.GothamBold
 	toggleBtn.TextScaled = true
@@ -839,8 +890,8 @@ local function createSettingsPanel(parent: Instance)
 
 	local panel = Instance.new("Frame")
 	panel.Name = "SettingsPanel"
-	panel.AnchorPoint = Vector2.new(1, 1)
-	panel.Position = if isMobile then UDim2.new(1, -10, 1, -62) else UDim2.new(1, -10, 1, -52)
+	panel.AnchorPoint = if isMobile then Vector2.new(1, 0) else Vector2.new(1, 1)
+	panel.Position = if isMobile then UDim2.new(1, -10, 0, 166) else UDim2.new(1, -10, 1, -52)
 	panel.Size = if isMobile then UDim2.new(0.35, 0, 0, 260) else UDim2.new(0.16, 0, 0, 190)
 	panel.BackgroundColor3 = Theme.Colors.Panel
 	panel.BackgroundTransparency = 0.1
@@ -1211,7 +1262,7 @@ local function createMainHUD()
 	label.Size = UDim2.fromScale(1, 1)
 	label.BackgroundTransparency = 1
 	label.TextColor3 = Theme.Colors.Accent
-	label.TextScaled = false
+	label.TextScaled = isMobile
 	label.TextSize = if isMobile then 14 else 24
 	label.Font = Enum.Font.GothamBold
 	label.Text = "Scrap: 0"
@@ -1536,27 +1587,36 @@ function MainHUD.Init()
 			{
 				delay = 0,
 				text = if isMobile
-					then "Tap T/D/W at the bottom, drag in world, then tap PLACE."
+					then "Tap T, D, or W at the bottom to select a building."
 					else "Press [1] [2] [3] to select buildings, click to place",
 			},
 			{
-				delay = 5,
-				text = if isMobile then "Use [x] GRID to switch between grid and free placement."
+				delay = 6,
+				text = if isMobile
+					then "Blueprint appears in front of you. Turn your character, then tap PLACE."
 					else "Press [R] to rotate buildings before placing",
 			},
 			{
-				delay = 10,
+				delay = 12,
 				text = if isMobile
 					then "Walk near a blueprint and touch-hold it to build."
 					else "Walk to the Titan Core and hold [E] to deposit resources",
+			},
+			{
+				delay = 18,
+				text = "Collect scrap to build defenses and upgrade the Titan.",
+			},
+			{
+				delay = 24,
+				text = "Survive the swarms and protect the Titan core.",
 			},
 		}
 		for _, hint in hints do
 			task.delay(hint.delay, function()
 				local hintLabel = Instance.new("TextLabel")
 				hintLabel.Name = "TutorialHint"
-				hintLabel.AnchorPoint = Vector2.new(0.5, 1)
-				hintLabel.Position = UDim2.new(0.5, 0, 0.92, 0)
+				hintLabel.AnchorPoint = Vector2.new(0.5, 0)
+				hintLabel.Position = UDim2.new(0.5, 0, 0.155, 0)
 				hintLabel.Size = UDim2.new(0.35, 0, 0, 28)
 				hintLabel.BackgroundColor3 = Theme.Colors.TutorialHintBg
 				hintLabel.BackgroundTransparency = 0.2
@@ -1570,7 +1630,7 @@ function MainHUD.Init()
 				hintCorner.CornerRadius = UDim.new(0, 4)
 				hintCorner.Parent = hintLabel
 
-				task.delay(4, function()
+				task.delay(5, function()
 					if hintLabel.Parent ~= nil then
 						local fade = TweenService:Create(hintLabel, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 							TextTransparency = 1,

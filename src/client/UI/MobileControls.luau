@@ -241,20 +241,24 @@ local function createUI(parentGui: ScreenGui)
 	hotbarLayout.FillDirection = Enum.FillDirection.Horizontal
 	hotbarLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 	hotbarLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+	hotbarLayout.SortOrder = Enum.SortOrder.LayoutOrder
 	hotbarLayout.Padding = UDim.new(0, 6)
 	hotbarLayout.Parent = hotbarFrame
 
 	local turretSlot = createSlotButton(hotbarFrame, "Turret", "T")
+	turretSlot.LayoutOrder = 1
 	turretSlot.MouseButton1Click:Connect(function()
 		selectBuildSlot("Turret")
 	end)
 
 	local drillSlot = createSlotButton(hotbarFrame, "Drill", "D")
+	drillSlot.LayoutOrder = 2
 	drillSlot.MouseButton1Click:Connect(function()
 		selectBuildSlot("Drill")
 	end)
 
 	local wallSlot = createSlotButton(hotbarFrame, "Wall", "W")
+	wallSlot.LayoutOrder = 3
 	wallSlot.MouseButton1Click:Connect(function()
 		selectBuildSlot("Wall")
 	end)
@@ -263,9 +267,11 @@ local function createUI(parentGui: ScreenGui)
 	spacer.Name = "Spacer"
 	spacer.Size = UDim2.fromOffset(16, 44)
 	spacer.BackgroundTransparency = 1
+	spacer.LayoutOrder = 4
 	spacer.Parent = hotbarFrame
 
 	local toolSlot = createSlotButton(hotbarFrame, "Tool", "TOOL")
+	toolSlot.LayoutOrder = 5
 	toolSlot.MouseButton1Click:Connect(function()
 		toggleToolSlot()
 	end)

@@ -9,6 +9,7 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Constants = require(Shared:WaitForChild("Constants"))
 local VisualManifest = require(Shared:WaitForChild("VisualManifest"))
 local EconomyService = require(script.Parent:WaitForChild("EconomyService"))
+local RoleService = require(script.Parent:WaitForChild("RoleService"))
 
 local ScrapSpawnService = {}
 
@@ -59,6 +60,7 @@ end
 
 function ScrapSpawnService.Init(): ()
 	task.spawn(function()
+		RoleService.WaitForAllPlayersReady()
 		while true do
 			task.wait(Constants.SCRAP_SPAWNS.IntervalSeconds)
 			local activeCount = getActivePileCount()

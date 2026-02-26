@@ -27,6 +27,7 @@ local mode: ControllerMode = "Idle"
 local isInitialized = false
 local currentType: BuildingType? = nil
 local currentGhost: Part? = nil
+local currentGroundMarker: Part? = nil
 local renderConn: RBXScriptConnection? = nil
 local placementPosition: Vector3? = nil
 local placementValid = false
@@ -137,6 +138,10 @@ local function clearGhost()
 		currentGhost:Destroy()
 		currentGhost = nil
 	end
+	if currentGroundMarker ~= nil then
+		currentGroundMarker:Destroy()
+		currentGroundMarker = nil
+	end
 
 	placementPosition = nil
 	placementValid = false
@@ -146,29 +151,45 @@ local function clearGhost()
 end
 
 local function getPlacementResult(): (boolean, Vector3?)
-	local camera = Workspace.CurrentCamera
-	if camera == nil then
-		return false, nil
-	end
-
-	local unitRay = camera:ViewportPointToRay(Mouse.X, Mouse.Y)
-	local rayParams = RaycastParams.new()
-	rayParams.FilterType = Enum.RaycastFilterType.Exclude
-	rayParams.FilterDescendantsInstances = { LocalPlayer.Character, currentGhost }
-
-	local result = Workspace:Raycast(unitRay.Origin, unitRay.Direction * 500, rayParams)
-	if result == nil then
-		return false, nil
-	end
-
-	local placed = result.Position
-	if useGridSnap then
-		placed = Utils.SnapToGrid(placed, Constants.BUILDING.GridSize)
-	end
 	local character = LocalPlayer.Character
 	local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
 	if root == nil or not root:IsA("BasePart") then
 		return false, nil
+	end
+
+	local placed: Vector3
+	if Platform.IsMobile then
+		local look = root.CFrame.LookVector
+		local flatLook = Vector3.new(look.X, 0, look.Z)
+		local flatLookMag = flatLook.Magnitude
+		local forward = if flatLookMag > 0.001 then (flatLook / flatLookMag) else Vector3.new(0, 0, -1)
+		local rawPos = root.Position + forward * 5
+		local rayParams = RaycastParams.new()
+		rayParams.FilterType = Enum.RaycastFilterType.Exclude
+		rayParams.FilterDescendantsInstances = { LocalPlayer.Character, currentGhost, currentGroundMarker }
+		local groundOrigin = Vector3.new(rawPos.X, 300, rawPos.Z)
+		local result = Workspace:Raycast(groundOrigin, Vector3.new(0, -800, 0), rayParams)
+		local groundY = if result ~= nil then result.Position.Y else rawPos.Y - root.Size.Y * 0.5
+		placed = Vector3.new(rawPos.X, groundY, rawPos.Z)
+	else
+		local camera = Workspace.CurrentCamera
+		if camera == nil then
+			return false, nil
+		end
+
+		local unitRay = camera:ViewportPointToRay(Mouse.X, Mouse.Y)
+		local rayParams = RaycastParams.new()
+		rayParams.FilterType = Enum.RaycastFilterType.Exclude
+		rayParams.FilterDescendantsInstances = { LocalPlayer.Character, currentGhost, currentGroundMarker }
+
+		local result = Workspace:Raycast(unitRay.Origin, unitRay.Direction * 500, rayParams)
+		if result == nil then
+			return false, nil
+		end
+		placed = result.Position
+	end
+	if useGridSnap then
+		placed = Utils.SnapToGrid(placed, Constants.BUILDING.GridSize)
 	end
 
 	local maxDistance = Constants.BUILDING.PlacementMaxDistance
@@ -213,12 +234,22 @@ local function updateGhostVisual()
 	if pos ~= nil then
 		local y = currentGhost.Size.Y * 0.5
 		currentGhost.CFrame = CFrame.new(pos + Vector3.new(0, y, 0)) * CFrame.Angles(0, math.rad(currentRotation), 0)
+		if currentGroundMarker ~= nil then
+			local markerY = pos.Y + (currentGroundMarker.Size.Y * 0.5)
+			currentGroundMarker.CFrame = CFrame.new(pos.X, markerY, pos.Z) * CFrame.Angles(0, math.rad(currentRotation), 0)
+		end
 	end
 
 	if valid then
 		currentGhost.Color = VisualManifest.Tools.GhostValidColor
+		if currentGroundMarker ~= nil then
+			currentGroundMarker.Color = VisualManifest.Tools.GhostValidColor
+		end
 	else
 		currentGhost.Color = VisualManifest.Tools.GhostInvalidColor
+		if currentGroundMarker ~= nil then
+			currentGroundMarker.Color = VisualManifest.Tools.GhostInvalidColor
+		end
 	end
 end
 
@@ -232,13 +263,24 @@ function BlueprintController.StartPlacing(buildingType: BuildingType)
 	local ghost = Instance.new("Part")
 	ghost.Name = "LocalPlacementGhost"
 	ghost.Size = Constants.BUILDING.Sizes[buildingType]
-	ghost.Transparency = Constants.BUILDING.GhostTransparency
+	ghost.Transparency = if Platform.IsMobile then 0.15 else Constants.BUILDING.GhostTransparency
 	ghost.Anchored = true
 	ghost.CanCollide = false
 	ghost.Material = VisualManifest.Buildings.GhostMaterial
 	ghost.Color = VisualManifest.Buildings.BaseColors[buildingType]
 	ghost.Parent = Workspace
 	currentGhost = ghost
+
+	local marker = Instance.new("Part")
+	marker.Name = "LocalPlacementGroundMarker"
+	marker.Size = Vector3.new(ghost.Size.X, 0.08, ghost.Size.Z)
+	marker.Anchored = true
+	marker.CanCollide = false
+	marker.Material = Enum.Material.Neon
+	marker.Transparency = 0.4
+	marker.Color = VisualManifest.Tools.GhostValidColor
+	marker.Parent = Workspace
+	currentGroundMarker = marker
 
 	renderConn = RunService.RenderStepped:Connect(updateGhostVisual)
 end

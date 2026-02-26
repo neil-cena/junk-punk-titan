@@ -17,6 +17,7 @@ local EconomyService = require(script.Parent:WaitForChild("EconomyService"))
 local BuildingService = require(script.Parent:WaitForChild("BuildingService"))
 local ObjectiveService = require(script.Parent:WaitForChild("ObjectiveService"))
 local PlayerTrackingService = require(script.Parent:WaitForChild("PlayerTrackingService"))
+local RoleService = require(script.Parent:WaitForChild("RoleService"))
 local RemoteGuard = require(script.Parent.Parent:WaitForChild("RemoteGuard"))
 
 local EnemyService = {}
@@ -1239,6 +1240,7 @@ function EnemyService.Init(): ()
 	end)
 
 	task.spawn(function()
+		RoleService.WaitForAllPlayersReady()
 		local firstDelay = Constants.WAVES.FirstWaveDelaySeconds
 		local remaining = firstDelay
 		while remaining > 0 and gameActive do

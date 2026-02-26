@@ -199,6 +199,25 @@ function RoleService.GetActiveBuffs(player: Player): {
 	}
 end
 
+function RoleService.AllPlayersReady(): boolean
+	local players = Players:GetPlayers()
+	if #players == 0 then
+		return false
+	end
+	for _, player in players do
+		if playerRoles[player.UserId] == nil then
+			return false
+		end
+	end
+	return true
+end
+
+function RoleService.WaitForAllPlayersReady()
+	while not RoleService.AllPlayersReady() do
+		task.wait(0.5)
+	end
+end
+
 function RoleService.Init(): ()
 	Players.PlayerAdded:Connect(function(player)
 		player.CharacterAdded:Connect(function()
