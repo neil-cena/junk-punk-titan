@@ -1,6 +1,8 @@
 --!strict
 
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local StarterGui = game:GetService("StarterGui")
 local TeleportService = game:GetService("TeleportService")
 local TweenService = game:GetService("TweenService")
 
@@ -34,16 +36,33 @@ local function createActionButton(parent: Instance, text: string, position: UDim
 end
 
 local function restartSession()
+	local function notifyRestartUnavailable()
+		pcall(function()
+			StarterGui:SetCore("SendNotification", {
+				Title = "Restart Unavailable",
+				Text = "Restart not available in Studio -- please rejoin manually.",
+				Duration = 4,
+			})
+		end)
+	end
+
+	if RunService:IsStudio() then
+		notifyRestartUnavailable()
+		return
+	end
+
+	local teleportOptions = Instance.new("TeleportOptions")
+	teleportOptions.ShouldReserveServer = true
 	local ok = pcall(function()
-		TeleportService:Teleport(game.PlaceId, LocalPlayer)
+		TeleportService:TeleportAsync(game.PlaceId, { LocalPlayer }, teleportOptions)
 	end)
 	if not ok then
-		LocalPlayer:Kick("Could not restart session.")
+		notifyRestartUnavailable()
 	end
 end
 
 local function leaveSession()
-	LocalPlayer:Kick("Left session.")
+	LocalPlayer:Kick("")
 end
 
 local function buildStatsText(remotes: any): string
@@ -103,8 +122,8 @@ function EndScreenUI.ShowGameOver(rootGui: ScreenGui, remotes: any)
 	statsLabel.Text = buildStatsText(remotes)
 	statsLabel.Parent = overlay
 
-	createActionButton(overlay, "RESTART", UDim2.new(0.42, 0, 0.8, 0), Theme.Colors.Accent, restartSession)
-	createActionButton(overlay, "LEAVE", UDim2.new(0.58, 0, 0.8, 0), Theme.Colors.Bad, leaveSession)
+	createActionButton(overlay, "RESTART", UDim2.new(0.35, 0, 0.82, 0), Theme.Colors.Accent, restartSession)
+	createActionButton(overlay, "LEAVE", UDim2.new(0.65, 0, 0.82, 0), Theme.Colors.Bad, leaveSession)
 end
 
 function EndScreenUI.ShowVictory(rootGui: ScreenGui, remotes: any)
@@ -155,8 +174,8 @@ function EndScreenUI.ShowVictory(rootGui: ScreenGui, remotes: any)
 	statsLabel.Text = buildStatsText(remotes)
 	statsLabel.Parent = overlay
 
-	createActionButton(overlay, "RESTART", UDim2.new(0.42, 0, 0.8, 0), Theme.Colors.Accent, restartSession)
-	createActionButton(overlay, "LEAVE", UDim2.new(0.58, 0, 0.8, 0), Theme.Colors.Bad, leaveSession)
+	createActionButton(overlay, "RESTART", UDim2.new(0.35, 0, 0.82, 0), Theme.Colors.Accent, restartSession)
+	createActionButton(overlay, "LEAVE", UDim2.new(0.65, 0, 0.82, 0), Theme.Colors.Bad, leaveSession)
 end
 
 function EndScreenUI.ShowFinalStandBanner(rootGui: ScreenGui)

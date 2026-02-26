@@ -140,6 +140,11 @@ local VisualManifest = {
 			color = Color3.fromRGB(100, 160, 200),
 			material = Enum.Material.Metal,
 		},
+		PowerUps = {
+			Lightning = Color3.fromRGB(100, 180, 255),
+			Fireball = Color3.fromRGB(255, 100, 50),
+			Shockwave = Color3.fromRGB(180, 80, 255),
+		},
 	},
 
 	TetherPad = {
@@ -186,6 +191,7 @@ local VisualManifest = {
 		HealthBarBackground = Color3.fromRGB(30, 30, 30),
 		DamageNumberColor = Color3.fromRGB(255, 160, 120),
 		ScrapComboColor = Color3.fromRGB(255, 221, 130),
+		ScrapPickupSparkle = Color3.fromRGB(255, 210, 110),
 		DismantleSparksA = Color3.fromRGB(255, 80, 60),
 		DismantleSparksB = Color3.fromRGB(255, 140, 50),
 		DestroyDustColor = Color3.fromRGB(150, 130, 100),

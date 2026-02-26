@@ -39,6 +39,9 @@ local RemoteNames = {
 	PunchEnemy = "PunchEnemy",
 	BuildingUpgraded = "BuildingUpgraded",
 	RequestUpgrade = "RequestUpgrade",
+	PowerUpSpawned = "PowerUpSpawned",
+	PowerUpCollected = "PowerUpCollected",
+	PowerUpPickup = "PowerUpPickup",
 	SandboxStarted = "SandboxStarted",
 	UpgradeTierUnlocked = "UpgradeTierUnlocked",
 }
@@ -134,6 +137,9 @@ function Remotes.Get()
 			PunchEnemy = getOrCreateRemoteEvent(folder, RemoteNames.PunchEnemy),
 			BuildingUpgraded = getOrCreateRemoteEvent(folder, RemoteNames.BuildingUpgraded),
 			RequestUpgrade = getOrCreateRemoteEvent(folder, RemoteNames.RequestUpgrade),
+			PowerUpSpawned = getOrCreateRemoteEvent(folder, RemoteNames.PowerUpSpawned),
+			PowerUpCollected = getOrCreateRemoteEvent(folder, RemoteNames.PowerUpCollected),
+			PowerUpPickup = getOrCreateRemoteEvent(folder, RemoteNames.PowerUpPickup),
 			SandboxStarted = getOrCreateRemoteEvent(folder, RemoteNames.SandboxStarted),
 			UpgradeTierUnlocked = getOrCreateRemoteEvent(folder, RemoteNames.UpgradeTierUnlocked),
 		}
@@ -176,6 +182,9 @@ function Remotes.Get()
 		PunchEnemy = waitForRemoteEvent(folder, RemoteNames.PunchEnemy),
 		BuildingUpgraded = waitForRemoteEvent(folder, RemoteNames.BuildingUpgraded),
 		RequestUpgrade = waitForRemoteEvent(folder, RemoteNames.RequestUpgrade),
+		PowerUpSpawned = waitForRemoteEvent(folder, RemoteNames.PowerUpSpawned),
+		PowerUpCollected = waitForRemoteEvent(folder, RemoteNames.PowerUpCollected),
+		PowerUpPickup = waitForRemoteEvent(folder, RemoteNames.PowerUpPickup),
 		SandboxStarted = waitForRemoteEvent(folder, RemoteNames.SandboxStarted),
 		UpgradeTierUnlocked = waitForRemoteEvent(folder, RemoteNames.UpgradeTierUnlocked),
 	}

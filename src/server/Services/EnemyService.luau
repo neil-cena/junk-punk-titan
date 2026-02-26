@@ -52,6 +52,10 @@ local ratStates: { [Model]: RatState } = {}
 local activeRatCaches: { BasePart } = {}
 local pickedRatCaches: { [BasePart]: boolean } = {}
 local ratCacheValues: { [BasePart]: number } = {}
+type PowerUpType = "Lightning" | "Fireball" | "Shockwave"
+local activePowerUps: { BasePart } = {}
+local pickedPowerUps: { [BasePart]: boolean } = {}
+local powerUpTypeByOrb: { [BasePart]: PowerUpType } = {}
 
 local ratPool: { Model } = {}
 local RAT_POOL_INITIAL = 30
@@ -182,6 +186,168 @@ local function spawnRatCacheDrops(atPosition: Vector3, dropCount: number, scrapP
 	end
 end
 
+local function getPowerUpColor(powerUpType: PowerUpType): Color3
+	local colors = VisualManifest.Loot.PowerUps
+	if powerUpType == "Lightning" then
+		return colors.Lightning
+	elseif powerUpType == "Fireball" then
+		return colors.Fireball
+	end
+	return colors.Shockwave
+end
+
+local function createPowerUpOrb(atPosition: Vector3, powerUpType: PowerUpType): BasePart
+	local orb = Instance.new("Part")
+	orb.Name = "PowerUpOrb"
+	orb.Shape = Enum.PartType.Ball
+	orb.Size = Constants.POWERUPS.OrbSize
+	orb.Material = Enum.Material.Neon
+	orb.Color = getPowerUpColor(powerUpType)
+	orb.Anchored = true
+	orb.CanCollide = false
+	orb.Position = atPosition + Vector3.new(0, 1.7, 0)
+	orb.Parent = Workspace
+	orb:SetAttribute("PowerUpType", powerUpType)
+	CollectionService:AddTag(orb, "PowerUpOrb")
+	return orb
+end
+
+local function spawnPowerUpOrb(atPosition: Vector3)
+	local availableTypes = Constants.POWERUPS.Types
+	local idx = math.random(1, #availableTypes)
+	local powerUpType = availableTypes[idx] :: PowerUpType
+	local orb = createPowerUpOrb(atPosition, powerUpType)
+	powerUpTypeByOrb[orb] = powerUpType
+	table.insert(activePowerUps, orb)
+	remotes.PowerUpSpawned:FireAllClients(orb, powerUpType)
+
+	task.delay(Constants.POWERUPS.DespawnSeconds, function()
+		if pickedPowerUps[orb] then
+			pickedPowerUps[orb] = nil
+			powerUpTypeByOrb[orb] = nil
+			return
+		end
+		if orb.Parent ~= nil then
+			CollectionService:RemoveTag(orb, "PowerUpOrb")
+			orb:Destroy()
+		end
+		pickedPowerUps[orb] = nil
+		powerUpTypeByOrb[orb] = nil
+	end)
+end
+
+local function getAliveRatRoots(): { BasePart }
+	local roots: { BasePart } = {}
+	for rat in activeRats do
+		local humanoid = rat:FindFirstChildOfClass("Humanoid")
+		local root = rat.PrimaryPart
+		if humanoid ~= nil and humanoid.Health > 0 and root ~= nil and rat.Parent ~= nil then
+			table.insert(roots, root)
+		end
+	end
+	return roots
+end
+
+local function executePowerUp(player: Player, powerUpType: PowerUpType): { Vector3 }
+	local character = player.Character
+	local playerRoot = if character then character:FindFirstChild("HumanoidRootPart") else nil
+	if playerRoot == nil or not playerRoot:IsA("BasePart") then
+		return {}
+	end
+
+	local hitPositions: { Vector3 } = {}
+	if powerUpType == "Lightning" then
+		local minKills = Constants.POWERUPS.Lightning.kills[1]
+		local maxKills = Constants.POWERUPS.Lightning.kills[2]
+		local wantedKills = math.random(minKills, maxKills)
+		local ranked: { { root: BasePart, dist: number } } = {}
+		for _, root in getAliveRatRoots() do
+			table.insert(ranked, { root = root, dist = (root.Position - playerRoot.Position).Magnitude })
+		end
+		table.sort(ranked, function(a, b)
+			return a.dist < b.dist
+		end)
+		local killCount = math.min(wantedKills, #ranked)
+		for i = 1, killCount do
+			local root = ranked[i].root
+			local rat = root.Parent
+			if rat ~= nil and rat:IsA("Model") then
+				local humanoid = rat:FindFirstChildOfClass("Humanoid")
+				if humanoid ~= nil and humanoid.Health > 0 then
+					table.insert(hitPositions, root.Position)
+					humanoid.Health = 0
+				end
+			end
+		end
+	elseif powerUpType == "Fireball" then
+		local width = Constants.POWERUPS.Fireball.width
+		local halfWidth = width * 0.5
+		local maxLength = Constants.POWERUPS.Fireball.length
+		local damage = Constants.POWERUPS.Fireball.damage
+		local origin = playerRoot.Position
+		local direction = playerRoot.CFrame.LookVector.Unit
+		for rat in activeRats do
+			local humanoid = rat:FindFirstChildOfClass("Humanoid")
+			local root = rat.PrimaryPart
+			if humanoid == nil or humanoid.Health <= 0 or root == nil then
+				continue
+			end
+			local toRat = root.Position - origin
+			local forward = toRat:Dot(direction)
+			if forward < 0 or forward > maxLength then
+				continue
+			end
+			local lateral = (toRat - direction * forward).Magnitude
+			if lateral <= halfWidth then
+				table.insert(hitPositions, root.Position)
+				humanoid:TakeDamage(damage)
+			end
+		end
+	elseif powerUpType == "Shockwave" then
+		local radius = Constants.POWERUPS.Shockwave.radius
+		local damagePercent = Constants.POWERUPS.Shockwave.damagePercent
+		local origin = playerRoot.Position
+		for rat in activeRats do
+			local humanoid = rat:FindFirstChildOfClass("Humanoid")
+			local root = rat.PrimaryPart
+			if humanoid == nil or humanoid.Health <= 0 or root == nil then
+				continue
+			end
+			if (root.Position - origin).Magnitude <= radius then
+				table.insert(hitPositions, root.Position)
+				local damage = math.max(1, humanoid.MaxHealth * damagePercent)
+				humanoid:TakeDamage(damage)
+			end
+		end
+	end
+
+	return hitPositions
+end
+
+local function collectPowerUp(orb: BasePart, player: Player)
+	if pickedPowerUps[orb] then
+		return
+	end
+	local powerUpType = powerUpTypeByOrb[orb]
+	if powerUpType == nil then
+		return
+	end
+	pickedPowerUps[orb] = true
+	orb:SetAttribute("MagnetTarget", player.Name)
+	local origin = orb.Position
+	local hitPositions = executePowerUp(player, powerUpType)
+	remotes.PowerUpCollected:FireAllClients(player, powerUpType, origin, hitPositions)
+	if orb.Parent ~= nil then
+		CollectionService:RemoveTag(orb, "PowerUpOrb")
+		task.delay(0.15, function()
+			if orb.Parent ~= nil then
+				orb:Destroy()
+			end
+		end)
+	end
+	powerUpTypeByOrb[orb] = nil
+end
+
 local function handleRatDeath(ratModel: Model)
 	local state = ratStates[ratModel]
 	if state == nil or state.despawning then
@@ -205,6 +371,9 @@ local function handleRatDeath(ratModel: Model)
 		dropCount = dropCount + bonusDrops
 	end
 	spawnRatCacheDrops(atPosition, dropCount, Constants.LOOT.RatCacheValue)
+	if math.random() < Constants.POWERUPS.DropChance then
+		spawnPowerUpOrb(atPosition)
+	end
 
 	remotes.EnemyKilled:FireAllClients(atPosition)
 	ratStates[ratModel] = nil
@@ -942,8 +1111,17 @@ function EnemyService.StopAll(): ()
 			rat:Destroy()
 		end
 	end
+	for _, orb in activePowerUps do
+		if orb.Parent ~= nil then
+			CollectionService:RemoveTag(orb, "PowerUpOrb")
+			orb:Destroy()
+		end
+	end
 	activeRats = {}
 	ratStates = {}
+	activePowerUps = {}
+	pickedPowerUps = {}
+	powerUpTypeByOrb = {}
 end
 
 spawnRatToward = function(targetBuilding: BasePart, isElite: boolean?, isThief: boolean?)
@@ -1136,6 +1314,7 @@ function EnemyService.Init(): ()
 
 	RemoteGuard.Register("HitEnemy", 5, 1)
 	RemoteGuard.Register("PunchEnemy", 20, 1)
+	RemoteGuard.Register("PowerUpPickup", 20, 1)
 
 	remotes.HitEnemy.OnServerEvent:Connect(function(player: Player, ratModelOrPart: Instance)
 		if not gameActive then
@@ -1225,6 +1404,31 @@ function EnemyService.Init(): ()
 		local damageMult = if typeof(damageMultAttr) == "number" then (damageMultAttr :: number) else 1
 		local damage = math.max(1, Constants.COMBAT.PunchDamage * damageMult)
 		humanoid.Health = math.max(0, humanoid.Health - damage)
+	end)
+
+	remotes.PowerUpPickup.OnServerEvent:Connect(function(player: Player, orbPart: Instance)
+		if not gameActive then
+			return
+		end
+		if not RemoteGuard.Check("PowerUpPickup", player) then
+			return
+		end
+		if not orbPart:IsA("BasePart") then
+			return
+		end
+		if powerUpTypeByOrb[orbPart] == nil then
+			return
+		end
+		local char = player.Character
+		local root = if char then char:FindFirstChild("HumanoidRootPart") else nil
+		if root == nil or not root:IsA("BasePart") then
+			return
+		end
+		local maxPickupRange = Constants.SCRAP_SPAWNS.MagnetRadius + 8
+		if (root.Position - orbPart.Position).Magnitude > maxPickupRange then
+			return
+		end
+		collectPowerUp(orbPart, player)
 	end)
 
 	TheftComponent.ConnectCompleted(function(dismantledPart: BasePart, ratModel: Model?)
@@ -1371,6 +1575,57 @@ function EnemyService.Init(): ()
 		end
 
 		activeRatCaches = alive
+	end)
+
+	local POWERUP_MAGNET_TICK = 0.12
+	local powerUpMagnetAcc = 0
+	RunService.Heartbeat:Connect(function(dt)
+		powerUpMagnetAcc += dt
+		if powerUpMagnetAcc < POWERUP_MAGNET_TICK then
+			return
+		end
+		powerUpMagnetAcc = 0
+
+		local magnetRadius = Constants.SCRAP_SPAWNS.MagnetRadius
+		local alive: { BasePart } = {}
+
+		for _, orb in activePowerUps do
+			if orb.Parent == nil or pickedPowerUps[orb] then
+				pickedPowerUps[orb] = nil
+				powerUpTypeByOrb[orb] = nil
+				continue
+			end
+
+			local nearestPlayer: Player? = nil
+			local nearestDist = magnetRadius + 1
+
+			for _, player in Players:GetPlayers() do
+				local character = player.Character
+				if character == nil then
+					continue
+				end
+				local root = character:FindFirstChild("HumanoidRootPart")
+				if root == nil or not root:IsA("BasePart") then
+					continue
+				end
+				local pDist = (root.Position - orb.Position).Magnitude
+				if pDist < nearestDist then
+					nearestDist = pDist
+					nearestPlayer = player
+				end
+			end
+
+			if nearestPlayer ~= nil and nearestDist <= magnetRadius then
+				collectPowerUp(orb, nearestPlayer)
+			else
+				if orb:GetAttribute("MagnetTarget") ~= nil then
+					orb:SetAttribute("MagnetTarget", nil)
+				end
+				table.insert(alive, orb)
+			end
+		end
+
+		activePowerUps = alive
 	end)
 end
 

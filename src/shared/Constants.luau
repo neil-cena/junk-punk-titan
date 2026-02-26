@@ -39,8 +39,8 @@ local Constants = {
 		MaxBuildRadiusFromCenter = 50,
 		RebuildCooldownSeconds = 15,
 		TurretRange = 45,
-		TurretFireInterval = 1.5,
-		TurretDamage = 7.5,
+		TurretFireInterval = 0.9,
+		TurretDamage = 5,
 		DrillScrapPerTick = 8,
 		DrillTickInterval = 2,
 		DefaultHP = 100,
@@ -55,10 +55,10 @@ local Constants = {
 
 	BUILDING_UPGRADES = {
 		Turret = {
-			[1] = { damage = 7.5, range = 45, fireInterval = 1.5, hp = 100, cost = 0 },
-			[2] = { damage = 12, range = 48, fireInterval = 1.3, hp = 140, cost = 75 },
-			[3] = { damage = 18, range = 52, fireInterval = 1.1, hp = 190, cost = 140 },
-			[4] = { damage = 25, range = 56, fireInterval = 0.85, hp = 250, cost = 220 },
+			[1] = { damage = 5, range = 45, fireInterval = 0.9, hp = 100, cost = 0 },
+			[2] = { damage = 8, range = 48, fireInterval = 0.75, hp = 140, cost = 75 },
+			[3] = { damage = 13, range = 52, fireInterval = 0.6, hp = 190, cost = 140 },
+			[4] = { damage = 18, range = 56, fireInterval = 0.45, hp = 250, cost = 220 },
 		},
 		Drill = {
 			[1] = { scrapPerTick = 8, tickInterval = 2, hp = 100, cost = 0 },
@@ -99,8 +99,8 @@ local Constants = {
 		IntervalSeconds = 75,
 		FirstWaveDelaySeconds = 60,
 		SwarmDurationSeconds = 25,
-		BaseEnemyCount = 8,
-		EnemiesPerWave = 9,
+		BaseEnemyCount = 16,
+		EnemiesPerWave = 18,
 		IntensityPattern = { 0.6, 1.0, 1.8 },
 		MinSpawnDistanceFromCenter = 50,
 		SpawnRadius = 60,
@@ -111,13 +111,13 @@ local Constants = {
 	},
 
 	COMBAT = {
-		ShotgunBaseDamage = 25,
+		ShotgunBaseDamage = 18,
 		ShotgunRange = 30,
-		ShotgunCooldown = 0.27,
+		ShotgunCooldown = 0.15,
 		PunchDamage = 7,
 		PunchRange = 6,
 		PunchCooldown = 0.33,
-		RatBaseHealth = 26,
+		RatBaseHealth = 18,
 		RatFleeSpeedMultiplier = 1.2,
 		ScrapBundleDespawnSeconds = 30,
 	},
@@ -140,6 +140,16 @@ local Constants = {
 		RatCacheBonusMax = 5,
 		CriticalHarvestChance = 0.12,
 		CriticalHarvestMultiplier = 3,
+	},
+
+	POWERUPS = {
+		DropChance = 0.06,
+		Types = { "Lightning", "Fireball", "Shockwave" },
+		Lightning = { kills = { 5, 10 } },
+		Fireball = { width = 6, length = 60, damage = 100 },
+		Shockwave = { radius = 20, damagePercent = 0.5 },
+		DespawnSeconds = 20,
+		OrbSize = Vector3.new(1.8, 1.8, 1.8),
 	},
 
 	ECONOMY = {

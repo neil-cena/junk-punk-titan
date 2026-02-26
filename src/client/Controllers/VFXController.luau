@@ -847,6 +847,238 @@ local function showScrapCombo(combo: number)
 	end)
 end
 
+local function showPickupNumber(position: Vector3, textValue: string, color: Color3)
+	local marker = Instance.new("Part")
+	marker.Name = "PickupNumberMarker"
+	marker.Anchored = true
+	marker.CanCollide = false
+	marker.Transparency = 1
+	marker.Size = Vector3.new(0.2, 0.2, 0.2)
+	marker.Position = position + Vector3.new(0, 2, 0)
+	marker.Parent = Workspace
+
+	local gui = Instance.new("BillboardGui")
+	gui.Size = UDim2.fromOffset(90, 30)
+	gui.StudsOffset = Vector3.new(0, 1, 0)
+	gui.AlwaysOnTop = true
+	gui.Adornee = marker
+	gui.Parent = marker
+
+	local text = Instance.new("TextLabel")
+	text.Size = UDim2.fromScale(1, 1)
+	text.BackgroundTransparency = 1
+	text.Font = Enum.Font.GothamBold
+	text.TextScaled = true
+	text.TextStrokeTransparency = 0.4
+	text.TextColor3 = color
+	text.Text = textValue
+	text.Parent = gui
+
+	TweenService:Create(gui, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		StudsOffset = Vector3.new(0, 2.4, 0),
+	}):Play()
+	TweenService:Create(text, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		TextTransparency = 1,
+		TextStrokeTransparency = 1,
+	}):Play()
+	task.delay(0.55, function()
+		if marker.Parent ~= nil then
+			marker:Destroy()
+		end
+	end)
+end
+
+local function playScrapSparkleBurst(position: Vector3, amount: number)
+	local bursts = math.clamp(math.floor(amount / 2), 6, 10)
+	for _ = 1, bursts do
+		local p = Instance.new("Part")
+		p.Name = "ScrapSparkle"
+		p.Shape = Enum.PartType.Ball
+		p.Material = Enum.Material.Neon
+		p.Color = VisualManifest.VFX.ScrapPickupSparkle
+		p.Anchored = true
+		p.CanCollide = false
+		p.Size = Vector3.new(0.25, 0.25, 0.25)
+		p.Transparency = 0.15
+		p.Position = position + Vector3.new(0, 1.8, 0)
+		p.Parent = Workspace
+		local dir = (Vector3.new(math.random() - 0.5, math.random() * 0.7 + 0.2, math.random() - 0.5)).Unit
+		TweenService:Create(p, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			Position = p.Position + (dir * (math.random(6, 10) * 0.25)),
+			Size = Vector3.new(0.05, 0.05, 0.05),
+			Transparency = 1,
+		}):Play()
+		task.delay(0.25, function()
+			if p.Parent ~= nil then
+				p:Destroy()
+			end
+		end)
+	end
+end
+
+local function flashScrapComboVignette()
+	local playerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
+	if playerGui == nil then
+		return
+	end
+	local hud = playerGui:FindFirstChild("MainHUDGui")
+	if hud == nil or not hud:IsA("ScreenGui") then
+		return
+	end
+	local existing = hud:FindFirstChild("ScrapComboVignette")
+	if existing ~= nil then
+		existing:Destroy()
+	end
+	local vignette = Instance.new("Frame")
+	vignette.Name = "ScrapComboVignette"
+	vignette.Size = UDim2.fromScale(1, 1)
+	vignette.BackgroundColor3 = VisualManifest.VFX.ScrapPickupSparkle
+	vignette.BackgroundTransparency = 0.92
+	vignette.BorderSizePixel = 0
+	vignette.ZIndex = 60
+	vignette.Parent = hud
+	TweenService:Create(vignette, TweenInfo.new(0.15, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
+		BackgroundTransparency = 1,
+	}):Play()
+	task.delay(0.18, function()
+		if vignette.Parent ~= nil then
+			vignette:Destroy()
+		end
+	end)
+end
+
+local function bumpCamera()
+	local character = LocalPlayer.Character
+	local humanoid = if character then character:FindFirstChildOfClass("Humanoid") else nil
+	if humanoid == nil then
+		return
+	end
+	TweenService:Create(humanoid, TweenInfo.new(0.05, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		CameraOffset = Vector3.new(0, 0.08, 0),
+	}):Play()
+	task.delay(0.06, function()
+		if humanoid.Parent ~= nil then
+			TweenService:Create(humanoid, TweenInfo.new(0.09, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+				CameraOffset = Vector3.zero,
+			}):Play()
+		end
+	end)
+end
+
+local function playPowerUpSound(powerUpType: string)
+	local s = Instance.new("Sound")
+	s.SoundId = AudioManifest.WaveSlam
+	s.Volume = 0.25
+	if powerUpType == "Lightning" then
+		s.PlaybackSpeed = 1.25
+	elseif powerUpType == "Fireball" then
+		s.PlaybackSpeed = 0.95
+	else
+		s.PlaybackSpeed = 0.75
+	end
+	s.Parent = SoundService
+	s:Play()
+	s.Ended:Connect(function()
+		if s.Parent ~= nil then
+			s:Destroy()
+		end
+	end)
+end
+
+local function playLightningPowerUpVFX(origin: Vector3, hitPositions: { Vector3 }?)
+	local points = hitPositions or {}
+	if #points == 0 then
+		for _ = 1, math.random(5, 8) do
+			table.insert(points, origin + Vector3.new(math.random(-18, 18), 0, math.random(-18, 18)))
+		end
+	end
+	for _, strikePos in points do
+		local top = strikePos + Vector3.new(0, 200, 0)
+		local beam = Instance.new("Part")
+		beam.Name = "LightningBeam"
+		beam.Anchored = true
+		beam.CanCollide = false
+		beam.Material = Enum.Material.Neon
+		beam.Color = VisualManifest.Loot.PowerUps.Lightning
+		beam.Transparency = 0.15
+		local length = (top - strikePos).Magnitude
+		beam.Size = Vector3.new(0.55, length, 0.55)
+		beam.CFrame = CFrame.lookAt((top + strikePos) * 0.5, strikePos) * CFrame.Angles(math.rad(90), 0, 0)
+		beam.Parent = Workspace
+		TweenService:Create(beam, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			Transparency = 1,
+			Size = Vector3.new(0.1, length, 0.1),
+		}):Play()
+		task.delay(0.35, function()
+			if beam.Parent ~= nil then
+				beam:Destroy()
+			end
+		end)
+	end
+	bumpCamera()
+	playPowerUpSound("Lightning")
+end
+
+local function playFireballPowerUpVFX(origin: Vector3)
+	local character = LocalPlayer.Character
+	local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
+	local direction = if root ~= nil and root:IsA("BasePart") then root.CFrame.LookVector.Unit else Vector3.new(0, 0, -1)
+	local length = Constants.POWERUPS.Fireball.length
+	local step = 7
+	for i = 1, math.floor(length / step) do
+		task.delay(i * 0.02, function()
+			local p = Instance.new("Part")
+			p.Name = "FireballTrail"
+			p.Shape = Enum.PartType.Ball
+			p.Anchored = true
+			p.CanCollide = false
+			p.Material = Enum.Material.Neon
+			p.Color = VisualManifest.Loot.PowerUps.Fireball
+			p.Size = Vector3.new(1.6, 1.6, 1.6)
+			p.Position = origin + direction * (i * step)
+			p.Transparency = 0.25
+			p.Parent = Workspace
+			TweenService:Create(p, TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+				Size = Vector3.new(0.2, 0.2, 0.2),
+				Transparency = 1,
+			}):Play()
+			task.delay(0.24, function()
+				if p.Parent ~= nil then
+					p:Destroy()
+				end
+			end)
+		end)
+	end
+	bumpCamera()
+	playPowerUpSound("Fireball")
+end
+
+local function playShockwavePowerUpVFX(origin: Vector3)
+	local ring = Instance.new("Part")
+	ring.Name = "ShockwaveRing"
+	ring.Shape = Enum.PartType.Cylinder
+	ring.Anchored = true
+	ring.CanCollide = false
+	ring.Material = Enum.Material.Neon
+	ring.Color = VisualManifest.Loot.PowerUps.Shockwave
+	ring.Size = Vector3.new(0.4, 2, 2)
+	ring.CFrame = CFrame.new(origin + Vector3.new(0, 0.12, 0)) * CFrame.Angles(0, 0, math.rad(90))
+	ring.Transparency = 0.2
+	ring.Parent = Workspace
+	local target = Constants.POWERUPS.Shockwave.radius * 2
+	TweenService:Create(ring, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		Size = Vector3.new(0.4, target, target),
+		Transparency = 1,
+	}):Play()
+	task.delay(0.4, function()
+		if ring.Parent ~= nil then
+			ring:Destroy()
+		end
+	end)
+	bumpCamera()
+	playPowerUpSound("Shockwave")
+end
+
 local function bindRatHealthBar(ratModel: Model)
 	if ratHealthBars[ratModel] ~= nil then
 		return
@@ -1379,12 +1611,16 @@ function VFXController.Init()
 	end)
 
 	Workspace.ChildAdded:Connect(function(child)
-		if child:IsA("BasePart") and (child.Name == "JunkBlock" or child.Name == "RatCache" or child.Name == "StormHardenedSteel") then
+		if child:IsA("BasePart")
+			and (child.Name == "JunkBlock" or child.Name == "RatCache" or child.Name == "StormHardenedSteel" or child.Name == "PowerUpOrb")
+		then
 			bindMagnetAttribute(child)
 		end
 	end)
 	for _, child in Workspace:GetChildren() do
-		if child:IsA("BasePart") and (child.Name == "JunkBlock" or child.Name == "RatCache" or child.Name == "StormHardenedSteel") then
+		if child:IsA("BasePart")
+			and (child.Name == "JunkBlock" or child.Name == "RatCache" or child.Name == "StormHardenedSteel" or child.Name == "PowerUpOrb")
+		then
 			bindMagnetAttribute(child)
 		end
 	end
@@ -1449,6 +1685,12 @@ function VFXController.Init()
 		local delta = newValue - lastScrap
 		if delta > 0 then
 			playLootFountain(delta)
+			local character = LocalPlayer.Character
+			local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
+			if root ~= nil and root:IsA("BasePart") then
+				playScrapSparkleBurst(root.Position, delta)
+				showPickupNumber(root.Position, ("+%d"):format(delta), VisualManifest.VFX.ScrapPickupSparkle)
+			end
 			local now = os.clock()
 			if now - lastScrapPickupAt <= 1.2 then
 				scrapComboCount += 1
@@ -1459,10 +1701,13 @@ function VFXController.Init()
 			if scrapComboCount >= 3 then
 				showScrapCombo(scrapComboCount)
 			end
+			if scrapComboCount >= 5 then
+				flashScrapComboVignette()
+			end
 			local ching = Instance.new("Sound")
 			ching.SoundId = AudioManifest.LootCollect
 			ching.Volume = 0.25
-			ching.PlaybackSpeed = 1.2
+			ching.PlaybackSpeed = math.min(1.8, 1.2 + (scrapComboCount * 0.03))
 			ching.Parent = SoundService
 			ching:Play()
 			ching.Ended:Connect(function()
@@ -1519,6 +1764,21 @@ function VFXController.Init()
 
 	remotes.EnemyKilled.OnClientEvent:Connect(function(position: Vector3)
 		playEnemyDeathFx(position)
+	end)
+
+	remotes.PowerUpSpawned.OnClientEvent:Connect(function(orbPart: Instance, _powerUpType: string)
+		if orbPart:IsA("BasePart") then
+			bindMagnetAttribute(orbPart)
+		end
+	end)
+	remotes.PowerUpCollected.OnClientEvent:Connect(function(_collector: Player, powerUpType: string, position: Vector3, hitPositions: { Vector3 }?)
+		if powerUpType == "Lightning" then
+			playLightningPowerUpVFX(position, hitPositions)
+		elseif powerUpType == "Fireball" then
+			playFireballPowerUpVFX(position)
+		elseif powerUpType == "Shockwave" then
+			playShockwavePowerUpVFX(position)
+		end
 	end)
 
 	remotes.BlueprintFinished.OnClientEvent:Connect(function(_blueprintId: string, position: Vector3)
