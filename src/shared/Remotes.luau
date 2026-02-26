@@ -38,6 +38,7 @@ local RemoteNames = {
 	CancelBlueprint = "CancelBlueprint",
 	PunchEnemy = "PunchEnemy",
 	BuildingUpgraded = "BuildingUpgraded",
+	RequestUpgrade = "RequestUpgrade",
 	SandboxStarted = "SandboxStarted",
 	UpgradeTierUnlocked = "UpgradeTierUnlocked",
 }
@@ -132,6 +133,7 @@ function Remotes.Get()
 			CancelBlueprint = getOrCreateRemoteEvent(folder, RemoteNames.CancelBlueprint),
 			PunchEnemy = getOrCreateRemoteEvent(folder, RemoteNames.PunchEnemy),
 			BuildingUpgraded = getOrCreateRemoteEvent(folder, RemoteNames.BuildingUpgraded),
+			RequestUpgrade = getOrCreateRemoteEvent(folder, RemoteNames.RequestUpgrade),
 			SandboxStarted = getOrCreateRemoteEvent(folder, RemoteNames.SandboxStarted),
 			UpgradeTierUnlocked = getOrCreateRemoteEvent(folder, RemoteNames.UpgradeTierUnlocked),
 		}
@@ -173,6 +175,7 @@ function Remotes.Get()
 		CancelBlueprint = waitForRemoteEvent(folder, RemoteNames.CancelBlueprint),
 		PunchEnemy = waitForRemoteEvent(folder, RemoteNames.PunchEnemy),
 		BuildingUpgraded = waitForRemoteEvent(folder, RemoteNames.BuildingUpgraded),
+		RequestUpgrade = waitForRemoteEvent(folder, RemoteNames.RequestUpgrade),
 		SandboxStarted = waitForRemoteEvent(folder, RemoteNames.SandboxStarted),
 		UpgradeTierUnlocked = waitForRemoteEvent(folder, RemoteNames.UpgradeTierUnlocked),
 	}

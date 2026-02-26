@@ -10,12 +10,15 @@ local LocalPlayer = Players.LocalPlayer
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Platform = require(Shared:WaitForChild("Platform"))
+local Remotes = require(Shared:WaitForChild("Remotes"))
 
 local BlueprintController = require(script.Parent.Parent:WaitForChild("Controllers"):WaitForChild("BlueprintController"))
 local ToolController = require(script.Parent.Parent:WaitForChild("Controllers"):WaitForChild("ToolController"))
 local Theme = require(script.Parent:WaitForChild("Theme"))
 
 local MobileControls = {}
+local remotes = Remotes.Get()
+local userGameSettings = UserSettings():GetService("UserGameSettings")
 
 local isInitialized = false
 local rootGui: ScreenGui? = nil
@@ -29,12 +32,17 @@ local slotStrokes: { [string]: UIStroke } = {}
 local placeButton: TextButton? = nil
 local rotateButton: TextButton? = nil
 local cancelButton: TextButton? = nil
+local buildButton: TextButton? = nil
 local removeButton: TextButton? = nil
 local upgradeButton: TextButton? = nil
 local gridModeButton: TextButton? = nil
+local shiftLockButton: ImageButton? = nil
 local activeSlotName: string? = nil
 local SLOT_BASE_SIZE = UDim2.fromOffset(44, 44)
 local SLOT_ACTIVE_SIZE = UDim2.fromOffset(48, 48)
+local SHIFT_LOCK_OFF_ICON = "rbxasset://textures/ui/mouseLock_off@2x.png"
+local SHIFT_LOCK_ON_ICON = "rbxasset://textures/ui/mouseLock_on@2x.png"
+local trackedPromptParts: { [BasePart]: true } = {}
 
 local function makeButton(
 	parent: Instance,
@@ -73,10 +81,10 @@ local function getRootPart(): BasePart?
 	return nil
 end
 
-local function getNearestUpgradePrompt(range: number): ProximityPrompt?
+local function getNearestUpgradePrompt(range: number): (ProximityPrompt?, number)
 	local root = getRootPart()
 	if root == nil then
-		return nil
+		return nil, math.huge
 	end
 	local nearestPrompt: ProximityPrompt? = nil
 	local nearestDist = range
@@ -84,15 +92,39 @@ local function getNearestUpgradePrompt(range: number): ProximityPrompt?
 		if tagged:IsA("BasePart") and tagged.Parent ~= nil then
 			local dist = (tagged.Position - root.Position).Magnitude
 			if dist <= nearestDist then
-				local prompt = tagged:FindFirstChildOfClass("ProximityPrompt")
-				if prompt ~= nil and prompt.Enabled then
+				local prompt = tagged:FindFirstChild("UpgradePrompt")
+				if prompt ~= nil and prompt:IsA("ProximityPrompt") and prompt.Enabled then
 					nearestDist = dist
 					nearestPrompt = prompt
 				end
 			end
 		end
 	end
-	return nearestPrompt
+	if nearestPrompt == nil then
+		return nil, math.huge
+	end
+	return nearestPrompt, nearestDist
+end
+
+local function getNearestBlueprintDistance(range: number): (BasePart?, number)
+	local root = getRootPart()
+	if root == nil then
+		return nil, math.huge
+	end
+	local nearest = BlueprintController.GetNearestBlueprint(range)
+	if nearest == nil then
+		return nil, math.huge
+	end
+	return nearest, (nearest.Position - root.Position).Magnitude
+end
+
+local function updateShiftLockButtonVisual()
+	if shiftLockButton == nil then
+		return
+	end
+	local rotationType = userGameSettings.RotationType
+	local enabled = rotationType == Enum.RotationType.CameraRelative
+	shiftLockButton.Image = if enabled then SHIFT_LOCK_ON_ICON else SHIFT_LOCK_OFF_ICON
 end
 
 local function updateGridModeText()
@@ -280,7 +312,7 @@ local function createUI(parentGui: ScreenGui)
 	actionFrame.Name = "ActionStack"
 	actionFrame.AnchorPoint = Vector2.new(1, 1)
 	actionFrame.Position = UDim2.new(1, -10, 1, -90)
-	actionFrame.Size = UDim2.fromOffset(40, 220)
+	actionFrame.Size = UDim2.fromOffset(84, 220)
 	actionFrame.BackgroundTransparency = 1
 	actionFrame.Parent = rootFrame
 
@@ -314,6 +346,21 @@ local function createUI(parentGui: ScreenGui)
 		BlueprintController.CancelPlacement()
 	end)
 
+	buildButton = makeButton(actionFrame, "BuildButton", "BUILD", UDim2.fromOffset(80, 40), UDim2.fromOffset(0, 0), Theme.Colors.Good)
+	buildButton.TextColor3 = Theme.Colors.Panel
+	buildButton.TextScaled = false
+	buildButton.TextSize = 12
+	buildButton.InputBegan:Connect(function(input: InputObject)
+		if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+			BlueprintController.StartInteractHold()
+		end
+	end)
+	buildButton.InputEnded:Connect(function(input: InputObject)
+		if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+			BlueprintController.EndInteractHold()
+		end
+	end)
+
 	removeButton = makeButton(actionFrame, "RemoveButton", "DEL", UDim2.fromOffset(40, 40), UDim2.fromOffset(0, 0))
 	removeButton.TextScaled = false
 	removeButton.TextSize = 11
@@ -329,15 +376,10 @@ local function createUI(parentGui: ScreenGui)
 		if prompt == nil then
 			return
 		end
-		pcall(function()
-			prompt:InputHoldBegin()
-		end)
-		local holdTime = math.max(0.05, prompt.HoldDuration)
-		task.delay(holdTime, function()
-			pcall(function()
-				prompt:InputHoldEnd()
-			end)
-		end)
+		local buildingPart = prompt.Parent
+		if buildingPart ~= nil and buildingPart:IsA("BasePart") then
+			remotes.RequestUpgrade:FireServer(buildingPart)
+		end
 	end)
 
 	gridModeButton = makeButton(actionFrame, "GridModeButton", "[x] GRID", UDim2.fromOffset(40, 40), UDim2.fromOffset(0, 0))
@@ -347,9 +389,50 @@ local function createUI(parentGui: ScreenGui)
 		BlueprintController.SetGridSnap(not BlueprintController.GetGridSnap())
 		updateGridModeText()
 	end)
+
+	shiftLockButton = Instance.new("ImageButton")
+	shiftLockButton.Name = "ShiftLockButton"
+	shiftLockButton.AnchorPoint = Vector2.new(1, 1)
+	shiftLockButton.Position = UDim2.new(1, -60, 1, -12)
+	shiftLockButton.Size = UDim2.fromOffset(36, 36)
+	shiftLockButton.BackgroundColor3 = Theme.Colors.PanelAlt
+	shiftLockButton.BackgroundTransparency = 0.1
+	shiftLockButton.ImageColor3 = Theme.Colors.TextPrimary
+	shiftLockButton.Parent = rootFrame
+	local shiftCorner = Instance.new("UICorner")
+	shiftCorner.CornerRadius = UDim.new(0, 8)
+	shiftCorner.Parent = shiftLockButton
+	local shiftStroke = Instance.new("UIStroke")
+	shiftStroke.Color = Theme.Colors.PanelStroke
+	shiftStroke.Thickness = 1
+	shiftStroke.Transparency = 0.3
+	shiftStroke.Parent = shiftLockButton
+	shiftLockButton.Activated:Connect(function()
+		local nextType = if userGameSettings.RotationType == Enum.RotationType.CameraRelative
+			then Enum.RotationType.MovementRelative
+			else Enum.RotationType.CameraRelative
+		userGameSettings.RotationType = nextType
+		updateShiftLockButtonVisual()
+	end)
+	updateShiftLockButtonVisual()
+
 	updateGridModeText()
 	updateToolSlot()
 	syncActiveSlot()
+end
+
+local function suppressUpgradePromptOnPart(part: BasePart)
+	local function applyPromptStyle(child: Instance)
+		if child:IsA("ProximityPrompt") and child.Name == "UpgradePrompt" then
+			child.Style = Enum.ProximityPromptStyle.Custom
+		end
+	end
+	for _, child in part:GetChildren() do
+		applyPromptStyle(child)
+	end
+	part.ChildAdded:Connect(function(child)
+		applyPromptStyle(child)
+	end)
 end
 
 function MobileControls.Init()
@@ -362,6 +445,19 @@ function MobileControls.Init()
 	rootGui = playerGui:WaitForChild("MainHUDGui") :: ScreenGui
 	createUI(rootGui)
 
+	for _, tagged in CollectionService:GetTagged("DismantlableBuilding") do
+		if tagged:IsA("BasePart") and trackedPromptParts[tagged] ~= true then
+			trackedPromptParts[tagged] = true
+			suppressUpgradePromptOnPart(tagged)
+		end
+	end
+	CollectionService:GetInstanceAddedSignal("DismantlableBuilding"):Connect(function(instance)
+		if instance:IsA("BasePart") and trackedPromptParts[instance] ~= true then
+			trackedPromptParts[instance] = true
+			suppressUpgradePromptOnPart(instance)
+		end
+	end)
+
 	RunService.RenderStepped:Connect(function()
 		if rootFrame == nil then
 			return
@@ -369,8 +465,10 @@ function MobileControls.Init()
 
 		local mode = BlueprintController.GetMode()
 		local placing = mode == "Placing"
-		local hasNearbyBlueprint = BlueprintController.GetNearestBlueprint(16) ~= nil
-		local hasUpgradePrompt = getNearestUpgradePrompt(14) ~= nil
+		local nearestBlueprint, nearestBlueprintDist = getNearestBlueprintDistance(16)
+		local nearestUpgradePrompt, nearestUpgradeDist = getNearestUpgradePrompt(14)
+		local showBuildActions = not placing and nearestBlueprint ~= nil and nearestBlueprintDist <= nearestUpgradeDist
+		local showUpgradeAction = not placing and nearestUpgradePrompt ~= nil and not showBuildActions
 
 		if placeButton ~= nil then
 			placeButton.Visible = placing
@@ -381,17 +479,21 @@ function MobileControls.Init()
 		if cancelButton ~= nil then
 			cancelButton.Visible = placing
 		end
+		if buildButton ~= nil then
+			buildButton.Visible = showBuildActions
+		end
 		if removeButton ~= nil then
-			removeButton.Visible = not placing and hasNearbyBlueprint
+			removeButton.Visible = showBuildActions
 		end
 		if upgradeButton ~= nil then
-			upgradeButton.Visible = not placing and hasUpgradePrompt
+			upgradeButton.Visible = showUpgradeAction
 		end
 		if gridModeButton ~= nil then
 			gridModeButton.Visible = placing
 		end
 
 		updateGridModeText()
+		updateShiftLockButtonVisual()
 		updateToolSlot()
 		syncActiveSlot()
 	end)

@@ -294,38 +294,6 @@ local function placeCurrentBlueprint()
 	clearGhost()
 end
 
-local function getBlueprintFromTouchPosition(screenPos: Vector2, range: number): BasePart?
-	local camera = Workspace.CurrentCamera
-	if camera == nil then
-		return nil
-	end
-	local character = LocalPlayer.Character
-	local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
-	if root == nil or not root:IsA("BasePart") then
-		return nil
-	end
-
-	local unitRay = camera:ViewportPointToRay(screenPos.X, screenPos.Y)
-	local rayParams = RaycastParams.new()
-	rayParams.FilterType = Enum.RaycastFilterType.Exclude
-	rayParams.FilterDescendantsInstances = { LocalPlayer.Character, currentGhost }
-	local result = Workspace:Raycast(unitRay.Origin, unitRay.Direction * 500, rayParams)
-	if result == nil then
-		return nil
-	end
-	local hit = result.Instance
-	if not hit:IsA("BasePart") then
-		return nil
-	end
-	if not CollectionService:HasTag(hit, "Blueprint") then
-		return nil
-	end
-	if (hit.Position - root.Position).Magnitude > range then
-		return nil
-	end
-	return hit
-end
-
 function BlueprintController.FinishBlueprint(blueprintId: string)
 	local response = remotes.FinishBlueprint:InvokeServer(blueprintId)
 	if not response.success then
@@ -542,13 +510,7 @@ local function onInputBegan(input: InputObject, processed: boolean)
 		end
 	end
 
-	if Platform.IsMobile and mode == "Idle" and holdTarget == nil and input.UserInputType == Enum.UserInputType.Touch and not processed then
-		local touchTarget = getBlueprintFromTouchPosition(input.Position, BLUEPRINT_INTERACT_RANGE)
-		if touchTarget ~= nil then
-			startHold(touchTarget)
-			return
-		end
-	end
+	-- Mobile building hold is driven by the on-screen BUILD button.
 
 	if processed then
 		return

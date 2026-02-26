@@ -57,6 +57,7 @@ local builtCounts: { [BuildingType]: number } = {
 }
 local buildingsLostCount = 0
 local finishedBuildings: { [BasePart]: true } = {}
+local REQUEST_UPGRADE_MAX_DISTANCE = 14
 
 local upgradeBuilding: (player: Player, part: BasePart) -> ()
 
@@ -670,6 +671,7 @@ function BuildingService.Init(): ()
 	RemoteGuard.Register("PlaceBlueprint", 5, 1)
 	RemoteGuard.Register("FinishBlueprint", 3, 1)
 	RemoteGuard.Register("CancelBlueprint", 5, 1)
+	RemoteGuard.Register("RequestUpgrade", 5, 1)
 
 	remotes.PlaceBlueprint.OnServerEvent:Connect(function(player: Player, buildingType: BuildingType, position: Vector3, rotation: number?)
 		if not RemoteGuard.Check("PlaceBlueprint", player) then
@@ -693,6 +695,29 @@ function BuildingService.Init(): ()
 			return
 		end
 		cancelBlueprint(player, blueprintId)
+	end)
+
+	remotes.RequestUpgrade.OnServerEvent:Connect(function(player: Player, part: Instance)
+		if not RemoteGuard.Check("RequestUpgrade", player) then
+			return
+		end
+		if not part:IsA("BasePart") or part.Parent == nil then
+			return
+		end
+		if finishedBuildings[part] ~= true then
+			return
+		end
+
+		local character = player.Character
+		local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
+		if root == nil or not root:IsA("BasePart") then
+			return
+		end
+		if (root.Position - part.Position).Magnitude > REQUEST_UPGRADE_MAX_DISTANCE then
+			return
+		end
+
+		upgradeBuilding(player, part)
 	end)
 
 	Players.PlayerRemoving:Connect(cleanupPlayerBlueprints)
