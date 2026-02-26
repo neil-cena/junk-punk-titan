@@ -2083,7 +2083,7 @@ function VFXController.Init()
 
 	dayMusic = Instance.new("Sound")
 	dayMusic.Name = "DayMusic"
-	dayMusic.SoundId = AudioManifest.DayAmbient or AudioManifest.AmbientBase
+	dayMusic.SoundId = AudioManifest.WaveCombat or AudioManifest.AmbientBase
 	dayMusic.Looped = true
 	dayMusic.Volume = 0
 	dayMusic.Parent = SoundService
@@ -2091,7 +2091,7 @@ function VFXController.Init()
 
 	waveMusic = Instance.new("Sound")
 	waveMusic.Name = "WaveMusic"
-	waveMusic.SoundId = AudioManifest.WaveCombat or AudioManifest.AmbientBase
+	waveMusic.SoundId = AudioManifest.DayAmbient or AudioManifest.AmbientBase
 	waveMusic.Looped = true
 	waveMusic.Volume = 0
 	waveMusic.Parent = SoundService

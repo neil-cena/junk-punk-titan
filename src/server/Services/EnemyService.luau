@@ -1341,7 +1341,8 @@ function EnemyService.SpawnWave(waveNumber: number): ()
 			else
 				warn("[EnemyService] retreatAllRats missing at swarm end")
 			end
-			triggerDrillBonusShower()
+			-- Run shower every wave; defer so it runs after this block and all drills are considered
+			task.defer(triggerDrillBonusShower)
 		end
 	end)
 end

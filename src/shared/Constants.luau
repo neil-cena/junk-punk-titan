@@ -102,7 +102,7 @@ local Constants = {
 	},
 
 	WAVES = {
-		IntervalSeconds = 80,
+		IntervalSeconds = 60,
 		FirstWaveDelaySeconds = 100,
 		SwarmDurationSeconds = 25,
 		BaseEnemyCount = 16,
