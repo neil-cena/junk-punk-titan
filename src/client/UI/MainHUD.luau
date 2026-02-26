@@ -559,6 +559,7 @@ local function createToolbar(parent: Instance)
 	frame.Size = if isMobile then UDim2.new(0.46, 0, 0, 100) else UDim2.new(0.3, 0, 0, 88)
 	frame.BackgroundColor3 = Theme.Colors.Panel
 	frame.BackgroundTransparency = 0.2
+	frame.Visible = not isMobile
 	frame.Parent = parent
 	Theme.StylePanel(frame, 8)
 
@@ -660,6 +661,10 @@ end
 
 local function updateToolPanelVisual()
 	if toolPanelFrame == nil or toolPanelButton == nil then
+		return
+	end
+	if isMobile then
+		toolPanelFrame.Visible = false
 		return
 	end
 
@@ -1032,7 +1037,7 @@ local function createTitanProgressPanel(parent: Instance)
 	frame.Name = "TitanProgress"
 	frame.AnchorPoint = Vector2.new(1, 0)
 	frame.Position = UDim2.new(1, -10, 0, 10)
-	frame.Size = if isMobile then UDim2.new(0.22, 0, 0, 130) else UDim2.new(0.14, 0, 0, 110)
+	frame.Size = if isMobile then UDim2.new(0.17, 0, 0, 80) else UDim2.new(0.14, 0, 0, 110)
 	frame.BackgroundColor3 = Theme.Colors.Panel
 	frame.BackgroundTransparency = 0.15
 	frame.Parent = parent
@@ -1040,7 +1045,7 @@ local function createTitanProgressPanel(parent: Instance)
 
 	local titleLabel = Instance.new("TextLabel")
 	titleLabel.Name = "Title"
-	titleLabel.Size = UDim2.new(1, -10, 0, 22)
+	titleLabel.Size = if isMobile then UDim2.new(1, -8, 0, 16) else UDim2.new(1, -10, 0, 22)
 	titleLabel.Position = UDim2.fromOffset(5, 4)
 	titleLabel.BackgroundTransparency = 1
 	titleLabel.Font = Enum.Font.GothamBlack
@@ -1052,8 +1057,8 @@ local function createTitanProgressPanel(parent: Instance)
 
 	local barBg = Instance.new("Frame")
 	barBg.Name = "IntegrityBarBg"
-	barBg.Size = UDim2.new(1, -20, 0, 16)
-	barBg.Position = UDim2.new(0, 10, 0, 30)
+	barBg.Size = if isMobile then UDim2.new(1, -16, 0, 12) else UDim2.new(1, -20, 0, 16)
+	barBg.Position = if isMobile then UDim2.new(0, 8, 0, 24) else UDim2.new(0, 10, 0, 30)
 	barBg.BackgroundColor3 = Theme.Colors.IntegrityBarBg
 	barBg.BorderSizePixel = 0
 	barBg.Parent = frame
@@ -1080,8 +1085,8 @@ local function createTitanProgressPanel(parent: Instance)
 
 	local reqLabel = Instance.new("TextLabel")
 	reqLabel.Name = "Requirements"
-	reqLabel.Size = UDim2.new(1, -10, 0, 44)
-	reqLabel.Position = UDim2.new(0, 5, 0, 52)
+	reqLabel.Size = if isMobile then UDim2.new(1, -8, 0, 28) else UDim2.new(1, -10, 0, 44)
+	reqLabel.Position = if isMobile then UDim2.new(0, 4, 0, 40) else UDim2.new(0, 5, 0, 52)
 	reqLabel.BackgroundTransparency = 1
 	reqLabel.Font = Enum.Font.GothamSemibold
 	reqLabel.TextColor3 = Theme.Colors.TextMuted
@@ -1094,12 +1099,13 @@ local function createTitanProgressPanel(parent: Instance)
 	local distLabel = Instance.new("TextLabel")
 	distLabel.Name = "Distance"
 	distLabel.Size = UDim2.new(1, -10, 0, 16)
-	distLabel.Position = UDim2.new(0, 5, 0, 96)
+	distLabel.Position = if isMobile then UDim2.new(0, 5, 1, -16) else UDim2.new(0, 5, 0, 96)
 	distLabel.BackgroundTransparency = 1
 	distLabel.Font = Enum.Font.Gotham
 	distLabel.TextScaled = true
 	distLabel.TextColor3 = Theme.Colors.TextMuted
 	distLabel.Text = ""
+	distLabel.Visible = not isMobile
 	distLabel.Parent = frame
 	titanDistanceLabel = distLabel
 end
@@ -1192,9 +1198,9 @@ local function createMainHUD()
 
 	local scrapFrame = Instance.new("Frame")
 	scrapFrame.Name = "ScrapFrame"
-	scrapFrame.AnchorPoint = Vector2.new(0.5, 0)
-	scrapFrame.Position = UDim2.new(0.5, 0, 0.02, 0)
-	scrapFrame.Size = if isMobile then UDim2.new(0.22, 0, 0, 56) else UDim2.new(0.14, 0, 0, 48)
+	scrapFrame.AnchorPoint = if isMobile then Vector2.new(1, 0) else Vector2.new(0.5, 0)
+	scrapFrame.Position = if isMobile then UDim2.new(1, -10, 0, 96) else UDim2.new(0.5, 0, 0.02, 0)
+	scrapFrame.Size = if isMobile then UDim2.new(0.17, 0, 0, 36) else UDim2.new(0.14, 0, 0, 48)
 	scrapFrame.BackgroundColor3 = Theme.Colors.Panel
 	scrapFrame.BackgroundTransparency = 0.15
 	scrapFrame.Parent = gui
@@ -1206,7 +1212,7 @@ local function createMainHUD()
 	label.BackgroundTransparency = 1
 	label.TextColor3 = Theme.Colors.Accent
 	label.TextScaled = false
-	label.TextSize = 24
+	label.TextSize = if isMobile then 14 else 24
 	label.Font = Enum.Font.GothamBold
 	label.Text = "Scrap: 0"
 	label.Parent = scrapFrame
@@ -1215,12 +1221,13 @@ local function createMainHUD()
 	local steelLabel = Instance.new("TextLabel")
 	steelLabel.Name = "StormSteelLabel"
 	steelLabel.AnchorPoint = Vector2.new(1, 0)
-	steelLabel.Position = UDim2.new(1, -8, 0, 56)
-	steelLabel.Size = UDim2.fromOffset(200, 34)
+	steelLabel.Position = if isMobile then UDim2.new(1, -4, 1, 2) else UDim2.new(1, -8, 0, 56)
+	steelLabel.Size = if isMobile then UDim2.fromOffset(150, 20) else UDim2.fromOffset(200, 34)
 	steelLabel.BackgroundTransparency = 1
 	steelLabel.TextColor3 = Theme.Colors.RoleColors.Fixer
 	steelLabel.Font = Enum.Font.GothamBold
-	steelLabel.TextScaled = true
+	steelLabel.TextScaled = if isMobile then false else true
+	steelLabel.TextSize = if isMobile then 12 else 14
 	steelLabel.Text = "Storm Steel: 0"
 	steelLabel.Visible = false
 	steelLabel.Parent = scrapFrame
@@ -1529,18 +1536,18 @@ function MainHUD.Init()
 			{
 				delay = 0,
 				text = if isMobile
-					then "Tap BUILD to choose Turret/Drill/Wall, then tap the ground to place."
+					then "Tap T/D/W at the bottom, drag in world, then tap PLACE."
 					else "Press [1] [2] [3] to select buildings, click to place",
 			},
 			{
 				delay = 5,
-				text = if isMobile then "Tap ROTATE while placing to turn buildings."
+				text = if isMobile then "Use [x] GRID to switch between grid and free placement."
 					else "Press [R] to rotate buildings before placing",
 			},
 			{
 				delay = 10,
 				text = if isMobile
-					then "Walk to the Titan Core and hold BUILD when near a blueprint or prompt."
+					then "Walk near a blueprint and touch-hold it to build."
 					else "Walk to the Titan Core and hold [E] to deposit resources",
 			},
 		}

@@ -1,8 +1,10 @@
 --!strict
 
+local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
 
 local LocalPlayer = Players.LocalPlayer
 
@@ -18,15 +20,21 @@ local MobileControls = {}
 local isInitialized = false
 local rootGui: ScreenGui? = nil
 local rootFrame: Frame? = nil
-local buildMenuOpen = false
+local hotbarFrame: Frame? = nil
+local actionFrame: Frame? = nil
 
+local slotButtons: { [string]: TextButton } = {}
+local slotStrokes: { [string]: UIStroke } = {}
+
+local placeButton: TextButton? = nil
 local rotateButton: TextButton? = nil
 local cancelButton: TextButton? = nil
-local holdButton: TextButton? = nil
 local removeButton: TextButton? = nil
-local optionFrame: Frame? = nil
-local toolButton: TextButton? = nil
-local holdPointerDown = false
+local upgradeButton: TextButton? = nil
+local gridModeButton: TextButton? = nil
+local activeSlotName: string? = nil
+local SLOT_BASE_SIZE = UDim2.fromOffset(44, 44)
+local SLOT_ACTIVE_SIZE = UDim2.fromOffset(48, 48)
 
 local function makeButton(
 	parent: Instance,
@@ -56,20 +64,159 @@ local function makeButton(
 	return button
 end
 
-local function updateToolButton()
+local function getRootPart(): BasePart?
+	local character = LocalPlayer.Character
+	local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
+	if root and root:IsA("BasePart") then
+		return root
+	end
+	return nil
+end
+
+local function getNearestUpgradePrompt(range: number): ProximityPrompt?
+	local root = getRootPart()
+	if root == nil then
+		return nil
+	end
+	local nearestPrompt: ProximityPrompt? = nil
+	local nearestDist = range
+	for _, tagged in CollectionService:GetTagged("DismantlableBuilding") do
+		if tagged:IsA("BasePart") and tagged.Parent ~= nil then
+			local dist = (tagged.Position - root.Position).Magnitude
+			if dist <= nearestDist then
+				local prompt = tagged:FindFirstChildOfClass("ProximityPrompt")
+				if prompt ~= nil and prompt.Enabled then
+					nearestDist = dist
+					nearestPrompt = prompt
+				end
+			end
+		end
+	end
+	return nearestPrompt
+end
+
+local function updateGridModeText()
+	if gridModeButton == nil then
+		return
+	end
+	local usingGrid = BlueprintController.GetGridSnap()
+	gridModeButton.Text = if usingGrid then "[x] GRID" else "[ ] FREE"
+end
+
+local function updateToolSlot()
+	local toolButton = slotButtons.Tool
 	if toolButton == nil then
 		return
 	end
+
 	local toolName = ToolController.GetCurrentToolName()
 	if toolName == nil then
 		toolButton.Visible = false
 		return
 	end
 	toolButton.Visible = true
-	toolButton.Text = if toolName == "RustyShotgun" then "SHOT" else "WRENCH"
-	toolButton.BackgroundColor3 = if ToolController.IsCurrentToolEquipped()
-		then Theme.Colors.ToolEquipped
-		else Theme.Colors.ToolUnequipped
+	toolButton.Text = if toolName == "RustyShotgun" then "GUN" else "WR"
+end
+
+local function setSlotActive(slotName: string, isActive: boolean)
+	local button = slotButtons[slotName]
+	local stroke = slotStrokes[slotName]
+	if button == nil or stroke == nil then
+		return
+	end
+
+	stroke.Transparency = if isActive then 0 else 0.75
+	stroke.Thickness = if isActive then 2 else 1
+	stroke.Color = if isActive then Theme.Colors.Accent else Theme.Colors.TextMuted
+	button.BackgroundColor3 = if isActive then Theme.Colors.ToolEquipped else Theme.Colors.PanelAlt
+	button.Size = if isActive then SLOT_ACTIVE_SIZE else SLOT_BASE_SIZE
+end
+
+local function pulseSlot(button: TextButton)
+	local grow = TweenService:Create(button, TweenInfo.new(0.08, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+		Size = SLOT_ACTIVE_SIZE,
+	})
+	local shrink = TweenService:Create(button, TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+		Size = SLOT_BASE_SIZE,
+	})
+	grow:Play()
+	grow.Completed:Connect(function()
+		shrink:Play()
+	end)
+end
+
+local function syncActiveSlot()
+	local mode = BlueprintController.GetMode()
+	local desiredSlot: string? = nil
+	if mode == "Placing" then
+		local currentType = BlueprintController.GetCurrentType()
+		if currentType == "Turret" then
+			desiredSlot = "Turret"
+		elseif currentType == "Drill" then
+			desiredSlot = "Drill"
+		elseif currentType == "Wall" then
+			desiredSlot = "Wall"
+		end
+	elseif ToolController.IsCurrentToolEquipped() then
+		local toolName = ToolController.GetCurrentToolName()
+		if toolName ~= nil then
+			desiredSlot = "Tool"
+		end
+	end
+	activeSlotName = desiredSlot
+
+	for slotName, _ in slotButtons do
+		setSlotActive(slotName, slotName == activeSlotName)
+	end
+end
+
+local function selectBuildSlot(buildType: "Turret" | "Drill" | "Wall")
+	local mode = BlueprintController.GetMode()
+	local currentType = BlueprintController.GetCurrentType()
+	if mode == "Placing" and currentType == buildType then
+		BlueprintController.CancelPlacement()
+		return
+	end
+
+	if ToolController.IsCurrentToolEquipped() then
+		ToolController.UnequipCurrentTool()
+	end
+
+	BlueprintController.StartPlacing(buildType)
+	local slotButton = slotButtons[buildType]
+	if slotButton ~= nil then
+		pulseSlot(slotButton)
+	end
+end
+
+local function toggleToolSlot()
+	if BlueprintController.GetMode() == "Placing" then
+		BlueprintController.CancelPlacement()
+	end
+
+	if ToolController.IsCurrentToolEquipped() then
+		ToolController.UnequipCurrentTool()
+		return
+	end
+	ToolController.EquipCurrentTool()
+	local slotButton = slotButtons.Tool
+	if slotButton ~= nil then
+		pulseSlot(slotButton)
+	end
+end
+
+local function createSlotButton(parent: Instance, slotName: string, text: string): TextButton
+	local button = makeButton(parent, slotName .. "Slot", text, SLOT_BASE_SIZE, UDim2.fromOffset(0, 0))
+	button.TextScaled = false
+	button.TextSize = 14
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = Theme.Colors.TextMuted
+	stroke.Transparency = 0.75
+	stroke.Thickness = 1
+	stroke.Parent = button
+	slotButtons[slotName] = button
+	slotStrokes[slotName] = stroke
+	return button
 end
 
 local function createUI(parentGui: ScreenGui)
@@ -80,113 +227,123 @@ local function createUI(parentGui: ScreenGui)
 	rootFrame.ZIndex = 20
 	rootFrame.Parent = parentGui
 
-	local buildButton = makeButton(
-		rootFrame,
-		"BuildMenuButton",
-		"BUILD",
-		UDim2.fromOffset(92, 52),
-		UDim2.new(0.5, -46, 1, -102),
-		Theme.Colors.Accent
-	)
-	buildButton.TextColor3 = Theme.Colors.Panel
+	hotbarFrame = Instance.new("Frame")
+	hotbarFrame.Name = "Hotbar"
+	hotbarFrame.AnchorPoint = Vector2.new(0.5, 1)
+	hotbarFrame.Position = UDim2.new(0.5, 0, 1, -8)
+	hotbarFrame.Size = UDim2.fromOffset(236, 56)
+	hotbarFrame.BackgroundColor3 = Theme.Colors.Panel
+	hotbarFrame.BackgroundTransparency = 0.2
+	hotbarFrame.Parent = rootFrame
+	Theme.StylePanel(hotbarFrame, 8)
 
-	optionFrame = Instance.new("Frame")
-	optionFrame.Name = "BuildOptions"
-	optionFrame.Size = UDim2.fromOffset(228, 52)
-	optionFrame.Position = UDim2.new(0.5, -114, 1, -160)
-	optionFrame.BackgroundTransparency = 1
-	optionFrame.Visible = false
-	optionFrame.Parent = rootFrame
+	local hotbarLayout = Instance.new("UIListLayout")
+	hotbarLayout.FillDirection = Enum.FillDirection.Horizontal
+	hotbarLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	hotbarLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+	hotbarLayout.Padding = UDim.new(0, 6)
+	hotbarLayout.Parent = hotbarFrame
 
-	local optionLayout = Instance.new("UIListLayout")
-	optionLayout.FillDirection = Enum.FillDirection.Horizontal
-	optionLayout.Padding = UDim.new(0, 8)
-	optionLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-	optionLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-	optionLayout.Parent = optionFrame
-
-	local turret = makeButton(optionFrame, "TurretButton", "T", UDim2.fromOffset(68, 52), UDim2.fromOffset(0, 0))
-	turret.MouseButton1Click:Connect(function()
-		BlueprintController.StartPlacing("Turret")
-		buildMenuOpen = false
-		if optionFrame then
-			optionFrame.Visible = false
-		end
+	local turretSlot = createSlotButton(hotbarFrame, "Turret", "T")
+	turretSlot.MouseButton1Click:Connect(function()
+		selectBuildSlot("Turret")
 	end)
 
-	local drill = makeButton(optionFrame, "DrillButton", "D", UDim2.fromOffset(68, 52), UDim2.fromOffset(0, 0))
-	drill.MouseButton1Click:Connect(function()
-		BlueprintController.StartPlacing("Drill")
-		buildMenuOpen = false
-		if optionFrame then
-			optionFrame.Visible = false
-		end
+	local drillSlot = createSlotButton(hotbarFrame, "Drill", "D")
+	drillSlot.MouseButton1Click:Connect(function()
+		selectBuildSlot("Drill")
 	end)
 
-	local wall = makeButton(optionFrame, "WallButton", "W", UDim2.fromOffset(68, 52), UDim2.fromOffset(0, 0))
-	wall.MouseButton1Click:Connect(function()
-		BlueprintController.StartPlacing("Wall")
-		buildMenuOpen = false
-		if optionFrame then
-			optionFrame.Visible = false
-		end
+	local wallSlot = createSlotButton(hotbarFrame, "Wall", "W")
+	wallSlot.MouseButton1Click:Connect(function()
+		selectBuildSlot("Wall")
 	end)
 
-	buildButton.MouseButton1Click:Connect(function()
-		buildMenuOpen = not buildMenuOpen
-		if optionFrame then
-			optionFrame.Visible = buildMenuOpen
-		end
+	local spacer = Instance.new("Frame")
+	spacer.Name = "Spacer"
+	spacer.Size = UDim2.fromOffset(16, 44)
+	spacer.BackgroundTransparency = 1
+	spacer.Parent = hotbarFrame
+
+	local toolSlot = createSlotButton(hotbarFrame, "Tool", "TOOL")
+	toolSlot.MouseButton1Click:Connect(function()
+		toggleToolSlot()
 	end)
 
-	rotateButton = makeButton(rootFrame, "RotateButton", "ROTATE", UDim2.fromOffset(94, 50), UDim2.new(1, -206, 1, -162))
+	actionFrame = Instance.new("Frame")
+	actionFrame.Name = "ActionStack"
+	actionFrame.AnchorPoint = Vector2.new(1, 1)
+	actionFrame.Position = UDim2.new(1, -10, 1, -90)
+	actionFrame.Size = UDim2.fromOffset(40, 220)
+	actionFrame.BackgroundTransparency = 1
+	actionFrame.Parent = rootFrame
+
+	local actionLayout = Instance.new("UIListLayout")
+	actionLayout.FillDirection = Enum.FillDirection.Vertical
+	actionLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	actionLayout.VerticalAlignment = Enum.VerticalAlignment.Bottom
+	actionLayout.Padding = UDim.new(0, 6)
+	actionLayout.Parent = actionFrame
+
+	placeButton = makeButton(actionFrame, "PlaceButton", "PLACE", UDim2.fromOffset(40, 40), UDim2.fromOffset(0, 0), Theme.Colors.Good)
+	placeButton.TextColor3 = Theme.Colors.Panel
+	placeButton.TextScaled = false
+	placeButton.TextSize = 10
+	placeButton.MouseButton1Click:Connect(function()
+		BlueprintController.PlaceCurrentBlueprint()
+	end)
+
+	rotateButton = makeButton(actionFrame, "RotateButton", "ROT", UDim2.fromOffset(40, 40), UDim2.fromOffset(0, 0))
+	rotateButton.TextScaled = false
+	rotateButton.TextSize = 10
 	rotateButton.MouseButton1Click:Connect(function()
 		BlueprintController.RotatePlacement()
 	end)
 
-	cancelButton = makeButton(rootFrame, "CancelButton", "CANCEL", UDim2.fromOffset(94, 50), UDim2.new(1, -106, 1, -162))
+	cancelButton = makeButton(actionFrame, "CancelButton", "X", UDim2.fromOffset(40, 40), UDim2.fromOffset(0, 0), Theme.Colors.Bad)
+	cancelButton.TextColor3 = Theme.Colors.Panel
+	cancelButton.TextScaled = false
+	cancelButton.TextSize = 14
 	cancelButton.MouseButton1Click:Connect(function()
 		BlueprintController.CancelPlacement()
 	end)
 
-	holdButton = makeButton(
-		rootFrame,
-		"BuildHoldButton",
-		"HOLD\nBUILD",
-		UDim2.fromOffset(100, 64),
-		UDim2.new(1, -112, 1, -242),
-		Theme.Colors.Good
-	)
-	holdButton.TextColor3 = Theme.Colors.Panel
-	holdButton.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
-			holdPointerDown = true
-			BlueprintController.StartInteractHold()
-		end
-	end)
-	holdButton.InputEnded:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
-			holdPointerDown = false
-			BlueprintController.EndInteractHold()
-		end
-	end)
-
-	removeButton = makeButton(rootFrame, "RemoveButton", "REMOVE", UDim2.fromOffset(94, 50), UDim2.new(1, -106, 1, -106))
+	removeButton = makeButton(actionFrame, "RemoveButton", "DEL", UDim2.fromOffset(40, 40), UDim2.fromOffset(0, 0))
+	removeButton.TextScaled = false
+	removeButton.TextSize = 11
 	removeButton.MouseButton1Click:Connect(function()
 		BlueprintController.CancelNearestBlueprint()
 	end)
 
-	toolButton = makeButton(rootFrame, "ToolButton", "TOOL", UDim2.fromOffset(94, 50), UDim2.new(1, -106, 1, -52))
-	toolButton.MouseButton1Click:Connect(function()
-		if ToolController.IsCurrentToolEquipped() then
-			ToolController.UnequipCurrentTool()
-		else
-			ToolController.EquipCurrentTool()
+	upgradeButton = makeButton(actionFrame, "UpgradeButton", "UP", UDim2.fromOffset(40, 40), UDim2.fromOffset(0, 0))
+	upgradeButton.TextScaled = false
+	upgradeButton.TextSize = 12
+	upgradeButton.MouseButton1Click:Connect(function()
+		local prompt = getNearestUpgradePrompt(14)
+		if prompt == nil then
+			return
 		end
-		updateToolButton()
+		pcall(function()
+			prompt:InputHoldBegin()
+		end)
+		local holdTime = math.max(0.05, prompt.HoldDuration)
+		task.delay(holdTime, function()
+			pcall(function()
+				prompt:InputHoldEnd()
+			end)
+		end)
 	end)
 
-	updateToolButton()
+	gridModeButton = makeButton(actionFrame, "GridModeButton", "[x] GRID", UDim2.fromOffset(40, 40), UDim2.fromOffset(0, 0))
+	gridModeButton.TextScaled = false
+	gridModeButton.TextSize = 8
+	gridModeButton.MouseButton1Click:Connect(function()
+		BlueprintController.SetGridSnap(not BlueprintController.GetGridSnap())
+		updateGridModeText()
+	end)
+	updateGridModeText()
+	updateToolSlot()
+	syncActiveSlot()
 end
 
 function MobileControls.Init()
@@ -207,30 +364,30 @@ function MobileControls.Init()
 		local mode = BlueprintController.GetMode()
 		local placing = mode == "Placing"
 		local hasNearbyBlueprint = BlueprintController.GetNearestBlueprint(16) ~= nil
+		local hasUpgradePrompt = getNearestUpgradePrompt(14) ~= nil
 
-		if optionFrame ~= nil and not buildMenuOpen then
-			optionFrame.Visible = false
+		if placeButton ~= nil then
+			placeButton.Visible = placing
 		end
-
 		if rotateButton ~= nil then
 			rotateButton.Visible = placing
 		end
 		if cancelButton ~= nil then
 			cancelButton.Visible = placing
 		end
-
-		if holdButton ~= nil then
-			holdButton.Visible = not placing and hasNearbyBlueprint
-			if not holdButton.Visible and holdPointerDown then
-				holdPointerDown = false
-				BlueprintController.EndInteractHold()
-			end
-		end
 		if removeButton ~= nil then
 			removeButton.Visible = not placing and hasNearbyBlueprint
 		end
+		if upgradeButton ~= nil then
+			upgradeButton.Visible = not placing and hasUpgradePrompt
+		end
+		if gridModeButton ~= nil then
+			gridModeButton.Visible = placing
+		end
 
-		updateToolButton()
+		updateGridModeText()
+		updateToolSlot()
+		syncActiveSlot()
 	end)
 end
 

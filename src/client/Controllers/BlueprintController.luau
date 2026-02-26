@@ -15,6 +15,7 @@ local Constants = require(Shared:WaitForChild("Constants"))
 local VisualManifest = require(Shared:WaitForChild("VisualManifest"))
 local Remotes = require(Shared:WaitForChild("Remotes"))
 local Utils = require(Shared:WaitForChild("Utils"))
+local Platform = require(Shared:WaitForChild("Platform"))
 
 type BuildingType = "Turret" | "Drill" | "Wall"
 type ControllerMode = "Idle" | "Placing" | "Interacting"
@@ -30,6 +31,7 @@ local renderConn: RBXScriptConnection? = nil
 local placementPosition: Vector3? = nil
 local placementValid = false
 local currentRotation: number = 0
+local useGridSnap = true
 
 local holdTarget: BasePart? = nil
 local holdStartTime: number = 0
@@ -159,7 +161,10 @@ local function getPlacementResult(): (boolean, Vector3?)
 		return false, nil
 	end
 
-	local snapped = Utils.SnapToGrid(result.Position, Constants.BUILDING.GridSize)
+	local placed = result.Position
+	if useGridSnap then
+		placed = Utils.SnapToGrid(placed, Constants.BUILDING.GridSize)
+	end
 	local character = LocalPlayer.Character
 	local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
 	if root == nil or not root:IsA("BasePart") then
@@ -167,11 +172,11 @@ local function getPlacementResult(): (boolean, Vector3?)
 	end
 
 	local maxDistance = Constants.BUILDING.PlacementMaxDistance
-	if (root.Position - snapped).Magnitude > maxDistance then
+	if (root.Position - placed).Magnitude > maxDistance then
 		return false, nil
 	end
 	local maxBuildRadius = Constants.BUILDING.MaxBuildRadiusFromCenter
-	if Vector3.new(snapped.X, 0, snapped.Z).Magnitude > maxBuildRadius then
+	if Vector3.new(placed.X, 0, placed.Z).Magnitude > maxBuildRadius then
 		return false, nil
 	end
 
@@ -181,7 +186,7 @@ local function getPlacementResult(): (boolean, Vector3?)
 	end
 
 	local size = Constants.BUILDING.Sizes[buildType]
-	local center = snapped + Vector3.new(0, size.Y * 0.5, 0)
+	local center = placed + Vector3.new(0, size.Y * 0.5, 0)
 	local rotatedCF = CFrame.new(center) * CFrame.Angles(0, math.rad(currentRotation), 0)
 	local overlapParams = OverlapParams.new()
 	overlapParams.FilterType = Enum.RaycastFilterType.Exclude
@@ -193,7 +198,7 @@ local function getPlacementResult(): (boolean, Vector3?)
 		end
 	end
 
-	return true, snapped
+	return true, placed
 end
 
 local function updateGhostVisual()
@@ -245,6 +250,38 @@ local function placeCurrentBlueprint()
 
 	remotes.PlaceBlueprint:FireServer(currentType, placementPosition, currentRotation)
 	clearGhost()
+end
+
+local function getBlueprintFromTouchPosition(screenPos: Vector2, range: number): BasePart?
+	local camera = Workspace.CurrentCamera
+	if camera == nil then
+		return nil
+	end
+	local character = LocalPlayer.Character
+	local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
+	if root == nil or not root:IsA("BasePart") then
+		return nil
+	end
+
+	local unitRay = camera:ViewportPointToRay(screenPos.X, screenPos.Y)
+	local rayParams = RaycastParams.new()
+	rayParams.FilterType = Enum.RaycastFilterType.Exclude
+	rayParams.FilterDescendantsInstances = { LocalPlayer.Character, currentGhost }
+	local result = Workspace:Raycast(unitRay.Origin, unitRay.Direction * 500, rayParams)
+	if result == nil then
+		return nil
+	end
+	local hit = result.Instance
+	if not hit:IsA("BasePart") then
+		return nil
+	end
+	if not CollectionService:HasTag(hit, "Blueprint") then
+		return nil
+	end
+	if (hit.Position - root.Position).Magnitude > range then
+		return nil
+	end
+	return hit
 end
 
 function BlueprintController.FinishBlueprint(blueprintId: string)
@@ -309,13 +346,21 @@ local function cancelHold()
 	end
 end
 
-local function startHold()
-	local nearest = getNearestBlueprint(BLUEPRINT_INTERACT_RANGE)
-	if nearest == nil then
+local function startHold(targetOverride: BasePart?)
+	local target = targetOverride or getNearestBlueprint(BLUEPRINT_INTERACT_RANGE)
+	if target == nil then
+		return
+	end
+	local character = LocalPlayer.Character
+	local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
+	if root == nil or not root:IsA("BasePart") then
+		return
+	end
+	if (target.Position - root.Position).Magnitude > BLUEPRINT_INTERACT_RANGE + 0.5 then
 		return
 	end
 	mode = "Interacting"
-	holdTarget = nearest
+	holdTarget = target
 	holdStartTime = os.clock()
 	holdDuration = getBuildTime()
 
@@ -370,6 +415,26 @@ function BlueprintController.RotatePlacement(): boolean
 	end
 	currentRotation = (currentRotation + 90) % 360
 	return true
+end
+
+function BlueprintController.PlaceCurrentBlueprint(): boolean
+	if mode ~= "Placing" then
+		return false
+	end
+	placeCurrentBlueprint()
+	return true
+end
+
+function BlueprintController.SetGridSnap(enabled: boolean)
+	useGridSnap = enabled
+end
+
+function BlueprintController.GetGridSnap(): boolean
+	return useGridSnap
+end
+
+function BlueprintController.GetCurrentType(): BuildingType?
+	return currentType
 end
 
 function BlueprintController.CancelPlacement(): boolean
@@ -428,11 +493,17 @@ local function onInputBegan(input: InputObject, processed: boolean)
 			BlueprintController.CancelPlacement()
 			return
 		end
-		if
-			(input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch)
-			and not processed
-		then
+		if (input.UserInputType == Enum.UserInputType.MouseButton1 or (input.UserInputType == Enum.UserInputType.Touch and not Platform.IsMobile))
+			and not processed then
 			placeCurrentBlueprint()
+			return
+		end
+	end
+
+	if Platform.IsMobile and mode == "Idle" and holdTarget == nil and input.UserInputType == Enum.UserInputType.Touch and not processed then
+		local touchTarget = getBlueprintFromTouchPosition(input.Position, BLUEPRINT_INTERACT_RANGE)
+		if touchTarget ~= nil then
+			startHold(touchTarget)
 			return
 		end
 	end
@@ -458,6 +529,8 @@ end
 
 local function onInputEnded(input: InputObject, _processed: boolean)
 	if input.KeyCode == Enum.KeyCode.E and holdTarget ~= nil then
+		cancelHold()
+	elseif Platform.IsMobile and input.UserInputType == Enum.UserInputType.Touch and holdTarget ~= nil then
 		cancelHold()
 	end
 end
