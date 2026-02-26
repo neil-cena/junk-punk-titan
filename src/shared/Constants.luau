@@ -100,7 +100,8 @@ local Constants = {
 		FirstWaveDelaySeconds = 60,
 		SwarmDurationSeconds = 25,
 		BaseEnemyCount = 5,
-		EnemiesPerWave = 4,
+		EnemiesPerWave = 6,
+		IntensityPattern = { 0.6, 1.0, 1.8 },
 		MinSpawnDistanceFromCenter = 50,
 		SpawnRadius = 60,
 		RetreatBurrowDistance = 400,
@@ -116,7 +117,7 @@ local Constants = {
 		PunchDamage = 7,
 		PunchRange = 6,
 		PunchCooldown = 0.33,
-		RatBaseHealth = 35,
+		RatBaseHealth = 22,
 		RatFleeSpeedMultiplier = 1.2,
 		ScrapBundleDespawnSeconds = 30,
 	},
@@ -132,7 +133,7 @@ local Constants = {
 
 	LOOT = {
 		JunkBlockValue = 5,
-		RatCacheValue = 3,
+		RatCacheValue = 2,
 		RatCacheMinDrops = 2,
 		RatCacheMaxDrops = 3,
 		RatCacheBonusDivisor = 75,

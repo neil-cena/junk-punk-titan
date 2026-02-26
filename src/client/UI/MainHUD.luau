@@ -36,6 +36,7 @@ local scrapHistory: { { t: number, v: number } } = {}
 local scrapLabel: TextLabel? = nil
 local stormSteelLabel: TextLabel? = nil
 local waveTimerLabel: TextLabel? = nil
+local waveSeasonLabel: TextLabel? = nil
 local dismantleBars: { [BasePart]: BillboardGui } = {}
 local buildCostButtons: { [BuildingType]: TextButton } = {}
 local roleScreen: ScreenGui? = nil
@@ -59,6 +60,24 @@ local hudWatchdogStarted = false
 local upgradeBanner: TextLabel? = nil
 local sandboxMode = false
 local currentMaxBuildLevel = 1
+local currentWaveNumber = 0
+
+local function waveSeasonText(patternIdx: number): string
+	if patternIdx == 1 then
+		return "BREATHER"
+	elseif patternIdx == 2 then
+		return "NORMAL"
+	end
+	return "SURGE"
+end
+
+local function updateWaveSeasonLabel(waveNumber: number, patternIdx: number)
+	currentWaveNumber = waveNumber
+	if waveSeasonLabel == nil then
+		return
+	end
+	waveSeasonLabel.Text = ("WAVE %d -- %s"):format(currentWaveNumber, waveSeasonText(patternIdx))
+end
 
 local SHOTGUN_TOOL_NAME = "RustyShotgun"
 local WRENCH_TOOL_NAME = "RustyWrench"
@@ -1206,6 +1225,19 @@ local function createMainHUD()
 	waveLabel.Parent = gui
 	waveTimerLabel = waveLabel
 
+	local seasonLabel = Instance.new("TextLabel")
+	seasonLabel.Name = "WaveSeason"
+	seasonLabel.AnchorPoint = Vector2.new(0.5, 0)
+	seasonLabel.Position = UDim2.new(0.5, 0, 0.125, 0)
+	seasonLabel.Size = UDim2.fromOffset(300, 18)
+	seasonLabel.BackgroundTransparency = 1
+	seasonLabel.TextColor3 = Theme.Colors.TextMuted
+	seasonLabel.Font = Enum.Font.GothamBold
+	seasonLabel.TextScaled = true
+	seasonLabel.Text = "WAVE 0 -- NORMAL"
+	seasonLabel.Parent = gui
+	waveSeasonLabel = seasonLabel
+
 	local threat = Instance.new("TextLabel")
 	threat.Name = "ThreatBanner"
 	threat.AnchorPoint = Vector2.new(0.5, 0)
@@ -1420,6 +1452,10 @@ function MainHUD.Init()
 	end)
 	remotes.UpdateWaveTimer.OnClientEvent:Connect(function(secondsRemaining: number, _nextWaveTime: number)
 		updateWaveTimer(secondsRemaining)
+	end)
+	remotes.WaveStarted.OnClientEvent:Connect(function(waveNumber: number, patternIdx: number?)
+		local safePatternIdx = if typeof(patternIdx) == "number" then math.floor(patternIdx :: number) else 2
+		updateWaveSeasonLabel(waveNumber, safePatternIdx)
 	end)
 	remotes.GlobalGameOver.OnClientEvent:Connect(function()
 		showGameOver()

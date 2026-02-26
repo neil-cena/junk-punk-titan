@@ -72,6 +72,7 @@ function ScrapSpawnService.Init(): ()
 	end)
 
 	local MAGNET_TICK = 0.15
+	local MAX_COLLECTS_PER_TICK = 5
 	local magnetAcc = 0
 	RunService.Heartbeat:Connect(function(dt)
 		magnetAcc += dt
@@ -82,6 +83,7 @@ function ScrapSpawnService.Init(): ()
 
 		local magnetRadius = Constants.SCRAP_SPAWNS.MagnetRadius
 		local alive: { BasePart } = {}
+		local collectedThisTick = 0
 
 		for _, pile in activeScrapPiles do
 			if pile.Parent == nil or pickedPiles[pile] then
@@ -108,6 +110,11 @@ function ScrapSpawnService.Init(): ()
 			end
 
 			if nearestPlayer ~= nil and nearestDist <= magnetRadius then
+				if collectedThisTick >= MAX_COLLECTS_PER_TICK then
+					table.insert(alive, pile)
+					continue
+				end
+				collectedThisTick += 1
 				pickedPiles[pile] = true
 				local isInstant = nearestDist <= Constants.SCRAP_SPAWNS.InstantPickupRadius
 				pile:SetAttribute("MagnetTarget", nearestPlayer.Name)

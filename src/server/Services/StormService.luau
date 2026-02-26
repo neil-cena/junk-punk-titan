@@ -141,9 +141,14 @@ local function applyStormWindDamage()
 			if nextHP <= 0 then
 				local destroyedPos = instance.Position
 				local buildingType = instance:GetAttribute("BuildingType")
+				local rotationAttr = instance:GetAttribute("BuildingRotation")
+				local buildingRotation = if typeof(rotationAttr) == "number"
+					then (rotationAttr :: number)
+					else math.deg(select(2, instance.CFrame:ToEulerAnglesYXZ()))
 				remotes.BuildingDismantled:FireAllClients("StormDamage", destroyedPos)
 				instance:Destroy()
 				BuildingService.RegisterDestroyedSlot(destroyedPos, buildingType)
+				BuildingService.PlaceRuinGhost(destroyedPos, buildingType, buildingRotation)
 			else
 				instance:SetAttribute("BuildingHP", nextHP)
 			end

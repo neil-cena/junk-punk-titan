@@ -25,5 +25,5 @@ return {
 	SteelCollect = "rbxassetid://12221991",
 	HitConfirm = "rbxassetid://12222216",
 	WaveSlam = "rbxassetid://9114243152",
-	LootCombo = "rbxassetid://12221984",
+	LootCombo = "rbxassetid://6026984224",
 }

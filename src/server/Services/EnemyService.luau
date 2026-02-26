@@ -155,7 +155,7 @@ end
 local function spawnCollectableBundle(atPosition: Vector3, scrapValue: number)
 	local bundle = acquireRatCache()
 	bundle.Anchored = false
-	bundle.CanCollide = true
+	bundle.CanCollide = false
 	bundle.CFrame = CFrame.new(atPosition + Vector3.new(0, 2, 0))
 	bundle.Parent = Workspace
 
@@ -837,6 +837,10 @@ end
 dismantleAndDestroyBuilding = function(dismantledPart: BasePart, ratModel: Model?)
 	local finalPosition = dismantledPart.Position
 	local buildingType = dismantledPart:GetAttribute("BuildingType")
+	local rotationAttr = dismantledPart:GetAttribute("BuildingRotation")
+	local buildingRotation = if typeof(rotationAttr) == "number"
+		then (rotationAttr :: number)
+		else math.deg(select(2, dismantledPart.CFrame:ToEulerAnglesYXZ()))
 	local baseCost = if typeof(buildingType) == "string" then (Constants.BASE_COSTS[buildingType] or 0) else 0
 
 	local affectedRats: { Model } = {}
@@ -853,6 +857,7 @@ dismantleAndDestroyBuilding = function(dismantledPart: BasePart, ratModel: Model
 
 	invalidatePathCache()
 	BuildingService.RegisterDestroyedSlot(finalPosition, buildingType)
+	BuildingService.PlaceRuinGhost(finalPosition, buildingType, buildingRotation)
 
 	if ratModel ~= nil then
 		local state = ratStates[ratModel]
@@ -977,12 +982,15 @@ end
 function EnemyService.SpawnWave(waveNumber: number): ()
 	currentWave = waveNumber
 	publishNextWaveTimer(0)
-	remotes.WaveStarted:FireAllClients(currentWave)
+	local pattern = Constants.WAVES.IntensityPattern
+	local patternIdx = ((waveNumber - 1) % #pattern) + 1
+	local seasonMult = pattern[patternIdx]
+	remotes.WaveStarted:FireAllClients(currentWave, patternIdx)
 
 	local baseCount = Constants.WAVES.BaseEnemyCount + (currentWave * Constants.WAVES.EnemiesPerWave)
 	local difficultyMult = EnemyService.GetDifficultyMultiplier()
 	local randomMult = 0.8 + (math.random() * 0.7)
-	local enemyCount = math.max(1, math.floor(baseCount * difficultyMult * randomMult + 0.5))
+	local enemyCount = math.max(1, math.floor(baseCount * difficultyMult * randomMult * seasonMult + 0.5))
 
 	swarmActive = true
 	local titanCore = ObjectiveService.GetTitanCore()
@@ -1279,6 +1287,7 @@ function EnemyService.Init(): ()
 	end)
 
 	local RATCACHE_MAGNET_TICK = 0.15
+	local RATCACHE_MAX_COLLECTS_PER_TICK = 5
 	local ratCacheMagnetAcc = 0
 	RunService.Heartbeat:Connect(function(dt)
 		ratCacheMagnetAcc += dt
@@ -1289,6 +1298,7 @@ function EnemyService.Init(): ()
 
 		local magnetRadius = Constants.SCRAP_SPAWNS.MagnetRadius
 		local alive: { BasePart } = {}
+		local collectedThisTick = 0
 
 		for _, cache in activeRatCaches do
 			if cache.Parent == nil or pickedRatCaches[cache] then
@@ -1317,6 +1327,11 @@ function EnemyService.Init(): ()
 			end
 
 			if nearestPlayer ~= nil and nearestDist <= magnetRadius then
+				if collectedThisTick >= RATCACHE_MAX_COLLECTS_PER_TICK then
+					table.insert(alive, cache)
+					continue
+				end
+				collectedThisTick += 1
 				pickedRatCaches[cache] = true
 				local isInstant = nearestDist <= Constants.SCRAP_SPAWNS.InstantPickupRadius
 				cache:SetAttribute("MagnetTarget", nearestPlayer.Name)

@@ -194,6 +194,7 @@ local function createFinalBuilding(buildingType: BuildingType, position: Vector3
 	part.CanCollide = true
 	part.CFrame = CFrame.new(position + Vector3.new(0, part.Size.Y * 0.5, 0)) * CFrame.Angles(0, math.rad(rotation), 0)
 	part:SetAttribute("BuildingType", buildingType)
+	part:SetAttribute("BuildingRotation", rotation)
 	part:SetAttribute("BuildingLevel", 1)
 	part:SetAttribute("BuildingHP", Constants.BUILDING.DefaultHP)
 	part.Parent = Workspace
@@ -553,6 +554,64 @@ function BuildingService.RegisterDestroyedSlot(position: Vector3, buildingType: 
 	if buildingType ~= nil and builtCounts[buildingType] ~= nil then
 		builtCounts[buildingType] = math.max(0, builtCounts[buildingType] - 1)
 	end
+end
+
+local function snapRotationToQuarterTurn(rotation: number): number
+	local snapped = (math.floor((rotation / 90) + 0.5) * 90) % 360
+	if snapped < 0 then
+		snapped += 360
+	end
+	if not VALID_ROTATIONS[snapped] then
+		return 0
+	end
+	return snapped
+end
+
+function BuildingService.PlaceRuinGhost(position: Vector3, buildingType: string?, rotation: number?)
+	if typeof(position) ~= "Vector3" or typeof(buildingType) ~= "string" then
+		return
+	end
+	if Constants.BUILDING.Sizes[buildingType] == nil then
+		return
+	end
+
+	local typedBuildingType = buildingType :: BuildingType
+	local snappedPos = Utils.SnapToGrid(position, Constants.BUILDING.GridSize)
+	local snappedRotation = 0
+	if typeof(rotation) == "number" then
+		snappedRotation = snapRotationToQuarterTurn(rotation :: number)
+	end
+
+	local slotKey = positionSlotKey(snappedPos)
+	blockedSlots[slotKey] = nil
+
+	for id, data in blueprints do
+		if not data.isFinished and positionSlotKey(data.position) == slotKey then
+			if data.ghostPart.Parent ~= nil then
+				data.ghostPart:Destroy()
+			end
+			blueprints[id] = nil
+		end
+	end
+
+	local blueprintId = HttpService:GenerateGUID(false)
+	local ghost = createBlueprintGhost(typedBuildingType, snappedPos, snappedRotation)
+	ghost.Transparency = math.clamp(Constants.BUILDING.GhostTransparency + 0.12, 0, 0.95)
+	ghost:SetAttribute("BlueprintId", blueprintId)
+	ghost:SetAttribute("BlueprintBuildingType", typedBuildingType)
+	ghost:SetAttribute("IsRuin", true)
+
+	blueprints[blueprintId] = {
+		id = blueprintId,
+		buildingType = typedBuildingType,
+		position = snappedPos,
+		rotation = snappedRotation,
+		ownerUserId = 0,
+		isFinished = false,
+		ghostPart = ghost,
+	}
+
+	remotes.BlueprintPlaced:FireAllClients(blueprintId, typedBuildingType, snappedPos)
 end
 
 function BuildingService.GetBuildingsLost(): number
