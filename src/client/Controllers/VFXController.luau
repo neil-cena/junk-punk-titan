@@ -4,6 +4,7 @@ local CollectionService = game:GetService("CollectionService")
 local Lighting = game:GetService("Lighting")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local SoundService = game:GetService("SoundService")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
@@ -48,6 +49,30 @@ local baseRadiusMarker: Instance? = nil
 local scrapComboCount = 0
 local lastScrapPickupAt = 0
 local ambientDustPart: BasePart? = nil
+
+type MagnetFlight = {
+	part: BasePart,
+	startPos: Vector3,
+	elapsed: number,
+}
+local activeMagnetFlights: { MagnetFlight } = {}
+local MAGNET_FLIGHT_SPEED = 40
+local MAGNET_ARC_HEIGHT = 1.5
+local MAGNET_SPIN_RATE = 5
+
+local RAT_LOD_DETAIL_DISTANCE = 80
+local RAT_LOD_HIDE_DISTANCE = 150
+local ratLodState: { [Model]: string } = {}
+local LOD_DETAIL_PARTS = { "Head", "Tail", "EyeL", "EyeR", "LootBag" }
+
+local QUALITY_HIGH = 3
+local QUALITY_MEDIUM = 2
+local QUALITY_LOW = 1
+local currentQuality = QUALITY_HIGH
+local manualQualityOverride: number? = nil
+local frameTimes: { number } = {}
+local FRAME_BUDGET_WINDOW = 60
+local FRAME_BUDGET_THRESHOLD_MS = 33
 
 local function createGearPart(): BasePart
 	local part = Instance.new("Part")
@@ -899,10 +924,8 @@ local function refreshBaseRadiusMarker()
 
 	local center = Vector3.new(titanCore.Position.X, titanCore.Position.Y, titanCore.Position.Z)
 	local groundRayParams = RaycastParams.new()
-	groundRayParams.FilterType = Enum.RaycastFilterType.Exclude
-	groundRayParams.FilterDescendantsInstances = { titanCore }
-	local groundHit = Workspace:Raycast(center + Vector3.new(0, 60, 0), Vector3.new(0, -200, 0), groundRayParams)
-	local groundY = if groundHit ~= nil then groundHit.Position.Y + 0.08 else center.Y
+	groundRayParams.FilterType = Enum.RaycastFilterType.Include
+	groundRayParams.FilterDescendantsInstances = { Workspace.Terrain }
 
 	local segmentCount = 56
 	local segmentHeight = 0.12
@@ -910,8 +933,19 @@ local function refreshBaseRadiusMarker()
 	for i = 1, segmentCount do
 		local a0 = ((i - 1) / segmentCount) * math.pi * 2
 		local a1 = (i / segmentCount) * math.pi * 2
-		local p0 = Vector3.new(center.X + math.cos(a0) * radius, groundY, center.Z + math.sin(a0) * radius)
-		local p1 = Vector3.new(center.X + math.cos(a1) * radius, groundY, center.Z + math.sin(a1) * radius)
+
+		local x0 = center.X + math.cos(a0) * radius
+		local z0 = center.Z + math.sin(a0) * radius
+		local x1 = center.X + math.cos(a1) * radius
+		local z1 = center.Z + math.sin(a1) * radius
+
+		local hit0 = Workspace:Raycast(Vector3.new(x0, center.Y + 60, z0), Vector3.new(0, -200, 0), groundRayParams)
+		local y0 = if hit0 then hit0.Position.Y + 0.08 else 0.08
+		local hit1 = Workspace:Raycast(Vector3.new(x1, center.Y + 60, z1), Vector3.new(0, -200, 0), groundRayParams)
+		local y1 = if hit1 then hit1.Position.Y + 0.08 else 0.08
+
+		local p0 = Vector3.new(x0, y0, z0)
+		local p1 = Vector3.new(x1, y1, z1)
 		local mid = (p0 + p1) * 0.5
 		local length = (p1 - p0).Magnitude
 
@@ -969,6 +1003,256 @@ local function ensureAmbientDust()
 	ambientDustPart = part
 end
 
+local function getPlayerRootByName(playerName: string): BasePart?
+	for _, player in Players:GetPlayers() do
+		if player.Name == playerName then
+			local character = player.Character
+			if character ~= nil then
+				local root = character:FindFirstChild("HumanoidRootPart")
+				if root ~= nil and root:IsA("BasePart") then
+					return root
+				end
+			end
+		end
+	end
+	return nil
+end
+
+local function startMagnetFlight(part: BasePart)
+	for _, flight in activeMagnetFlights do
+		if flight.part == part then
+			return
+		end
+	end
+	table.insert(activeMagnetFlights, {
+		part = part,
+		startPos = part.Position,
+		elapsed = 0,
+	})
+end
+
+local function bindMagnetAttribute(part: BasePart)
+	part:GetAttributeChangedSignal("MagnetTarget"):Connect(function()
+		local target = part:GetAttribute("MagnetTarget")
+		if typeof(target) == "string" then
+			startMagnetFlight(part)
+		end
+	end)
+	local current = part:GetAttribute("MagnetTarget")
+	if typeof(current) == "string" then
+		startMagnetFlight(part)
+	end
+end
+
+local function runMagnetHeartbeat(dt: number)
+	local alive: { MagnetFlight } = {}
+	for _, flight in activeMagnetFlights do
+		if flight.part.Parent == nil then
+			continue
+		end
+		local targetName = flight.part:GetAttribute("MagnetTarget")
+		if typeof(targetName) ~= "string" then
+			continue
+		end
+		local root = getPlayerRootByName(targetName :: string)
+		if root == nil then
+			table.insert(alive, flight)
+			continue
+		end
+		flight.elapsed += dt
+		local dist = (root.Position - flight.part.Position).Magnitude
+		if dist < 0.5 then
+			continue
+		end
+		local totalDist = (root.Position - flight.startPos).Magnitude
+		local progress = if totalDist > 0.1 then math.clamp(1 - dist / totalDist, 0, 1) else 1
+		local arcY = math.sin(progress * math.pi) * MAGNET_ARC_HEIGHT
+		local targetPos = root.Position + Vector3.new(0, arcY, 0)
+		local dir = (targetPos - flight.part.Position)
+		local dirMag = dir.Magnitude
+		if dirMag > 0.001 then
+			local step = MAGNET_FLIGHT_SPEED * dt
+			local newPos = flight.part.Position + dir.Unit * math.min(step, dirMag)
+			local spinAngle = os.clock() * MAGNET_SPIN_RATE
+			flight.part.CFrame = CFrame.new(newPos) * CFrame.Angles(spinAngle, spinAngle * 0.6, math.sin(spinAngle) * 0.3)
+		end
+		table.insert(alive, flight)
+	end
+	activeMagnetFlights = alive
+end
+
+local function bindDrillRotation(drill: BasePart)
+	local conn: RBXScriptConnection? = nil
+	local rotAcc = 0
+	conn = RunService.Heartbeat:Connect(function(dt)
+		if drill.Parent == nil then
+			if conn ~= nil then
+				conn:Disconnect()
+			end
+			return
+		end
+		rotAcc += dt
+		if rotAcc >= Constants.BUILDING.DrillTickInterval then
+			rotAcc -= Constants.BUILDING.DrillTickInterval
+			drill.CFrame = drill.CFrame * CFrame.Angles(0, math.rad(20), 0)
+			local attachment = drill:FindFirstChild("DrillFxAttachment")
+			if attachment ~= nil then
+				local emitter = attachment:FindFirstChild("DrillSparks")
+				if emitter ~= nil and emitter:IsA("ParticleEmitter") then
+					emitter:Emit(18)
+				end
+			end
+		end
+	end)
+end
+
+local function playClientMuzzleFlash(turretPart: BasePart, targetPos: Vector3)
+	local direction = (targetPos - turretPart.Position)
+	if direction.Magnitude < 0.01 then
+		direction = Vector3.new(0, 0, -1)
+	end
+	local flash = Instance.new("Part")
+	flash.Name = "TurretMuzzleFlash"
+	flash.Anchored = true
+	flash.CanCollide = false
+	flash.Material = VisualManifest.Buildings.TurretMuzzleFlash.material
+	flash.Color = VisualManifest.Buildings.TurretMuzzleFlash.color
+	flash.Size = Vector3.new(0.25, 0.25, 0.25)
+	flash.CFrame = CFrame.lookAt(turretPart.Position + Vector3.new(0, turretPart.Size.Y * 0.35, 0), targetPos) * CFrame.new(0, 0, -1.8)
+	flash.Parent = Workspace
+	task.delay(0.06, function()
+		if flash.Parent ~= nil then
+			flash:Destroy()
+		end
+	end)
+end
+
+local function updateRatLOD()
+	local camera = Workspace.CurrentCamera
+	if camera == nil then
+		return
+	end
+	local camPos = camera.CFrame.Position
+
+	for _, instance in CollectionService:GetTagged("ScrapRatEnemy") do
+		if not instance:IsA("Model") then
+			continue
+		end
+		local root = instance.PrimaryPart
+		if root == nil then
+			continue
+		end
+		local dist = (root.Position - camPos).Magnitude
+		local prevState = ratLodState[instance] or "full"
+		local newState: string
+
+		if dist > RAT_LOD_HIDE_DISTANCE then
+			newState = "hidden"
+		elseif dist > RAT_LOD_DETAIL_DISTANCE then
+			newState = "simple"
+		else
+			newState = "full"
+		end
+
+		if newState ~= prevState then
+			ratLodState[instance] = newState
+			if newState == "hidden" then
+				for _, child in instance:GetChildren() do
+					if child:IsA("BasePart") then
+						child.Transparency = 1
+					end
+				end
+			elseif newState == "simple" then
+				for _, child in instance:GetChildren() do
+					if child:IsA("BasePart") then
+						local isDetail = false
+						for _, detailName in LOD_DETAIL_PARTS do
+							if child.Name == detailName then
+								isDetail = true
+								break
+							end
+						end
+						child.Transparency = if isDetail then 1 else 0
+					end
+				end
+			else
+				for _, child in instance:GetChildren() do
+					if child:IsA("BasePart") and child.Name ~= "HumanoidRootPart" then
+						child.Transparency = 0
+					end
+				end
+				root.Transparency = 0
+			end
+		end
+	end
+end
+
+local function bindTurretFireWatch(turretPart: BasePart)
+	turretPart:GetAttributeChangedSignal("LastFireTarget"):Connect(function()
+		local targetVal = turretPart:GetAttribute("LastFireTarget")
+		if typeof(targetVal) == "Vector3" then
+			playClientMuzzleFlash(turretPart, targetVal :: Vector3)
+		end
+	end)
+end
+
+local function applyQualityLevel(level: number)
+	currentQuality = level
+	RAT_LOD_DETAIL_DISTANCE = if level == QUALITY_LOW then 40 elseif level == QUALITY_MEDIUM then 60 else 80
+	RAT_LOD_HIDE_DISTANCE = if level == QUALITY_LOW then 80 elseif level == QUALITY_MEDIUM then 120 else 150
+
+	if ambientDustPart ~= nil and ambientDustPart.Parent ~= nil then
+		local attachment = ambientDustPart:FindFirstChildOfClass("Attachment")
+		if attachment ~= nil then
+			local dust = attachment:FindFirstChild("AmbientDust")
+			if dust ~= nil and dust:IsA("ParticleEmitter") then
+				if level == QUALITY_LOW then
+					dust.Rate = 0
+				elseif level == QUALITY_MEDIUM then
+					dust.Rate = 1.5
+				else
+					dust.Rate = 3
+				end
+			end
+		end
+	end
+
+	MAGNET_ARC_HEIGHT = if level == QUALITY_LOW then 0 else 1.5
+end
+
+local function updateFrameBudget(dt: number)
+	if manualQualityOverride ~= nil then
+		return
+	end
+	table.insert(frameTimes, dt * 1000)
+	if #frameTimes > FRAME_BUDGET_WINDOW then
+		table.remove(frameTimes, 1)
+	end
+	if #frameTimes < FRAME_BUDGET_WINDOW then
+		return
+	end
+	local total = 0
+	for _, ms in frameTimes do
+		total += ms
+	end
+	local avg = total / #frameTimes
+	if avg > FRAME_BUDGET_THRESHOLD_MS and currentQuality > QUALITY_LOW then
+		applyQualityLevel(currentQuality - 1)
+	elseif avg < FRAME_BUDGET_THRESHOLD_MS * 0.7 and currentQuality < QUALITY_HIGH then
+		applyQualityLevel(currentQuality + 1)
+	end
+end
+
+function VFXController.SetQuality(level: number)
+	local clamped = math.clamp(math.floor(level + 0.5), QUALITY_LOW, QUALITY_HIGH)
+	manualQualityOverride = clamped
+	applyQualityLevel(clamped)
+end
+
+function VFXController.GetQuality(): number
+	return currentQuality
+end
+
 function VFXController.Init()
 	if isInitialized then
 		return
@@ -980,6 +1264,28 @@ function VFXController.Init()
 	end
 
 	ensureAmbientDust()
+
+	local lodAcc = 0
+	RunService.Heartbeat:Connect(function(dt)
+		runMagnetHeartbeat(dt)
+		updateFrameBudget(dt)
+		lodAcc += dt
+		if lodAcc >= 0.5 then
+			lodAcc = 0
+			updateRatLOD()
+		end
+	end)
+
+	Workspace.ChildAdded:Connect(function(child)
+		if child:IsA("BasePart") and (child.Name == "JunkBlock" or child.Name == "RatCache" or child.Name == "StormHardenedSteel") then
+			bindMagnetAttribute(child)
+		end
+	end)
+	for _, child in Workspace:GetChildren() do
+		if child:IsA("BasePart") and (child.Name == "JunkBlock" or child.Name == "RatCache" or child.Name == "StormHardenedSteel") then
+			bindMagnetAttribute(child)
+		end
+	end
 
 	for _, instance in CollectionService:GetTagged("DismantlableBuilding") do
 		if instance:IsA("BasePart") then
@@ -996,12 +1302,25 @@ function VFXController.Init()
 	for _, instance in CollectionService:GetTagged("Drill") do
 		if instance:IsA("BasePart") then
 			bindDrillFx(instance)
+			bindDrillRotation(instance)
 		end
 	end
 
 	CollectionService:GetInstanceAddedSignal("Drill"):Connect(function(instance)
 		if instance:IsA("BasePart") then
 			bindDrillFx(instance)
+			bindDrillRotation(instance)
+		end
+	end)
+
+	for _, instance in CollectionService:GetTagged("DismantlableBuilding") do
+		if instance:IsA("BasePart") and instance:GetAttribute("BuildingType") == "Turret" then
+			bindTurretFireWatch(instance)
+		end
+	end
+	CollectionService:GetInstanceAddedSignal("DismantlableBuilding"):Connect(function(instance)
+		if instance:IsA("BasePart") and instance:GetAttribute("BuildingType") == "Turret" then
+			bindTurretFireWatch(instance)
 		end
 	end)
 

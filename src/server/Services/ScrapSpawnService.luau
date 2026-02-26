@@ -86,8 +86,7 @@ function ScrapSpawnService.Init(): ()
 		end
 	end)
 
-	local MAGNET_TICK = 0.05
-	local PULL_SPEED = 40
+	local MAGNET_TICK = 0.15
 	local magnetAcc = 0
 	RunService.Heartbeat:Connect(function(dt)
 		magnetAcc += dt
@@ -104,7 +103,7 @@ function ScrapSpawnService.Init(): ()
 				continue
 			end
 
-			local nearestRoot: BasePart? = nil
+			local nearestPlayer: Player? = nil
 			local nearestDist = magnetRadius + 1
 
 			for _, player in Players:GetPlayers() do
@@ -119,27 +118,23 @@ function ScrapSpawnService.Init(): ()
 				local pDist = (root.Position - pile.Position).Magnitude
 				if pDist < nearestDist then
 					nearestDist = pDist
-					nearestRoot = root
+					nearestPlayer = player
 				end
 			end
 
-			if nearestRoot ~= nil and nearestDist <= magnetRadius then
-				if nearestDist <= 1.5 then
-					pickedPiles[pile] = true
-					EconomyService.AddScrap(Constants.LOOT.JunkBlockValue)
-					pile:Destroy()
-				else
-					local distRatio = nearestDist / magnetRadius
-					local arcY = math.sin(distRatio * math.pi) * 1.5
-					local targetPos = nearestRoot.Position + Vector3.new(0, arcY, 0)
-					local dir = (targetPos - pile.Position).Unit
-					local step = PULL_SPEED * MAGNET_TICK
-					local newPos = pile.Position + dir * math.min(step, nearestDist)
-					local spinAngle = os.clock() * 4
-					pile.CFrame = CFrame.new(newPos) * CFrame.Angles(0, spinAngle, math.sin(spinAngle) * 0.3)
-					table.insert(alive, pile)
-				end
+			if nearestPlayer ~= nil and nearestDist <= magnetRadius then
+				pickedPiles[pile] = true
+				pile:SetAttribute("MagnetTarget", nearestPlayer.Name)
+				EconomyService.AddScrap(Constants.LOOT.JunkBlockValue)
+				task.delay(0.5, function()
+					if pile.Parent ~= nil then
+						pile:Destroy()
+					end
+				end)
 			else
+				if pile:GetAttribute("MagnetTarget") ~= nil then
+					pile:SetAttribute("MagnetTarget", nil)
+				end
 				table.insert(alive, pile)
 			end
 		end

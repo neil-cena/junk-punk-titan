@@ -735,7 +735,7 @@ local function createSettingsPanel(parent: Instance)
 	panel.Name = "SettingsPanel"
 	panel.AnchorPoint = Vector2.new(1, 1)
 	panel.Position = UDim2.new(1, -10, 1, -52)
-	panel.Size = UDim2.new(0.16, 0, 0, 140)
+	panel.Size = UDim2.new(0.16, 0, 0, 190)
 	panel.BackgroundColor3 = Theme.Colors.Panel
 	panel.BackgroundTransparency = 0.1
 	panel.Visible = false
@@ -837,6 +837,31 @@ local function createSettingsPanel(parent: Instance)
 			music.Volume = pct * 0.2
 		end
 	end)
+
+	local qualityLabels = { "LOW", "MED", "HIGH" }
+	createSlider("Graphics: HIGH", 112, 1.0, function(pct)
+		local level = math.clamp(math.floor(pct * 3 + 0.5), 1, 3)
+		pcall(function()
+			local Controllers = script.Parent.Parent:FindFirstChild("Controllers")
+			if Controllers ~= nil then
+				local vfxModule = Controllers:FindFirstChild("VFXController")
+				if vfxModule ~= nil then
+					local vfx = require(vfxModule)
+					vfx.SetQuality(level)
+				end
+			end
+		end)
+		local sliderLbl = panel:FindFirstChild("GraphicsLabel")
+		if sliderLbl ~= nil and sliderLbl:IsA("TextLabel") then
+			sliderLbl.Text = "Graphics: " .. (qualityLabels[level] or "HIGH")
+		end
+	end)
+	for _, child in panel:GetChildren() do
+		if child:IsA("TextLabel") and child.Text:find("Graphics") then
+			child.Name = "GraphicsLabel"
+			break
+		end
+	end
 
 	toggleBtn.MouseButton1Click:Connect(function()
 		playUISound(AudioManifest.UIClick)

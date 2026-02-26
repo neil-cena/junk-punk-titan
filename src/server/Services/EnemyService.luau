@@ -12,6 +12,7 @@ local Constants = require(Shared:WaitForChild("Constants"))
 local VisualManifest = require(Shared:WaitForChild("VisualManifest"))
 local RemotesModule = require(Shared:WaitForChild("Remotes"))
 local TheftComponent = require(Shared:WaitForChild("TheftComponent"))
+local SpatialGrid = require(Shared:WaitForChild("SpatialGrid"))
 local EconomyService = require(script.Parent:WaitForChild("EconomyService"))
 local BuildingService = require(script.Parent:WaitForChild("BuildingService"))
 local ObjectiveService = require(script.Parent:WaitForChild("ObjectiveService"))
@@ -27,6 +28,7 @@ local gameActive = true
 local finalStandActive = false
 local swarmActive = false
 local activeRats: { [Model]: true } = {}
+local ratGrid = SpatialGrid.new(16)
 local retreatBurrowDistance = Constants.WAVES.RetreatBurrowDistance
 local burrowPositions = {
 	Vector3.new(-retreatBurrowDistance, 0.2, -retreatBurrowDistance),
@@ -50,6 +52,12 @@ local activeRatCaches: { BasePart } = {}
 local pickedRatCaches: { [BasePart]: boolean } = {}
 local ratCacheValues: { [BasePart]: number } = {}
 
+local ratPool: { Model } = {}
+local RAT_POOL_INITIAL = 30
+local ratCachePool: { BasePart } = {}
+local RAT_CACHE_POOL_INITIAL = 50
+local POOL_HIDE_POS = Vector3.new(0, -500, 0)
+
 local function publishNextWaveTimer(secondsRemaining: number)
 	local remaining = math.max(0, math.floor(secondsRemaining + 0.5))
 	local nextWaveTime = os.time() + remaining
@@ -59,6 +67,22 @@ end
 
 local function removeRatFromActive(ratModel: Model)
 	activeRats[ratModel] = nil
+	ratGrid:Remove(ratModel)
+end
+
+local function returnRatToPool(ratModel: Model)
+	CollectionService:RemoveTag(ratModel, "ScrapRatEnemy")
+	local humanoid = ratModel:FindFirstChildOfClass("Humanoid")
+	if humanoid ~= nil then
+		humanoid.Health = 0
+	end
+	ratModel.Parent = nil
+	for _, child in ratModel:GetChildren() do
+		if child.Name == "StolenScrapVisual" or child.Name == "AggroTarget" then
+			child:Destroy()
+		end
+	end
+	table.insert(ratPool, ratModel)
 end
 
 local function despawnRat(ratModel: Model)
@@ -68,22 +92,21 @@ local function despawnRat(ratModel: Model)
 	end
 	removeRatFromActive(ratModel)
 	if ratModel.Parent ~= nil then
-		ratModel:Destroy()
+		returnRatToPool(ratModel)
 	end
 	ratStates[ratModel] = nil
 end
 
-local function spawnCollectableBundle(atPosition: Vector3, scrapValue: number)
+local function createRatCachePart(): BasePart
 	local bundle = Instance.new("Part")
 	bundle.Name = "RatCache"
 	bundle.Size = Vector3.new(1.1, 1.1, 1.1)
 	bundle.Shape = Enum.PartType.Block
 	bundle.Material = VisualManifest.Loot.RatCache.material
 	bundle.Color = VisualManifest.Loot.RatCache.color
-	bundle.Anchored = false
+	bundle.Anchored = true
 	bundle.CanCollide = true
-	bundle.Position = atPosition + Vector3.new(0, 2, 0)
-	bundle.Parent = Workspace
+	bundle.CFrame = CFrame.new(POOL_HIDE_POS)
 
 	local cogA = Instance.new("Part")
 	cogA.Name = "CogA"
@@ -108,12 +131,40 @@ local function spawnCollectableBundle(atPosition: Vector3, scrapValue: number)
 	weldB.Part1 = cogB
 	weldB.Parent = bundle
 
+	return bundle
+end
+
+local function acquireRatCache(): BasePart
+	if #ratCachePool > 0 then
+		local bundle = ratCachePool[#ratCachePool]
+		table.remove(ratCachePool, #ratCachePool)
+		return bundle
+	end
+	return createRatCachePart()
+end
+
+local function returnRatCacheToPool(cachePart: BasePart)
+	cachePart.Anchored = true
+	if cachePart:GetAttribute("MagnetTarget") ~= nil then
+		cachePart:SetAttribute("MagnetTarget", nil)
+	end
+	cachePart.Parent = nil
+	table.insert(ratCachePool, cachePart)
+end
+
+local function spawnCollectableBundle(atPosition: Vector3, scrapValue: number)
+	local bundle = acquireRatCache()
+	bundle.Anchored = false
+	bundle.CanCollide = true
+	bundle.CFrame = CFrame.new(atPosition + Vector3.new(0, 2, 0))
+	bundle.Parent = Workspace
+
 	table.insert(activeRatCaches, bundle)
 	ratCacheValues[bundle] = scrapValue
 
 	task.delay(Constants.COMBAT.ScrapBundleDespawnSeconds, function()
 		if not pickedRatCaches[bundle] and bundle.Parent ~= nil then
-			bundle:Destroy()
+			returnRatCacheToPool(bundle)
 		end
 		pickedRatCaches[bundle] = nil
 		ratCacheValues[bundle] = nil
@@ -476,7 +527,7 @@ moveToWithShortTimeout = function(humanoid: Humanoid, targetPosition: Vector3, t
 		if humanoid.Health <= 0 then
 			break
 		end
-		task.wait(0.05)
+		task.wait(0.15)
 	end
 
 	connection:Disconnect()
@@ -485,6 +536,91 @@ end
 
 local spawnRatToward: (BasePart, boolean?, boolean?) -> ()
 local dismantleAndDestroyBuilding: (BasePart, Model?) -> ()
+
+local PATH_ZONE_SIZE = 16
+local pathCache: { [string]: { waypoints: { PathWaypoint }, time: number } } = {}
+local PATH_CACHE_TTL = 3
+local pathComputeThisFrame = 0
+local MAX_PATHS_PER_FRAME = 3
+local lastPathFrameTime = 0
+
+local losRayParams = RaycastParams.new()
+losRayParams.FilterType = Enum.RaycastFilterType.Include
+losRayParams.FilterDescendantsInstances = {}
+
+local function refreshLosFilter()
+	local walls: { Instance } = {}
+	for _, inst in CollectionService:GetTagged("DismantlableBuilding") do
+		if inst:IsA("BasePart") and inst.Parent ~= nil then
+			table.insert(walls, inst)
+		end
+	end
+	losRayParams.FilterDescendantsInstances = walls
+end
+
+local function hasLineOfSight(from: Vector3, to: Vector3): boolean
+	local dir = to - from
+	if dir.Magnitude < 0.5 then
+		return true
+	end
+	local result = Workspace:Raycast(from, dir, losRayParams)
+	return result == nil
+end
+
+local function zoneKey(pos: Vector3): string
+	local zx = math.floor(pos.X / PATH_ZONE_SIZE)
+	local zz = math.floor(pos.Z / PATH_ZONE_SIZE)
+	return ("%d,%d"):format(zx, zz)
+end
+
+local function getCachedPath(from: Vector3, to: Vector3): { PathWaypoint }?
+	local key = zoneKey(from) .. ">" .. zoneKey(to)
+	local cached = pathCache[key]
+	if cached ~= nil and (os.clock() - cached.time) < PATH_CACHE_TTL then
+		return cached.waypoints
+	end
+	return nil
+end
+
+local function storeCachedPath(from: Vector3, to: Vector3, waypoints: { PathWaypoint })
+	local key = zoneKey(from) .. ">" .. zoneKey(to)
+	pathCache[key] = { waypoints = waypoints, time = os.clock() }
+end
+
+local function computePathStaggered(from: Vector3, to: Vector3): { PathWaypoint }?
+	local now = os.clock()
+	if now ~= lastPathFrameTime then
+		lastPathFrameTime = now
+		pathComputeThisFrame = 0
+	end
+	if pathComputeThisFrame >= MAX_PATHS_PER_FRAME then
+		task.wait()
+		lastPathFrameTime = os.clock()
+		pathComputeThisFrame = 0
+	end
+	pathComputeThisFrame += 1
+
+	local cached = getCachedPath(from, to)
+	if cached ~= nil then
+		return cached
+	end
+
+	local path = PathfindingService:CreatePath()
+	local ok = pcall(function()
+		path:ComputeAsync(from, to)
+	end)
+	if ok and path.Status == Enum.PathStatus.Success then
+		local waypoints = path:GetWaypoints()
+		storeCachedPath(from, to, waypoints)
+		return waypoints
+	end
+	return nil
+end
+
+local function invalidatePathCache()
+	table.clear(pathCache)
+	refreshLosFilter()
+end
 
 local function getAggroTarget(ratModel: Model): BasePart?
 	local aggroVal = ratModel:FindFirstChild("AggroTarget")
@@ -560,50 +696,58 @@ local function moveRatBehavior(ratModel: Model, humanoid: Humanoid, root: BasePa
 			end
 		end
 
-		local path = PathfindingService:CreatePath()
-		local pathOk = pcall(function()
-			path:ComputeAsync(root.Position, currentTarget.Position)
-		end)
-
 		local redirected = false
-		if pathOk and path.Status == Enum.PathStatus.Success then
-			for _, waypoint in path:GetWaypoints() do
-				if humanoid.Health <= 0 or activeRats[ratModel] == nil or isRatRetreating(ratModel) then
-					return
-				end
-				local aggroTarget = getAggroTarget(ratModel)
-				if aggroTarget ~= nil and aggroTarget ~= currentTarget then
-					currentTarget = aggroTarget
-					redirected = true
-					break
-				end
-				if currentTarget.Parent == nil then
-					local next = pickNextTarget()
-					if next == nil then
-						despawnRat(ratModel)
-						return
-					end
-					currentTarget = next
-					redirected = true
-					break
-				end
-				local reached = moveToWithShortTimeout(humanoid, waypoint.Position, 0.9)
-				if not reached then
-					local blocker = findBlockingBuilding(root.Position, currentTarget.Position, currentTarget, ratModel)
-					if blocker ~= nil then
-						currentTarget = blocker
-						redirected = true
-						break
-					end
-				end
-			end
-		else
+
+		if hasLineOfSight(root.Position, currentTarget.Position) then
 			local reached = moveToWithShortTimeout(humanoid, currentTarget.Position, 1.2)
 			if not reached then
 				local blocker = findBlockingBuilding(root.Position, currentTarget.Position, currentTarget, ratModel)
 				if blocker ~= nil then
 					currentTarget = blocker
 					redirected = true
+				end
+			end
+		else
+			local waypoints = computePathStaggered(root.Position, currentTarget.Position)
+			if waypoints ~= nil then
+				for _, waypoint in waypoints do
+					if humanoid.Health <= 0 or activeRats[ratModel] == nil or isRatRetreating(ratModel) then
+						return
+					end
+					local aggroTarget = getAggroTarget(ratModel)
+					if aggroTarget ~= nil and aggroTarget ~= currentTarget then
+						currentTarget = aggroTarget
+						redirected = true
+						break
+					end
+					if currentTarget.Parent == nil then
+						local nextTgt = pickNextTarget()
+						if nextTgt == nil then
+							despawnRat(ratModel)
+							return
+						end
+						currentTarget = nextTgt
+						redirected = true
+						break
+					end
+					local reached = moveToWithShortTimeout(humanoid, waypoint.Position, 0.9)
+					if not reached then
+						local blocker = findBlockingBuilding(root.Position, currentTarget.Position, currentTarget, ratModel)
+						if blocker ~= nil then
+							currentTarget = blocker
+							redirected = true
+							break
+						end
+					end
+				end
+			else
+				local reached = moveToWithShortTimeout(humanoid, currentTarget.Position, 1.2)
+				if not reached then
+					local blocker = findBlockingBuilding(root.Position, currentTarget.Position, currentTarget, ratModel)
+					if blocker ~= nil then
+						currentTarget = blocker
+						redirected = true
+					end
 				end
 			end
 		end
@@ -615,12 +759,12 @@ local function moveRatBehavior(ratModel: Model, humanoid: Humanoid, root: BasePa
 			return
 		end
 		if currentTarget.Parent == nil then
-			local next = pickNextTarget()
-			if next == nil then
+			local nextTgt = pickNextTarget()
+			if nextTgt == nil then
 				despawnRat(ratModel)
 				return
 			end
-			currentTarget = next
+			currentTarget = nextTgt
 			continue
 		end
 
@@ -653,12 +797,12 @@ local function moveRatBehavior(ratModel: Model, humanoid: Humanoid, root: BasePa
 			continue
 		end
 		if currentTarget.Parent == nil then
-			local next = pickNextTarget()
-			if next == nil then
+			local nextTgt = pickNextTarget()
+			if nextTgt == nil then
 				despawnRat(ratModel)
 				return
 			end
-			currentTarget = next
+			currentTarget = nextTgt
 			continue
 		end
 	end
@@ -703,6 +847,7 @@ dismantleAndDestroyBuilding = function(dismantledPart: BasePart, ratModel: Model
 		dismantledPart:Destroy()
 	end
 
+	invalidatePathCache()
 	BuildingService.RegisterDestroyedSlot(finalPosition, buildingType)
 
 	if ratModel ~= nil then
@@ -799,6 +944,7 @@ spawnRatToward = function(targetBuilding: BasePart, isElite: boolean?, isThief: 
 	local spawnPosition = Vector3.new(math.cos(angle) * dist, 3, math.sin(angle) * dist)
 	local ratModel = createScrapRatModel(spawnPosition, isElite, isThief)
 	activeRats[ratModel] = true
+	ratGrid:Insert(ratModel, spawnPosition)
 
 	local state = ratStates[ratModel]
 	if state ~= nil then
@@ -947,11 +1093,23 @@ local function collectRatCache(cachePart: BasePart)
 	ratCacheValues[cachePart] = nil
 	EconomyService.AddScrap(scrapValue)
 	if cachePart.Parent ~= nil then
-		cachePart:Destroy()
+		returnRatCacheToPool(cachePart)
 	end
 end
 
 function EnemyService.Init(): ()
+	for _ = 1, RAT_CACHE_POOL_INITIAL do
+		table.insert(ratCachePool, createRatCachePart())
+	end
+
+	refreshLosFilter()
+	CollectionService:GetInstanceAddedSignal("DismantlableBuilding"):Connect(function()
+		invalidatePathCache()
+	end)
+	CollectionService:GetInstanceRemovedSignal("DismantlableBuilding"):Connect(function()
+		invalidatePathCache()
+	end)
+
 	RemoteGuard.Register("HitEnemy", 5, 1)
 	RemoteGuard.Register("PunchEnemy", 20, 1)
 
@@ -1090,8 +1248,22 @@ function EnemyService.Init(): ()
 		end
 	end)
 
-	local RATCACHE_MAGNET_TICK = 0.05
-	local RATCACHE_PULL_SPEED = 40
+	local gridUpdateAcc = 0
+	RunService.Heartbeat:Connect(function(dt)
+		gridUpdateAcc += dt
+		if gridUpdateAcc < 0.5 then
+			return
+		end
+		gridUpdateAcc = 0
+		for ratModel in activeRats do
+			local root = ratModel.PrimaryPart
+			if root ~= nil then
+				ratGrid:Update(ratModel, root.Position)
+			end
+		end
+	end)
+
+	local RATCACHE_MAGNET_TICK = 0.15
 	local ratCacheMagnetAcc = 0
 	RunService.Heartbeat:Connect(function(dt)
 		ratCacheMagnetAcc += dt
@@ -1110,7 +1282,7 @@ function EnemyService.Init(): ()
 				continue
 			end
 
-			local nearestRoot: BasePart? = nil
+			local nearestPlayer: Player? = nil
 			local nearestDist = magnetRadius + 1
 
 			for _, player in Players:GetPlayers() do
@@ -1125,37 +1297,43 @@ function EnemyService.Init(): ()
 				local pDist = (root.Position - cache.Position).Magnitude
 				if pDist < nearestDist then
 					nearestDist = pDist
-					nearestRoot = root
+					nearestPlayer = player
 				end
 			end
 
-			if nearestRoot ~= nil and nearestDist <= magnetRadius then
-				if not cache.Anchored then
-					cache.Anchored = true
-				end
-				if nearestDist <= 1.5 then
-					collectRatCache(cache)
-				else
-					local distRatio = nearestDist / magnetRadius
-					local arcY = math.sin(distRatio * math.pi) * 1.5
-					local targetPos = nearestRoot.Position + Vector3.new(0, arcY, 0)
-					local toTarget = targetPos - cache.Position
-					local distance = toTarget.Magnitude
-					if distance > 0.001 then
-						local step = RATCACHE_PULL_SPEED * RATCACHE_MAGNET_TICK
-						local move = toTarget.Unit * math.min(step, distance)
-						local spinAngle = os.clock() * 5
-						cache.CFrame = CFrame.new(cache.Position + move) * CFrame.Angles(spinAngle, spinAngle * 0.6, 0)
+			if nearestPlayer ~= nil and nearestDist <= magnetRadius then
+				pickedRatCaches[cache] = true
+				cache:SetAttribute("MagnetTarget", nearestPlayer.Name)
+				local scrapValue = ratCacheValues[cache] or Constants.LOOT.RatCacheValue
+				ratCacheValues[cache] = nil
+				EconomyService.AddScrap(scrapValue)
+				task.delay(0.5, function()
+					if cache.Parent ~= nil then
+						returnRatCacheToPool(cache)
 					end
-					table.insert(alive, cache)
-				end
+					pickedRatCaches[cache] = nil
+				end)
 			else
+				if cache:GetAttribute("MagnetTarget") ~= nil then
+					cache:SetAttribute("MagnetTarget", nil)
+				end
 				table.insert(alive, cache)
 			end
 		end
 
 		activeRatCaches = alive
 	end)
+end
+
+function EnemyService.GetNearestRatInRadius(position: Vector3, radius: number): Model?
+	local model, _ = ratGrid:GetNearestInRadius(position, radius)
+	if model ~= nil then
+		local humanoid = model:FindFirstChildOfClass("Humanoid")
+		if humanoid ~= nil and humanoid.Health > 0 and model.Parent ~= nil then
+			return model
+		end
+	end
+	return nil
 end
 
 return EnemyService

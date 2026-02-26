@@ -17,6 +17,14 @@ local Utils = require(Shared:WaitForChild("Utils"))
 local EconomyService = require(script.Parent:WaitForChild("EconomyService"))
 local RemoteGuard = require(script.Parent.Parent:WaitForChild("RemoteGuard"))
 
+local EnemyServiceRef: any = nil
+local function getEnemyService()
+	if EnemyServiceRef == nil then
+		EnemyServiceRef = require(script.Parent:WaitForChild("EnemyService"))
+	end
+	return EnemyServiceRef
+end
+
 type BuildingType = Types.BuildingType
 type BlueprintData = Types.BlueprintData
 type PurchaseResponse = Types.PurchaseResponse
@@ -193,55 +201,18 @@ local function createFinalBuilding(buildingType: BuildingType, position: Vector3
 	return part
 end
 
-local function playTurretMuzzleFlash(turretPart: BasePart, targetPosition: Vector3)
-	local direction = (targetPosition - turretPart.Position)
-	if direction.Magnitude < 0.01 then
-		direction = Vector3.new(0, 0, -1)
-	end
-
-	local flash = Instance.new("Part")
-	flash.Name = "TurretMuzzleFlash"
-	flash.Anchored = true
-	flash.CanCollide = false
-	flash.Material = VisualManifest.Buildings.TurretMuzzleFlash.material
-	flash.Color = VisualManifest.Buildings.TurretMuzzleFlash.color
-	flash.Size = Vector3.new(0.25, 0.25, 0.25)
-	flash.CFrame = CFrame.lookAt(turretPart.Position + Vector3.new(0, turretPart.Size.Y * 0.35, 0), targetPosition) * CFrame.new(0, 0, -1.8)
-	flash.Parent = Workspace
-
-	task.delay(0.06, function()
-		if flash.Parent ~= nil then
-			flash:Destroy()
-		end
-	end)
-end
-
-local function ensureDrillFx(drillPart: BasePart): Attachment
-	local attachment = drillPart:FindFirstChild("DrillFxAttachment")
-	if attachment and attachment:IsA("Attachment") then
-		return attachment
-	end
-
-	local newAttachment = Instance.new("Attachment")
-	newAttachment.Name = "DrillFxAttachment"
-	newAttachment.Position = Vector3.new(0, -drillPart.Size.Y * 0.5 + 0.15, 0)
-	newAttachment.Parent = drillPart
-
-	local emitter = Instance.new("ParticleEmitter")
-	emitter.Name = "DrillSparks"
-	emitter.Texture = VisualManifest.Buildings.DrillSparks.texture
-	emitter.Color = ColorSequence.new(VisualManifest.Buildings.DrillSparks.colorA, VisualManifest.Buildings.DrillSparks.colorB)
-	emitter.Lifetime = NumberRange.new(0.12, 0.22)
-	emitter.Speed = NumberRange.new(1, 3)
-	emitter.Rate = 10
-	emitter.SpreadAngle = Vector2.new(30, 30)
-	emitter.Size = NumberSequence.new(0.08, 0.02)
-	emitter.Parent = newAttachment
-
-	return newAttachment
+local function signalTurretFire(turretPart: BasePart, targetPosition: Vector3)
+	turretPart:SetAttribute("LastFireTarget", targetPosition)
 end
 
 local function getNearestRat(position: Vector3, maxRange: number): Model?
+	local ok, result = pcall(function()
+		return getEnemyService().GetNearestRatInRadius(position, maxRange)
+	end)
+	if ok and result ~= nil then
+		return result
+	end
+
 	local nearest: Model? = nil
 	local nearestDist = maxRange
 	for _, instance in CollectionService:GetTagged("ScrapRatEnemy") do
@@ -277,7 +248,7 @@ local function activateBuildingBehavior(part: BasePart, buildingType: BuildingTy
 					local humanoid = targetRat:FindFirstChildOfClass("Humanoid")
 					local root = targetRat.PrimaryPart
 					if humanoid ~= nil and root ~= nil and humanoid.Health > 0 then
-						playTurretMuzzleFlash(part, root.Position)
+						signalTurretFire(part, root.Position)
 						humanoid:TakeDamage(Constants.BUILDING.TurretDamage)
 						local aggroVal = targetRat:FindFirstChild("AggroTarget")
 						if aggroVal == nil then
@@ -295,14 +266,8 @@ local function activateBuildingBehavior(part: BasePart, buildingType: BuildingTy
 		end)
 	elseif buildingType == "Drill" then
 		activeBuildingTasks[part] = task.spawn(function()
-			local drillAttachment = ensureDrillFx(part)
-			local emitter = drillAttachment:FindFirstChild("DrillSparks")
 			while part.Parent ~= nil do
 				task.wait(Constants.BUILDING.DrillTickInterval)
-				part.CFrame = part.CFrame * CFrame.Angles(0, math.rad(20), 0)
-				if emitter and emitter:IsA("ParticleEmitter") then
-					emitter:Emit(18)
-				end
 			end
 			activeBuildingTasks[part] = nil
 		end)
