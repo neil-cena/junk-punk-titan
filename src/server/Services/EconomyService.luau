@@ -115,7 +115,7 @@ local function getBaseCost(buildingType: BuildingType): number?
 	return baseCost
 end
 
-local function validatePurchase(buildingType: BuildingType, currentCount: number): PurchaseResponse
+local function validatePurchase(buildingType: BuildingType, currentCount: number, costMult: number?): PurchaseResponse
 	local baseCost = getBaseCost(buildingType)
 	if baseCost == nil then
 		return {
@@ -127,6 +127,8 @@ local function validatePurchase(buildingType: BuildingType, currentCount: number
 	end
 
 	local purchaseCost = EconomyService.GetCost(baseCost, currentCount)
+	local clampedCostMult = if typeof(costMult) == "number" then math.max(0.1, costMult :: number) else 1
+	purchaseCost = math.max(1, math.floor((purchaseCost * clampedCostMult) + 0.5))
 	if teamScrap < purchaseCost then
 		return {
 			success = false,
@@ -146,8 +148,8 @@ local function validatePurchase(buildingType: BuildingType, currentCount: number
 	}
 end
 
-function EconomyService.TryPurchase(buildingType: BuildingType, currentCount: number): PurchaseResponse
-	return validatePurchase(buildingType, currentCount)
+function EconomyService.TryPurchase(buildingType: BuildingType, currentCount: number, costMult: number?): PurchaseResponse
+	return validatePurchase(buildingType, currentCount, costMult)
 end
 
 function EconomyService.Init(initialScrap: number?): ()

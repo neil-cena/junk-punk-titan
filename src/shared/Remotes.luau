@@ -44,6 +44,7 @@ local RemoteNames = {
 	PowerUpPickup = "PowerUpPickup",
 	SandboxStarted = "SandboxStarted",
 	UpgradeTierUnlocked = "UpgradeTierUnlocked",
+	DrillBonusShower = "DrillBonusShower",
 }
 
 local function getOrCreateRemoteFolder(): Folder
@@ -142,6 +143,7 @@ function Remotes.Get()
 			PowerUpPickup = getOrCreateRemoteEvent(folder, RemoteNames.PowerUpPickup),
 			SandboxStarted = getOrCreateRemoteEvent(folder, RemoteNames.SandboxStarted),
 			UpgradeTierUnlocked = getOrCreateRemoteEvent(folder, RemoteNames.UpgradeTierUnlocked),
+			DrillBonusShower = getOrCreateRemoteEvent(folder, RemoteNames.DrillBonusShower),
 		}
 	end
 
@@ -187,6 +189,7 @@ function Remotes.Get()
 		PowerUpPickup = waitForRemoteEvent(folder, RemoteNames.PowerUpPickup),
 		SandboxStarted = waitForRemoteEvent(folder, RemoteNames.SandboxStarted),
 		UpgradeTierUnlocked = waitForRemoteEvent(folder, RemoteNames.UpgradeTierUnlocked),
+		DrillBonusShower = waitForRemoteEvent(folder, RemoteNames.DrillBonusShower),
 	}
 end
 

@@ -418,7 +418,9 @@ upgradeBuilding = function(player: Player, part: BasePart)
 		return
 	end
 
-	if not EconomyService.DeductScrap(stats.cost) then
+	local buildCostMult = getPlayerBuildCostMult(player)
+	local adjustedUpgradeCost = math.max(1, math.floor((stats.cost * buildCostMult) + 0.5))
+	if not EconomyService.DeductScrap(adjustedUpgradeCost) then
 		return
 	end
 
@@ -513,7 +515,15 @@ local function failResponse(reason: string): PurchaseResponse
 	}
 end
 
-local function finishBlueprint(_player: Player, blueprintId: string): PurchaseResponse
+local function getPlayerBuildCostMult(player: Player): number
+	local multAttr = player:GetAttribute("BuildCostMult")
+	if typeof(multAttr) == "number" then
+		return math.max(0.1, multAttr :: number)
+	end
+	return 1
+end
+
+local function finishBlueprint(player: Player, blueprintId: string): PurchaseResponse
 	if typeof(blueprintId) ~= "string" then
 		return failResponse("Invalid blueprint ID")
 	end
@@ -528,7 +538,8 @@ local function finishBlueprint(_player: Player, blueprintId: string): PurchaseRe
 	end
 
 	local countForType = builtCounts[blueprint.buildingType]
-	local response = EconomyService.TryPurchase(blueprint.buildingType, countForType)
+	local buildCostMult = getPlayerBuildCostMult(player)
+	local response = EconomyService.TryPurchase(blueprint.buildingType, countForType, buildCostMult)
 	if not response.success then
 		return response
 	end
@@ -548,11 +559,19 @@ local function finishBlueprint(_player: Player, blueprintId: string): PurchaseRe
 	return response
 end
 
-local function getNextBuildCosts(): { [BuildingType]: number }
+local function getNextBuildCosts(player: Player?): { [BuildingType]: number }
+	local buildCostMult = 1
+	if player ~= nil then
+		buildCostMult = getPlayerBuildCostMult(player)
+	end
+
+	local turretCost = EconomyService.GetCost(Constants.BASE_COSTS.Turret, builtCounts.Turret)
+	local drillCost = EconomyService.GetCost(Constants.BASE_COSTS.Drill, builtCounts.Drill)
+	local wallCost = EconomyService.GetCost(Constants.BASE_COSTS.Wall, builtCounts.Wall)
 	return {
-		Turret = EconomyService.GetCost(Constants.BASE_COSTS.Turret, builtCounts.Turret),
-		Drill = EconomyService.GetCost(Constants.BASE_COSTS.Drill, builtCounts.Drill),
-		Wall = EconomyService.GetCost(Constants.BASE_COSTS.Wall, builtCounts.Wall),
+		Turret = math.max(1, math.floor((turretCost * buildCostMult) + 0.5)),
+		Drill = math.max(1, math.floor((drillCost * buildCostMult) + 0.5)),
+		Wall = math.max(1, math.floor((wallCost * buildCostMult) + 0.5)),
 	}
 end
 
@@ -686,8 +705,8 @@ function BuildingService.Init(): ()
 		end
 		return finishBlueprint(player, blueprintId)
 	end
-	remotes.RequestBuildCosts.OnServerInvoke = function(_player: Player)
-		return getNextBuildCosts()
+	remotes.RequestBuildCosts.OnServerInvoke = function(player: Player)
+		return getNextBuildCosts(player)
 	end
 
 	remotes.CancelBlueprint.OnServerEvent:Connect(function(player: Player, blueprintId: string)

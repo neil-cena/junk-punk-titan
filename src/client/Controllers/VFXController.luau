@@ -1178,6 +1178,43 @@ local function playLootVacuumVFX(origin: Vector3)
 	playPowerUpSound("LootVacuum")
 end
 
+local function playDrillBonusShowerVFX(drillPositions: { Vector3 })
+	for _, position in drillPositions do
+		local burst = Instance.new("Part")
+		burst.Name = "DrillBonusBurst"
+		burst.Shape = Enum.PartType.Ball
+		burst.Anchored = true
+		burst.CanCollide = false
+		burst.Material = Enum.Material.Neon
+		burst.Color = Color3.fromRGB(255, 220, 90)
+		burst.Size = Vector3.new(2, 2, 2)
+		burst.Position = position + Vector3.new(0, 3, 0)
+		burst.Transparency = 0.2
+		burst.Parent = Workspace
+		TweenService:Create(burst, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			Size = Vector3.new(8, 8, 8),
+			Transparency = 1,
+		}):Play()
+		task.delay(0.4, function()
+			if burst.Parent ~= nil then
+				burst:Destroy()
+			end
+		end)
+	end
+
+	local showerSfx = Instance.new("Sound")
+	showerSfx.SoundId = AudioManifest.DrillShower or AudioManifest.LootCollect
+	showerSfx.Volume = 0.22
+	showerSfx.PlaybackSpeed = 1.15
+	showerSfx.Parent = SoundService
+	showerSfx:Play()
+	showerSfx.Ended:Connect(function()
+		if showerSfx.Parent ~= nil then
+			showerSfx:Destroy()
+		end
+	end)
+end
+
 local function playShockwavePowerUpVFX(origin: Vector3)
 	local ring = Instance.new("Part")
 	ring.Name = "ShockwaveRing"
@@ -1935,6 +1972,9 @@ function VFXController.Init()
 	remotes.DrillRepaired.OnClientEvent:Connect(function(position: Vector3)
 		playRepairSuccessFx(position)
 	end)
+	remotes.DrillBonusShower.OnClientEvent:Connect(function(drillPositions: { Vector3 })
+		playDrillBonusShowerVFX(drillPositions)
+	end)
 	remotes.GlobalVictory.OnClientEvent:Connect(function()
 		local titanCore: BasePart? = nil
 		for _, tagged in CollectionService:GetTagged("TitanObjective") do
@@ -2056,6 +2096,16 @@ function VFXController.Init()
 	waveMusic.Volume = 0
 	waveMusic.Parent = SoundService
 	waveMusic:Play()
+	task.delay(3, function()
+		if waveMusic == nil or waveMusic.Parent == nil then
+			return
+		end
+		if not waveMusic.IsLoaded then
+			warn("[VFXController] WaveCombat failed to load; using fallback track.")
+			waveMusic.SoundId = AudioManifest.AmbientBase
+			waveMusic:Play()
+		end
+	end)
 
 	TweenService:Create(dayMusic, TweenInfo.new(4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
 		Volume = 0.12,

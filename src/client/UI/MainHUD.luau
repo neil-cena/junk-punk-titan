@@ -465,9 +465,9 @@ local function updateDismantleBars()
 end
 
 local ROLE_DESCRIPTIONS = {
-	Scrapper = "Fastest runner. Collects scrap piles\nacross the map to fuel the team.",
-	Fixer = "Repair specialist. Uses the wrench to\nkeep drills running and buildings alive.",
-	Enforcer = "Combat expert. The only role that\ncan use the shotgun to fight rats.",
+	Scrapper = "Fastest runner. Gains bonus scrap\nfrom loot pickups across the map.",
+	Fixer = "Repair specialist. Buildings and upgrades\ncost less for the whole base setup.",
+	Enforcer = "Combat expert. Strongest direct damage\nfor holding wave pressure at the base.",
 }
 
 local ROLE_COLORS = Theme.Colors.RoleColors
@@ -518,7 +518,14 @@ local function makeRoleButton(parent: Instance, roleName: string, xScale: number
 	statsLabel.Font = Enum.Font.GothamSemibold
 	statsLabel.TextScaled = true
 	statsLabel.TextColor3 = Theme.Colors.TextMuted
-	statsLabel.Text = string.format("SPD x%.1f  RPR x%.1f  DMG x%.1f", roleDef.speedMult, roleDef.repairMult, roleDef.damageMult)
+	if roleName == "Fixer" then
+		local buildDiscount = math.max(0, (1 - (roleDef.buildCostMult or 1)) * 100)
+		statsLabel.Text = string.format("BUILD -%.0f%%  RPR x%.1f", buildDiscount, roleDef.repairMult)
+	elseif roleName == "Scrapper" then
+		statsLabel.Text = string.format("SPD x%.1f  LOOT x%.1f", roleDef.speedMult, roleDef.lootBonusMult or 1)
+	else
+		statsLabel.Text = string.format("DMG x%.1f  SPD x%.1f", roleDef.damageMult, roleDef.speedMult)
+	end
 	statsLabel.Parent = card
 
 	local button = Instance.new("TextButton")

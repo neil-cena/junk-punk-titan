@@ -57,6 +57,14 @@ local activePowerUps: { BasePart } = {}
 local pickedPowerUps: { [BasePart]: boolean } = {}
 local powerUpTypeByOrb: { [BasePart]: PowerUpType } = {}
 
+local function getLootBonusMultiplier(player: Player): number
+	local multAttr = player:GetAttribute("LootBonusMult")
+	if typeof(multAttr) == "number" then
+		return math.max(1, multAttr :: number)
+	end
+	return 1
+end
+
 local ratPool: { Model } = {}
 local RAT_POOL_INITIAL = 30
 local ratCachePool: { BasePart } = {}
@@ -157,7 +165,7 @@ local function returnRatCacheToPool(cachePart: BasePart)
 	table.insert(ratCachePool, cachePart)
 end
 
-local function spawnCollectableBundle(atPosition: Vector3, scrapValue: number)
+local function spawnCollectableBundle(atPosition: Vector3, scrapValue: number): BasePart
 	local bundle = acquireRatCache()
 	bundle.Anchored = false
 	bundle.CanCollide = false
@@ -174,6 +182,8 @@ local function spawnCollectableBundle(atPosition: Vector3, scrapValue: number)
 		pickedRatCaches[bundle] = nil
 		ratCacheValues[bundle] = nil
 	end)
+
+	return bundle
 end
 
 local function spawnRatCacheDrops(atPosition: Vector3, dropCount: number, scrapPerDrop: number)
@@ -183,6 +193,35 @@ local function spawnRatCacheDrops(atPosition: Vector3, dropCount: number, scrapP
 		task.delay((i - 1) * 0.03, function()
 			spawnCollectableBundle(atPosition + offset, scrapPerDrop)
 		end)
+	end
+end
+
+local function triggerDrillBonusShower()
+	local drillPositions: { Vector3 } = {}
+	for _, instance in CollectionService:GetTagged("Drill") do
+		if not instance:IsA("BasePart") or instance.Parent == nil then
+			continue
+		end
+		table.insert(drillPositions, instance.Position)
+
+		local dropCount = math.random(Constants.DRILL_SWARM_BONUS.MinBlocks, Constants.DRILL_SWARM_BONUS.MaxBlocks)
+		for i = 1, dropCount do
+			task.delay((i - 1) * 0.02, function()
+				if instance.Parent == nil then
+					return
+				end
+				local offset = Vector3.new(math.random(-2, 2), math.random(2, 4), math.random(-2, 2))
+				local bundle = spawnCollectableBundle(instance.Position + offset, Constants.DRILL_SWARM_BONUS.BlockValue)
+				bundle.AssemblyLinearVelocity = Vector3.new(
+					math.random(-16, 16),
+					math.random(20, 30),
+					math.random(-16, 16)
+				)
+			end)
+		end
+	end
+	if #drillPositions > 0 then
+		remotes.DrillBonusShower:FireAllClients(drillPositions)
 	end
 end
 
@@ -1302,6 +1341,7 @@ function EnemyService.SpawnWave(waveNumber: number): ()
 			else
 				warn("[EnemyService] retreatAllRats missing at swarm end")
 			end
+			triggerDrillBonusShower()
 		end
 	end)
 end
@@ -1660,6 +1700,7 @@ function EnemyService.Init(): ()
 					scrapValue = scrapValue * Constants.LOOT.CriticalHarvestMultiplier
 					cache:SetAttribute("CriticalHarvest", true)
 				end
+				scrapValue = math.max(1, math.floor((scrapValue * getLootBonusMultiplier(nearestPlayer)) + 0.5))
 				EconomyService.AddScrap(scrapValue)
 				if isInstant then
 					task.defer(function()

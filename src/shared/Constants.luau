@@ -6,7 +6,7 @@ local Constants = {
 	BASE_COSTS = {
 		Turret = 80,
 		Drill = 120,
-		Wall = 25,
+		Wall = 8,
 	},
 
 	ROLE_DEFINITIONS = {
@@ -14,16 +14,22 @@ local Constants = {
 			speedMult = 1.4,
 			repairMult = 0.8,
 			damageMult = 0.9,
+			buildCostMult = 1.0,
+			lootBonusMult = 1.3,
 		},
 		Fixer = {
 			speedMult = 0.9,
 			repairMult = 1.5,
 			damageMult = 0.8,
+			buildCostMult = 0.7,
+			lootBonusMult = 1.0,
 		},
 		Enforcer = {
 			speedMult = 1.0,
 			repairMult = 0.9,
-			damageMult = 1.5,
+			damageMult = 1.3,
+			buildCostMult = 1.0,
+			lootBonusMult = 1.0,
 		},
 	},
 
@@ -67,10 +73,10 @@ local Constants = {
 			[4] = { scrapPerTick = 48, tickInterval = 1.0, hp = 250, cost = 240 },
 		},
 		Wall = {
-			[1] = { hp = 100, cost = 0 },
-			[2] = { hp = 180, cost = 20 },
-			[3] = { hp = 300, cost = 45 },
-			[4] = { hp = 450, cost = 80 },
+			[1] = { hp = 150, cost = 0 },
+			[2] = { hp = 300, cost = 15 },
+			[3] = { hp = 500, cost = 30 },
+			[4] = { hp = 750, cost = 55 },
 		},
 	},
 
@@ -96,8 +102,8 @@ local Constants = {
 	},
 
 	WAVES = {
-		IntervalSeconds = 55,
-		FirstWaveDelaySeconds = 60,
+		IntervalSeconds = 80,
+		FirstWaveDelaySeconds = 100,
 		SwarmDurationSeconds = 25,
 		BaseEnemyCount = 16,
 		EnemiesPerWave = 18,
@@ -140,6 +146,12 @@ local Constants = {
 		RatCacheBonusMax = 5,
 		CriticalHarvestChance = 0.12,
 		CriticalHarvestMultiplier = 3,
+	},
+
+	DRILL_SWARM_BONUS = {
+		MinBlocks = 10,
+		MaxBlocks = 20,
+		BlockValue = 1,
 	},
 
 	POWERUPS = {

@@ -17,6 +17,14 @@ local activeScrapPiles: { BasePart } = {}
 local pickedPiles: { [BasePart]: boolean } = {}
 local elapsedCycles = 0
 
+local function getLootBonusMultiplier(player: Player): number
+	local multAttr = player:GetAttribute("LootBonusMult")
+	if typeof(multAttr) == "number" then
+		return math.max(1, multAttr :: number)
+	end
+	return 1
+end
+
 local function getActivePileCount(): number
 	local alive: { BasePart } = {}
 	for _, pile in activeScrapPiles do
@@ -128,6 +136,7 @@ function ScrapSpawnService.Init(): ()
 					scrapValue = scrapValue * Constants.LOOT.CriticalHarvestMultiplier
 					pile:SetAttribute("CriticalHarvest", true)
 				end
+				scrapValue = math.max(1, math.floor((scrapValue * getLootBonusMultiplier(nearestPlayer)) + 0.5))
 				EconomyService.AddScrap(scrapValue)
 				if isInstant then
 					task.defer(function()
