@@ -18,6 +18,7 @@ local Constants = require(Shared:WaitForChild("Constants"))
 local AudioManifest = require(Shared:WaitForChild("AudioManifest"))
 local VisualManifest = require(Shared:WaitForChild("VisualManifest"))
 local Remotes = require(Shared:WaitForChild("Remotes"))
+local Platform = require(Shared:WaitForChild("Platform"))
 local BlueprintController = require(script.Parent.Parent:WaitForChild("Controllers"):WaitForChild("BlueprintController"))
 local RepairMinigameUI = require(script.Parent:WaitForChild("RepairMinigameUI"))
 local EndScreenUI = require(script.Parent:WaitForChild("EndScreenUI"))
@@ -28,6 +29,7 @@ type BuildingType = "Turret" | "Drill" | "Wall"
 local MainHUD = {}
 
 local remotes = Remotes.Get()
+local isMobile = Platform.IsMobile
 local isInitialized = false
 local currentScrap = 0
 local currentStormSteel = 0
@@ -479,9 +481,9 @@ local function makeRoleButton(parent: Instance, roleName: string, xScale: number
 
 	local button = Instance.new("TextButton")
 	button.Name = roleName .. "Button"
-	button.Size = UDim2.new(0.8, 0, 0, 36)
+	button.Size = if isMobile then UDim2.new(0.85, 0, 0, 52) else UDim2.new(0.8, 0, 0, 36)
 	button.AnchorPoint = Vector2.new(0.5, 0)
-	button.Position = UDim2.new(0.5, 0, 1, -48)
+	button.Position = if isMobile then UDim2.new(0.5, 0, 1, -62) else UDim2.new(0.5, 0, 1, -48)
 	button.BackgroundColor3 = ROLE_COLORS[roleName] or Theme.Colors.PanelStroke
 	button.TextColor3 = Theme.Colors.Panel
 	button.TextScaled = true
@@ -553,8 +555,8 @@ local function createToolbar(parent: Instance)
 	local frame = Instance.new("Frame")
 	frame.Name = "BuildToolbar"
 	frame.AnchorPoint = Vector2.new(0.5, 1)
-	frame.Position = UDim2.new(0.5, 0, 0.97, 0)
-	frame.Size = UDim2.new(0.3, 0, 0, 88)
+	frame.Position = if isMobile then UDim2.new(0.5, 0, 0.84, 0) else UDim2.new(0.5, 0, 0.97, 0)
+	frame.Size = if isMobile then UDim2.new(0.46, 0, 0, 100) else UDim2.new(0.3, 0, 0, 88)
 	frame.BackgroundColor3 = Theme.Colors.Panel
 	frame.BackgroundTransparency = 0.2
 	frame.Parent = parent
@@ -576,12 +578,14 @@ local function createToolbar(parent: Instance)
 	for _, info in slots do
 		local slot = Instance.new("TextButton")
 		slot.Name = info.name .. "Slot"
-		slot.Size = UDim2.new(0.3, 0, 0, 72)
+		slot.Size = if isMobile then UDim2.new(0.3, 0, 0, 82) else UDim2.new(0.3, 0, 0, 72)
 		slot.BackgroundColor3 = Theme.Colors.PanelAlt
 		slot.TextColor3 = Theme.Colors.TextPrimary
 		slot.TextScaled = true
 		slot.Font = Enum.Font.GothamBold
-		slot.Text = string.format("%s\n$%d\n[%s]", info.name, Constants.BASE_COSTS[info.name], info.key)
+		slot.Text = if isMobile
+			then string.format("%s\n$%d", info.name, Constants.BASE_COSTS[info.name])
+			else string.format("%s\n$%d\n[%s]", info.name, Constants.BASE_COSTS[info.name], info.key)
 		slot.Parent = frame
 		buildCostButtons[info.name] = slot
 
@@ -634,7 +638,8 @@ local function createToolbar(parent: Instance)
 	hintLabel.Font = Enum.Font.Gotham
 	hintLabel.TextScaled = true
 	hintLabel.TextColor3 = Theme.Colors.TextMuted
-	hintLabel.Text = "[R] Rotate  |  [RMB/Esc] Cancel  |  [X] Remove"
+	hintLabel.Visible = not isMobile
+	hintLabel.Text = if isMobile then "" else "[R] Rotate  |  [RMB/Esc] Cancel  |  [X] Remove"
 	hintLabel.Parent = parent
 end
 
@@ -714,8 +719,8 @@ local function createToolPanel(parent: Instance)
 	local panel = Instance.new("Frame")
 	panel.Name = "ToolPanel"
 	panel.AnchorPoint = Vector2.new(1, 0.5)
-	panel.Position = UDim2.new(1, -6, 0.56, 0)
-	panel.Size = UDim2.fromOffset(56, 64)
+	panel.Position = if isMobile then UDim2.new(1, -10, 0.72, 0) else UDim2.new(1, -6, 0.56, 0)
+	panel.Size = if isMobile then UDim2.fromOffset(72, 80) else UDim2.fromOffset(56, 64)
 	panel.BackgroundColor3 = Theme.Colors.Panel
 	panel.BackgroundTransparency = 0.15
 	panel.Visible = false
@@ -726,7 +731,7 @@ local function createToolPanel(parent: Instance)
 	button.Name = "ToolToggle"
 	button.AnchorPoint = Vector2.new(0.5, 0.5)
 	button.Position = UDim2.fromScale(0.5, 0.5)
-	button.Size = UDim2.fromOffset(46, 50)
+	button.Size = if isMobile then UDim2.fromOffset(62, 68) else UDim2.fromOffset(46, 50)
 	button.BackgroundColor3 = Theme.Colors.PanelAlt
 	button.TextColor3 = Theme.Colors.TextPrimary
 	button.TextScaled = true
@@ -787,7 +792,9 @@ local function refreshBuildCosts()
 		local button = buildCostButtons[info.name]
 		local costValue = response[info.name]
 		if button ~= nil and type(costValue) == "number" then
-			local newText = string.format("%s\n$%d\n[%s]", info.name, math.floor(costValue + 0.5), info.key)
+			local newText = if isMobile
+				then string.format("%s\n$%d", info.name, math.floor(costValue + 0.5))
+				else string.format("%s\n$%d\n[%s]", info.name, math.floor(costValue + 0.5), info.key)
 			local changed = button.Text ~= newText
 			button.Text = newText
 
@@ -813,7 +820,7 @@ local function createSettingsPanel(parent: Instance)
 	toggleBtn.Name = "SettingsToggle"
 	toggleBtn.AnchorPoint = Vector2.new(1, 1)
 	toggleBtn.Position = UDim2.new(1, -10, 1, -10)
-	toggleBtn.Size = UDim2.fromOffset(36, 36)
+	toggleBtn.Size = if isMobile then UDim2.fromOffset(48, 48) else UDim2.fromOffset(36, 36)
 	toggleBtn.BackgroundColor3 = Theme.Colors.PanelAlt
 	toggleBtn.Font = Enum.Font.GothamBold
 	toggleBtn.TextScaled = true
@@ -828,8 +835,8 @@ local function createSettingsPanel(parent: Instance)
 	local panel = Instance.new("Frame")
 	panel.Name = "SettingsPanel"
 	panel.AnchorPoint = Vector2.new(1, 1)
-	panel.Position = UDim2.new(1, -10, 1, -52)
-	panel.Size = UDim2.new(0.16, 0, 0, 190)
+	panel.Position = if isMobile then UDim2.new(1, -10, 1, -62) else UDim2.new(1, -10, 1, -52)
+	panel.Size = if isMobile then UDim2.new(0.35, 0, 0, 260) else UDim2.new(0.16, 0, 0, 190)
 	panel.BackgroundColor3 = Theme.Colors.Panel
 	panel.BackgroundTransparency = 0.1
 	panel.Visible = false
@@ -902,13 +909,19 @@ local function createSettingsPanel(parent: Instance)
 		clickArea.MouseButton1Down:Connect(function()
 			dragging = true
 		end)
+		clickArea.InputBegan:Connect(function(input: InputObject)
+			if input.UserInputType == Enum.UserInputType.Touch then
+				dragging = true
+				updateFromInput(input.Position.X)
+			end
+		end)
 		clickArea.InputChanged:Connect(function(input: InputObject)
-			if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+			if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
 				updateFromInput(input.Position.X)
 			end
 		end)
 		UserInputService.InputEnded:Connect(function(input: InputObject)
-			if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
 				if dragging then
 					dragging = false
 					updateFromInput(input.Position.X)
@@ -933,7 +946,9 @@ local function createSettingsPanel(parent: Instance)
 	end)
 
 	local qualityLabels = { "LOW", "MED", "HIGH" }
-	createSlider("Graphics: HIGH", 112, 1.0, function(pct)
+	local initialGraphicsPct = if isMobile then 0 else 1
+	local initialGraphicsLabel = if isMobile then "LOW" else "HIGH"
+	createSlider("Graphics: " .. initialGraphicsLabel, 112, initialGraphicsPct, function(pct)
 		local level = math.clamp(math.floor(pct * 3 + 0.5), 1, 3)
 		pcall(function()
 			local Controllers = script.Parent.Parent:FindFirstChild("Controllers")
@@ -1017,7 +1032,7 @@ local function createTitanProgressPanel(parent: Instance)
 	frame.Name = "TitanProgress"
 	frame.AnchorPoint = Vector2.new(1, 0)
 	frame.Position = UDim2.new(1, -10, 0, 10)
-	frame.Size = UDim2.new(0.14, 0, 0, 110)
+	frame.Size = if isMobile then UDim2.new(0.22, 0, 0, 130) else UDim2.new(0.14, 0, 0, 110)
 	frame.BackgroundColor3 = Theme.Colors.Panel
 	frame.BackgroundTransparency = 0.15
 	frame.Parent = parent
@@ -1179,7 +1194,7 @@ local function createMainHUD()
 	scrapFrame.Name = "ScrapFrame"
 	scrapFrame.AnchorPoint = Vector2.new(0.5, 0)
 	scrapFrame.Position = UDim2.new(0.5, 0, 0.02, 0)
-	scrapFrame.Size = UDim2.new(0.14, 0, 0, 48)
+	scrapFrame.Size = if isMobile then UDim2.new(0.22, 0, 0, 56) else UDim2.new(0.14, 0, 0, 48)
 	scrapFrame.BackgroundColor3 = Theme.Colors.Panel
 	scrapFrame.BackgroundTransparency = 0.15
 	scrapFrame.Parent = gui
@@ -1215,12 +1230,12 @@ local function createMainHUD()
 	waveLabel.Name = "WaveTimer"
 	waveLabel.AnchorPoint = Vector2.new(0.5, 0)
 	waveLabel.Position = UDim2.new(0.5, 0, 0.095, 0)
-	waveLabel.Size = UDim2.fromOffset(300, 28)
+	waveLabel.Size = if isMobile then UDim2.new(0.4, 0, 0, 32) else UDim2.fromOffset(300, 28)
 	waveLabel.BackgroundTransparency = 1
 	waveLabel.TextColor3 = Theme.Colors.Accent
 	waveLabel.Font = Enum.Font.RobotoMono
-	waveLabel.TextScaled = false
-	waveLabel.TextSize = 20
+	waveLabel.TextScaled = isMobile
+	waveLabel.TextSize = if isMobile then 18 else 20
 	waveLabel.Text = "NEXT SWARM: 00:00"
 	waveLabel.Parent = gui
 	waveTimerLabel = waveLabel
@@ -1511,9 +1526,23 @@ function MainHUD.Init()
 			return
 		end
 		local hints = {
-			{ delay = 0, text = "Press [1] [2] [3] to select buildings, click to place" },
-			{ delay = 5, text = "Press [R] to rotate buildings before placing" },
-			{ delay = 10, text = "Walk to the Titan Core and hold [E] to deposit resources" },
+			{
+				delay = 0,
+				text = if isMobile
+					then "Tap BUILD to choose Turret/Drill/Wall, then tap the ground to place."
+					else "Press [1] [2] [3] to select buildings, click to place",
+			},
+			{
+				delay = 5,
+				text = if isMobile then "Tap ROTATE while placing to turn buildings."
+					else "Press [R] to rotate buildings before placing",
+			},
+			{
+				delay = 10,
+				text = if isMobile
+					then "Walk to the Titan Core and hold BUILD when near a blueprint or prompt."
+					else "Walk to the Titan Core and hold [E] to deposit resources",
+			},
 		}
 		for _, hint in hints do
 			task.delay(hint.delay, function()

@@ -16,6 +16,7 @@ local Constants = require(Shared:WaitForChild("Constants"))
 local AudioManifest = require(Shared:WaitForChild("AudioManifest"))
 local VisualManifest = require(Shared:WaitForChild("VisualManifest"))
 local Remotes = require(Shared:WaitForChild("Remotes"))
+local Platform = require(Shared:WaitForChild("Platform"))
 local MainHUD = require(script.Parent.Parent:WaitForChild("UI"):WaitForChild("MainHUD"))
 
 local VFXController = {}
@@ -1337,6 +1338,10 @@ function VFXController.Init()
 
 	for _ = 1, POOL_SIZE do
 		table.insert(gearPool, createGearPart())
+	end
+
+	if Platform.IsMobile and manualQualityOverride == nil then
+		applyQualityLevel(QUALITY_LOW)
 	end
 
 	ensureAmbientDust()

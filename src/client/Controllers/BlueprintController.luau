@@ -259,6 +259,10 @@ function BlueprintController.IsPlacing(): boolean
 	return mode == "Placing"
 end
 
+function BlueprintController.GetMode(): ControllerMode
+	return mode
+end
+
 local function getNearestBlueprint(range: number): BasePart?
 	local character = LocalPlayer.Character
 	local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
@@ -360,21 +364,74 @@ function BlueprintController.ConnectBuildProgress(callback: (number) -> ())
 	buildProgressCallback = callback
 end
 
+function BlueprintController.RotatePlacement(): boolean
+	if mode ~= "Placing" then
+		return false
+	end
+	currentRotation = (currentRotation + 90) % 360
+	return true
+end
+
+function BlueprintController.CancelPlacement(): boolean
+	if mode ~= "Placing" then
+		return false
+	end
+	clearGhost()
+	return true
+end
+
+function BlueprintController.GetNearestBlueprint(range: number?): BasePart?
+	local useRange = if typeof(range) == "number" then (range :: number) else BLUEPRINT_INTERACT_RANGE
+	return getNearestBlueprint(useRange)
+end
+
+function BlueprintController.StartInteractHold(): boolean
+	if mode == "Placing" then
+		return false
+	end
+	if holdTarget == nil then
+		startHold()
+	end
+	return holdTarget ~= nil
+end
+
+function BlueprintController.EndInteractHold()
+	if holdTarget ~= nil then
+		cancelHold()
+	end
+end
+
+function BlueprintController.CancelNearestBlueprint(): boolean
+	local nearest = getNearestBlueprint(BLUEPRINT_INTERACT_RANGE)
+	if nearest == nil then
+		return false
+	end
+	local bpId = nearest:GetAttribute("BlueprintId")
+	if typeof(bpId) == "string" then
+		remotes.CancelBlueprint:FireServer(bpId :: string)
+		return true
+	end
+	return false
+end
+
 local function onInputBegan(input: InputObject, processed: boolean)
 	if mode == "Placing" then
 		if input.KeyCode == Enum.KeyCode.R then
-			currentRotation = (currentRotation + 90) % 360
+			BlueprintController.RotatePlacement()
 			return
 		end
 		if input.UserInputType == Enum.UserInputType.MouseButton2 then
-			clearGhost()
+			BlueprintController.CancelPlacement()
 			return
 		end
 		if input.KeyCode == Enum.KeyCode.Escape then
-			clearGhost()
+			BlueprintController.CancelPlacement()
 			return
 		end
-		if input.UserInputType == Enum.UserInputType.MouseButton1 and not processed then
+		if
+			(input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch)
+			and not processed
+		then
 			placeCurrentBlueprint()
 			return
 		end
@@ -392,16 +449,10 @@ local function onInputBegan(input: InputObject, processed: boolean)
 		BlueprintController.StartPlacing("Wall")
 	elseif input.KeyCode == Enum.KeyCode.E then
 		if holdTarget == nil then
-			startHold()
+			BlueprintController.StartInteractHold()
 		end
 	elseif input.KeyCode == Enum.KeyCode.X then
-		local nearest = getNearestBlueprint(BLUEPRINT_INTERACT_RANGE)
-		if nearest ~= nil then
-			local bpId = nearest:GetAttribute("BlueprintId")
-			if typeof(bpId) == "string" then
-				remotes.CancelBlueprint:FireServer(bpId :: string)
-			end
-		end
+		BlueprintController.CancelNearestBlueprint()
 	end
 end
 

@@ -44,6 +44,13 @@ local initOrder: { { name: string, fn: () -> () } } = {
 			module.Init()
 		end,
 	},
+	{
+		name = "MobileControls",
+		fn = function()
+			local module = require(UI:WaitForChild("MobileControls"))
+			module.Init()
+		end,
+	},
 }
 
 for _, entry in initOrder do

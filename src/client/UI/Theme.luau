@@ -63,6 +63,11 @@ Theme.Fonts = {
 	Emphasis = Enum.Font.GothamBold,
 }
 
+Theme.Layout = {
+	MobileMinTouchSize = 48,
+	MobilePanelPadding = 10,
+}
+
 local function addCorner(guiObject: GuiObject, radius: number)
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0, radius)

@@ -564,11 +564,11 @@ function ToolController.Init()
 	end
 
 	UserInputService.InputBegan:Connect(function(input, processed)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-			tryPunch()
+		if processed then
 			return
 		end
-		if processed then
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			tryPunch()
 			return
 		end
 	end)
