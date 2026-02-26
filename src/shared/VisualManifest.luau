@@ -142,8 +142,10 @@ local VisualManifest = {
 		},
 		PowerUps = {
 			Lightning = Color3.fromRGB(100, 180, 255),
-			Fireball = Color3.fromRGB(255, 100, 50),
 			Shockwave = Color3.fromRGB(180, 80, 255),
+			RepairAura = Color3.fromRGB(80, 220, 120),
+			TitanPush = Color3.fromRGB(255, 180, 60),
+			LootVacuum = Color3.fromRGB(255, 255, 100),
 		},
 	},
 

@@ -42,7 +42,8 @@ local stormRattleSound: Sound? = nil
 local lastWaveHornAt = 0
 local baseAmbient = Lighting.Ambient
 local baseBrightness = Lighting.Brightness
-local ambientMusic: Sound? = nil
+local dayMusic: Sound? = nil
+local waveMusic: Sound? = nil
 local waveIntensityActive = false
 local ratHealthBars: { [Model]: BillboardGui } = {}
 local ratHealthConnections: { [Model]: { RBXScriptConnection } } = {}
@@ -967,14 +968,27 @@ end
 
 local function playPowerUpSound(powerUpType: string)
 	local s = Instance.new("Sound")
-	s.SoundId = AudioManifest.WaveSlam
+	local soundByType = {
+		Lightning = AudioManifest.PowerUpLightning,
+		Shockwave = AudioManifest.PowerUpShockwave,
+		RepairAura = AudioManifest.PowerUpRepairAura,
+		TitanPush = AudioManifest.PowerUpTitanPush,
+		LootVacuum = AudioManifest.PowerUpLootVacuum,
+	}
+	s.SoundId = soundByType[powerUpType] or AudioManifest.WaveSlam
 	s.Volume = 0.25
 	if powerUpType == "Lightning" then
 		s.PlaybackSpeed = 1.25
-	elseif powerUpType == "Fireball" then
-		s.PlaybackSpeed = 0.95
-	else
+	elseif powerUpType == "Shockwave" then
 		s.PlaybackSpeed = 0.75
+	elseif powerUpType == "RepairAura" then
+		s.PlaybackSpeed = 1.4
+	elseif powerUpType == "TitanPush" then
+		s.PlaybackSpeed = 0.7
+	elseif powerUpType == "LootVacuum" then
+		s.PlaybackSpeed = 1.6
+	else
+		s.PlaybackSpeed = 1
 	end
 	s.Parent = SoundService
 	s:Play()
@@ -1019,38 +1033,149 @@ local function playLightningPowerUpVFX(origin: Vector3, hitPositions: { Vector3 
 	playPowerUpSound("Lightning")
 end
 
-local function playFireballPowerUpVFX(origin: Vector3)
-	local character = LocalPlayer.Character
-	local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
-	local direction = if root ~= nil and root:IsA("BasePart") then root.CFrame.LookVector.Unit else Vector3.new(0, 0, -1)
-	local length = Constants.POWERUPS.Fireball.length
-	local step = 7
-	for i = 1, math.floor(length / step) do
-		task.delay(i * 0.02, function()
-			local p = Instance.new("Part")
-			p.Name = "FireballTrail"
-			p.Shape = Enum.PartType.Ball
-			p.Anchored = true
-			p.CanCollide = false
-			p.Material = Enum.Material.Neon
-			p.Color = VisualManifest.Loot.PowerUps.Fireball
-			p.Size = Vector3.new(1.6, 1.6, 1.6)
-			p.Position = origin + direction * (i * step)
-			p.Transparency = 0.25
-			p.Parent = Workspace
-			TweenService:Create(p, TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-				Size = Vector3.new(0.2, 0.2, 0.2),
-				Transparency = 1,
-			}):Play()
-			task.delay(0.24, function()
-				if p.Parent ~= nil then
-					p:Destroy()
-				end
-			end)
+local function playRepairAuraVFX(origin: Vector3, hitPositions: { Vector3 }?)
+	local ring = Instance.new("Part")
+	ring.Name = "RepairAuraRing"
+	ring.Shape = Enum.PartType.Cylinder
+	ring.Anchored = true
+	ring.CanCollide = false
+	ring.Material = Enum.Material.Neon
+	ring.Color = VisualManifest.Loot.PowerUps.RepairAura
+	ring.Size = Vector3.new(0.4, 2, 2)
+	ring.CFrame = CFrame.new(origin + Vector3.new(0, 0.12, 0)) * CFrame.Angles(0, 0, math.rad(90))
+	ring.Transparency = 0.2
+	ring.Parent = Workspace
+	local target = Constants.POWERUPS.RepairAura.radius * 2
+	TweenService:Create(ring, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		Size = Vector3.new(0.4, target, target),
+		Transparency = 1,
+	}):Play()
+	task.delay(0.45, function()
+		if ring.Parent ~= nil then
+			ring:Destroy()
+		end
+	end)
+
+	for _, pos in hitPositions or {} do
+		local spark = Instance.new("Part")
+		spark.Name = "RepairAuraSpark"
+		spark.Shape = Enum.PartType.Ball
+		spark.Anchored = true
+		spark.CanCollide = false
+		spark.Material = Enum.Material.Neon
+		spark.Color = VisualManifest.Loot.PowerUps.RepairAura
+		spark.Size = Vector3.new(0.5, 0.5, 0.5)
+		spark.Position = pos + Vector3.new(0, 2, 0)
+		spark.Transparency = 0.1
+		spark.Parent = Workspace
+		TweenService:Create(spark, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			Size = Vector3.new(2.2, 2.2, 2.2),
+			Transparency = 1,
+		}):Play()
+		task.delay(0.28, function()
+			if spark.Parent ~= nil then
+				spark:Destroy()
+			end
 		end)
 	end
 	bumpCamera()
-	playPowerUpSound("Fireball")
+	playPowerUpSound("RepairAura")
+end
+
+local function playTitanPushVFX(origin: Vector3, hitPositions: { Vector3 }?)
+	local ring = Instance.new("Part")
+	ring.Name = "TitanPushRing"
+	ring.Shape = Enum.PartType.Cylinder
+	ring.Anchored = true
+	ring.CanCollide = false
+	ring.Material = Enum.Material.Neon
+	ring.Color = VisualManifest.Loot.PowerUps.TitanPush
+	ring.Size = Vector3.new(0.5, 2, 2)
+	ring.CFrame = CFrame.new(origin + Vector3.new(0, 0.12, 0)) * CFrame.Angles(0, 0, math.rad(90))
+	ring.Transparency = 0.2
+	ring.Parent = Workspace
+	local target = Constants.POWERUPS.TitanPush.radius * 2
+	TweenService:Create(ring, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		Size = Vector3.new(0.5, target, target),
+		Transparency = 1,
+	}):Play()
+	task.delay(0.4, function()
+		if ring.Parent ~= nil then
+			ring:Destroy()
+		end
+	end)
+
+	for _, pos in hitPositions or {} do
+		local trail = Instance.new("Part")
+		trail.Name = "TitanPushTrail"
+		trail.Anchored = true
+		trail.CanCollide = false
+		trail.Material = Enum.Material.Neon
+		trail.Color = VisualManifest.Loot.PowerUps.TitanPush
+		trail.Size = Vector3.new(0.2, 0.2, 2)
+		trail.CFrame = CFrame.new(pos + Vector3.new(0, 0.8, 0))
+		trail.Transparency = 0.15
+		trail.Parent = Workspace
+		TweenService:Create(trail, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			Size = Vector3.new(0.1, 0.1, 6),
+			Transparency = 1,
+		}):Play()
+		task.delay(0.28, function()
+			if trail.Parent ~= nil then
+				trail:Destroy()
+			end
+		end)
+	end
+	bumpCamera()
+	playPowerUpSound("TitanPush")
+end
+
+local function playLootVacuumVFX(origin: Vector3)
+	local ring = Instance.new("Part")
+	ring.Name = "LootVacuumRing"
+	ring.Shape = Enum.PartType.Cylinder
+	ring.Anchored = true
+	ring.CanCollide = false
+	ring.Material = Enum.Material.Neon
+	ring.Color = VisualManifest.Loot.PowerUps.LootVacuum
+	local startDiameter = Constants.POWERUPS.LootVacuum.radius * 2
+	ring.Size = Vector3.new(0.4, startDiameter, startDiameter)
+	ring.CFrame = CFrame.new(origin + Vector3.new(0, 0.12, 0)) * CFrame.Angles(0, 0, math.rad(90))
+	ring.Transparency = 0.15
+	ring.Parent = Workspace
+	TweenService:Create(ring, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		Size = Vector3.new(0.4, 0.1, 0.1),
+		Transparency = 1,
+	}):Play()
+	task.delay(0.35, function()
+		if ring.Parent ~= nil then
+			ring:Destroy()
+		end
+	end)
+
+	local core = Instance.new("Part")
+	core.Name = "LootVacuumCore"
+	core.Shape = Enum.PartType.Ball
+	core.Anchored = true
+	core.CanCollide = false
+	core.Material = Enum.Material.Neon
+	core.Color = VisualManifest.Loot.PowerUps.LootVacuum
+	core.Size = Vector3.new(1.5, 1.5, 1.5)
+	core.Position = origin + Vector3.new(0, 1.2, 0)
+	core.Transparency = 0.1
+	core.Parent = Workspace
+	TweenService:Create(core, TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		Size = Vector3.new(0.2, 0.2, 0.2),
+		Transparency = 1,
+	}):Play()
+	task.delay(0.25, function()
+		if core.Parent ~= nil then
+			core:Destroy()
+		end
+	end)
+
+	bumpCamera()
+	playPowerUpSound("LootVacuum")
 end
 
 local function playShockwavePowerUpVFX(origin: Vector3)
@@ -1774,10 +1899,21 @@ function VFXController.Init()
 	remotes.PowerUpCollected.OnClientEvent:Connect(function(_collector: Player, powerUpType: string, position: Vector3, hitPositions: { Vector3 }?)
 		if powerUpType == "Lightning" then
 			playLightningPowerUpVFX(position, hitPositions)
-		elseif powerUpType == "Fireball" then
-			playFireballPowerUpVFX(position)
 		elseif powerUpType == "Shockwave" then
 			playShockwavePowerUpVFX(position)
+		elseif powerUpType == "RepairAura" then
+			playRepairAuraVFX(position, hitPositions)
+		elseif powerUpType == "TitanPush" then
+			local titanCenter = position
+			for _, tagged in CollectionService:GetTagged("TitanObjective") do
+				if tagged:IsA("BasePart") then
+					titanCenter = tagged.Position
+					break
+				end
+			end
+			playTitanPushVFX(titanCenter, hitPositions)
+		elseif powerUpType == "LootVacuum" then
+			playLootVacuumVFX(position)
 		end
 	end)
 
@@ -1879,33 +2015,50 @@ function VFXController.Init()
 				slam:Destroy()
 			end
 		end)
-		if ambientMusic and ambientMusic.Parent then
-			TweenService:Create(ambientMusic, TweenInfo.new(1.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-				Volume = 0.25,
-				PlaybackSpeed = 1.08,
+		if dayMusic and dayMusic.Parent then
+			TweenService:Create(dayMusic, TweenInfo.new(1.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+				Volume = 0,
+			}):Play()
+		end
+		if waveMusic and waveMusic.Parent then
+			TweenService:Create(waveMusic, TweenInfo.new(1.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+				Volume = 0.18,
 			}):Play()
 		end
 	end)
 
 	remotes.SwarmEnded.OnClientEvent:Connect(function()
 		waveIntensityActive = false
-		if ambientMusic and ambientMusic.Parent then
-			TweenService:Create(ambientMusic, TweenInfo.new(3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-				Volume = 0.1,
-				PlaybackSpeed = 1,
+		if waveMusic and waveMusic.Parent then
+			TweenService:Create(waveMusic, TweenInfo.new(2.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+				Volume = 0,
+			}):Play()
+		end
+		if dayMusic and dayMusic.Parent then
+			TweenService:Create(dayMusic, TweenInfo.new(2.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+				Volume = 0.12,
 			}):Play()
 		end
 	end)
 
-	ambientMusic = Instance.new("Sound")
-	ambientMusic.Name = "AmbientMusic"
-	ambientMusic.SoundId = AudioManifest.AmbientBase
-	ambientMusic.Looped = true
-	ambientMusic.Volume = 0
-	ambientMusic.Parent = SoundService
-	ambientMusic:Play()
-	TweenService:Create(ambientMusic, TweenInfo.new(4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-		Volume = 0.1,
+	dayMusic = Instance.new("Sound")
+	dayMusic.Name = "DayMusic"
+	dayMusic.SoundId = AudioManifest.DayAmbient or AudioManifest.AmbientBase
+	dayMusic.Looped = true
+	dayMusic.Volume = 0
+	dayMusic.Parent = SoundService
+	dayMusic:Play()
+
+	waveMusic = Instance.new("Sound")
+	waveMusic.Name = "WaveMusic"
+	waveMusic.SoundId = AudioManifest.WaveCombat or AudioManifest.AmbientBase
+	waveMusic.Looped = true
+	waveMusic.Volume = 0
+	waveMusic.Parent = SoundService
+	waveMusic:Play()
+
+	TweenService:Create(dayMusic, TweenInfo.new(4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		Volume = 0.12,
 	}):Play()
 end
 

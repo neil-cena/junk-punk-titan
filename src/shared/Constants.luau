@@ -5,7 +5,7 @@ local Constants = {
 
 	BASE_COSTS = {
 		Turret = 80,
-		Drill = 180,
+		Drill = 120,
 		Wall = 25,
 	},
 
@@ -41,8 +41,8 @@ local Constants = {
 		TurretRange = 45,
 		TurretFireInterval = 0.9,
 		TurretDamage = 5,
-		DrillScrapPerTick = 8,
-		DrillTickInterval = 2,
+		DrillScrapPerTick = 12,
+		DrillTickInterval = 1.5,
 		DefaultHP = 100,
 		BaseBuildTimeSeconds = 3,
 		MaxLevel = 4,
@@ -61,10 +61,10 @@ local Constants = {
 			[4] = { damage = 18, range = 56, fireInterval = 0.45, hp = 250, cost = 220 },
 		},
 		Drill = {
-			[1] = { scrapPerTick = 8, tickInterval = 2, hp = 100, cost = 0 },
-			[2] = { scrapPerTick = 14, tickInterval = 2, hp = 140, cost = 100 },
-			[3] = { scrapPerTick = 22, tickInterval = 1.8, hp = 190, cost = 180 },
-			[4] = { scrapPerTick = 32, tickInterval = 1.5, hp = 250, cost = 280 },
+			[1] = { scrapPerTick = 12, tickInterval = 1.5, hp = 100, cost = 0 },
+			[2] = { scrapPerTick = 20, tickInterval = 1.5, hp = 140, cost = 80 },
+			[3] = { scrapPerTick = 32, tickInterval = 1.3, hp = 190, cost = 150 },
+			[4] = { scrapPerTick = 48, tickInterval = 1.0, hp = 250, cost = 240 },
 		},
 		Wall = {
 			[1] = { hp = 100, cost = 0 },
@@ -96,7 +96,7 @@ local Constants = {
 	},
 
 	WAVES = {
-		IntervalSeconds = 75,
+		IntervalSeconds = 55,
 		FirstWaveDelaySeconds = 60,
 		SwarmDurationSeconds = 25,
 		BaseEnemyCount = 16,
@@ -119,7 +119,7 @@ local Constants = {
 		PunchCooldown = 0.33,
 		RatBaseHealth = 18,
 		RatFleeSpeedMultiplier = 1.2,
-		ScrapBundleDespawnSeconds = 30,
+		ScrapBundleDespawnSeconds = 45,
 	},
 
 	THIEF_RAT = {
@@ -133,9 +133,9 @@ local Constants = {
 
 	LOOT = {
 		JunkBlockValue = 5,
-		RatCacheValue = 2,
-		RatCacheMinDrops = 2,
-		RatCacheMaxDrops = 3,
+		RatCacheValue = 3,
+		RatCacheMinDrops = 3,
+		RatCacheMaxDrops = 4,
 		RatCacheBonusDivisor = 75,
 		RatCacheBonusMax = 5,
 		CriticalHarvestChance = 0.12,
@@ -143,11 +143,13 @@ local Constants = {
 	},
 
 	POWERUPS = {
-		DropChance = 0.06,
-		Types = { "Lightning", "Fireball", "Shockwave" },
+		DropChance = 0.08,
+		Types = { "Lightning", "Shockwave", "RepairAura", "TitanPush", "LootVacuum" },
 		Lightning = { kills = { 5, 10 } },
-		Fireball = { width = 6, length = 60, damage = 100 },
 		Shockwave = { radius = 20, damagePercent = 0.5 },
+		RepairAura = { radius = 25, healAmount = 40 },
+		TitanPush = { radius = 30, pushDistance = 10 },
+		LootVacuum = { radius = 15 },
 		DespawnSeconds = 20,
 		OrbSize = Vector3.new(1.8, 1.8, 1.8),
 	},
@@ -170,12 +172,12 @@ local Constants = {
 	},
 
 	SCRAP_SPAWNS = {
-		IntervalSeconds = 4,
-		CountPerSpawn = 7,
-		MinSpawnRadius = 30,
+		IntervalSeconds = 3,
+		CountPerSpawn = 9,
+		MinSpawnRadius = 20,
 		MaxSpawnRadius = 180,
 		RadiusRampCycles = 20,
-		MaxActivePiles = 60,
+		MaxActivePiles = 80,
 		MagnetRadius = 7,
 		InstantPickupRadius = 2,
 	},

@@ -21,9 +21,16 @@ return {
 	MinigameFail = "rbxassetid://12222208",
 
 	AmbientBase = "rbxassetid://9043887091",
+	DayAmbient = "rbxassetid://1837849285",
+	WaveCombat = "rbxassetid://1836311159",
 	LootCollect = "rbxassetid://12221976",
 	SteelCollect = "rbxassetid://12221991",
 	HitConfirm = "rbxassetid://12222216",
 	WaveSlam = "rbxassetid://9114243152",
 	LootCombo = "rbxassetid://6026984224",
+	PowerUpLightning = "rbxassetid://9114243152",
+	PowerUpShockwave = "rbxassetid://12222084",
+	PowerUpRepairAura = "rbxassetid://12221991",
+	PowerUpTitanPush = "rbxassetid://9125347736",
+	PowerUpLootVacuum = "rbxassetid://6026984224",
 }

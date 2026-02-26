@@ -55,6 +55,8 @@ local SELECTION_LINE_AMPLITUDE = 0.03
 local BUILD_ANIM_ID = "rbxassetid://507768375"
 local cachedBuildTrack: AnimationTrack? = nil
 local cachedBuildHumanoid: Humanoid? = nil
+local slowedHumanoid: Humanoid? = nil
+local originalWalkSpeed: number? = nil
 
 local function getBuildTrack(humanoid: Humanoid): AnimationTrack?
 	if cachedBuildTrack ~= nil and cachedBuildHumanoid == humanoid then
@@ -154,6 +156,12 @@ local function clearGhost()
 	currentType = nil
 	currentRotation = 0
 	mode = "Idle"
+
+	if slowedHumanoid ~= nil and slowedHumanoid.Parent ~= nil and originalWalkSpeed ~= nil then
+		slowedHumanoid.WalkSpeed = originalWalkSpeed
+	end
+	slowedHumanoid = nil
+	originalWalkSpeed = nil
 end
 
 local function getPlacementResult(): (boolean, Vector3?)
@@ -265,6 +273,14 @@ function BlueprintController.StartPlacing(buildingType: BuildingType)
 	mode = "Placing"
 	currentType = buildingType
 	setHighlightedBlueprint(nil)
+
+	local character = LocalPlayer.Character
+	local humanoid = if character then character:FindFirstChildOfClass("Humanoid") else nil
+	if humanoid ~= nil then
+		originalWalkSpeed = humanoid.WalkSpeed
+		humanoid.WalkSpeed = math.max(1, humanoid.WalkSpeed * 0.5)
+		slowedHumanoid = humanoid
+	end
 
 	local ghost = Instance.new("Part")
 	ghost.Name = "LocalPlacementGhost"

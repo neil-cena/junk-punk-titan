@@ -52,7 +52,7 @@ local ratStates: { [Model]: RatState } = {}
 local activeRatCaches: { BasePart } = {}
 local pickedRatCaches: { [BasePart]: boolean } = {}
 local ratCacheValues: { [BasePart]: number } = {}
-type PowerUpType = "Lightning" | "Fireball" | "Shockwave"
+type PowerUpType = "Lightning" | "Shockwave" | "RepairAura" | "TitanPush" | "LootVacuum"
 local activePowerUps: { BasePart } = {}
 local pickedPowerUps: { [BasePart]: boolean } = {}
 local powerUpTypeByOrb: { [BasePart]: PowerUpType } = {}
@@ -190,8 +190,12 @@ local function getPowerUpColor(powerUpType: PowerUpType): Color3
 	local colors = VisualManifest.Loot.PowerUps
 	if powerUpType == "Lightning" then
 		return colors.Lightning
-	elseif powerUpType == "Fireball" then
-		return colors.Fireball
+	elseif powerUpType == "RepairAura" then
+		return colors.RepairAura
+	elseif powerUpType == "TitanPush" then
+		return colors.TitanPush
+	elseif powerUpType == "LootVacuum" then
+		return colors.LootVacuum
 	end
 	return colors.Shockwave
 end
@@ -248,6 +252,7 @@ local function getAliveRatRoots(): { BasePart }
 	return roots
 end
 
+local collectRatCache: ((BasePart) -> ())?
 local function executePowerUp(player: Player, powerUpType: PowerUpType): { Vector3 }
 	local character = player.Character
 	local playerRoot = if character then character:FindFirstChild("HumanoidRootPart") else nil
@@ -279,30 +284,6 @@ local function executePowerUp(player: Player, powerUpType: PowerUpType): { Vecto
 				end
 			end
 		end
-	elseif powerUpType == "Fireball" then
-		local width = Constants.POWERUPS.Fireball.width
-		local halfWidth = width * 0.5
-		local maxLength = Constants.POWERUPS.Fireball.length
-		local damage = Constants.POWERUPS.Fireball.damage
-		local origin = playerRoot.Position
-		local direction = playerRoot.CFrame.LookVector.Unit
-		for rat in activeRats do
-			local humanoid = rat:FindFirstChildOfClass("Humanoid")
-			local root = rat.PrimaryPart
-			if humanoid == nil or humanoid.Health <= 0 or root == nil then
-				continue
-			end
-			local toRat = root.Position - origin
-			local forward = toRat:Dot(direction)
-			if forward < 0 or forward > maxLength then
-				continue
-			end
-			local lateral = (toRat - direction * forward).Magnitude
-			if lateral <= halfWidth then
-				table.insert(hitPositions, root.Position)
-				humanoid:TakeDamage(damage)
-			end
-		end
 	elseif powerUpType == "Shockwave" then
 		local radius = Constants.POWERUPS.Shockwave.radius
 		local damagePercent = Constants.POWERUPS.Shockwave.damagePercent
@@ -317,6 +298,98 @@ local function executePowerUp(player: Player, powerUpType: PowerUpType): { Vecto
 				table.insert(hitPositions, root.Position)
 				local damage = math.max(1, humanoid.MaxHealth * damagePercent)
 				humanoid:TakeDamage(damage)
+			end
+		end
+	elseif powerUpType == "RepairAura" then
+		local radius = Constants.POWERUPS.RepairAura.radius
+		local healAmount = Constants.POWERUPS.RepairAura.healAmount
+		for _, instance in CollectionService:GetTagged("DismantlableBuilding") do
+			if not instance:IsA("BasePart") or instance.Parent == nil then
+				continue
+			end
+			if (instance.Position - playerRoot.Position).Magnitude > radius then
+				continue
+			end
+			local maxHP = getBuildingMaxHP(instance)
+			local hpAttr = instance:GetAttribute("BuildingHP")
+			local currentHP = if typeof(hpAttr) == "number" then (hpAttr :: number) else maxHP
+			local healedHP = math.clamp(currentHP + healAmount, 0, maxHP)
+			if healedHP > currentHP then
+				instance:SetAttribute("BuildingHP", healedHP)
+				table.insert(hitPositions, instance.Position)
+			end
+		end
+	elseif powerUpType == "TitanPush" then
+		local radius = Constants.POWERUPS.TitanPush.radius
+		local pushDistance = Constants.POWERUPS.TitanPush.pushDistance
+		local titanCore = ObjectiveService.GetTitanCore()
+		local titanOrigin = if titanCore ~= nil then titanCore.Position else playerRoot.Position
+		for rat in activeRats do
+			local humanoid = rat:FindFirstChildOfClass("Humanoid")
+			local root = rat.PrimaryPart
+			if humanoid == nil or humanoid.Health <= 0 or root == nil or rat.Parent == nil then
+				continue
+			end
+			local fromTitan = root.Position - titanOrigin
+			if fromTitan.Magnitude > radius then
+				continue
+			end
+			local dir = Vector3.new(fromTitan.X, 0, fromTitan.Z)
+			if dir.Magnitude < 0.01 then
+				dir = Vector3.new(0, 0, 1)
+			end
+			local unitDir = dir.Unit
+			local currentPos = root.Position
+			local targetPos = currentPos + unitDir * pushDistance
+			root.CFrame = CFrame.lookAt(targetPos, targetPos + root.CFrame.LookVector)
+			humanoid:MoveTo(targetPos)
+			table.insert(hitPositions, currentPos)
+		end
+	elseif powerUpType == "LootVacuum" then
+		local radius = Constants.POWERUPS.LootVacuum.radius
+		local origin = playerRoot.Position
+		for _, cache in activeRatCaches do
+			if cache.Parent == nil or pickedRatCaches[cache] then
+				continue
+			end
+			if (cache.Position - origin).Magnitude <= radius then
+				cache:SetAttribute("MagnetTarget", player.Name)
+				if collectRatCache ~= nil then
+					collectRatCache(cache)
+				end
+				table.insert(hitPositions, cache.Position)
+			end
+		end
+
+		local overlapParams = OverlapParams.new()
+		overlapParams.FilterType = Enum.RaycastFilterType.Exclude
+		overlapParams.FilterDescendantsInstances = { character }
+		for _, part in Workspace:GetPartBoundsInRadius(origin, radius, overlapParams) do
+			if not part:IsA("BasePart") or part.Parent == nil then
+				continue
+			end
+			if part:GetAttribute("CollectedByLootVacuum") == true then
+				continue
+			end
+			if part.Name == "JunkBlock" then
+				part:SetAttribute("CollectedByLootVacuum", true)
+				part:SetAttribute("MagnetTarget", player.Name)
+				part:SetAttribute("InstantPickup", true)
+				local scrapValue = Constants.LOOT.JunkBlockValue
+				if math.random() < Constants.LOOT.CriticalHarvestChance then
+					scrapValue = scrapValue * Constants.LOOT.CriticalHarvestMultiplier
+					part:SetAttribute("CriticalHarvest", true)
+				end
+				EconomyService.AddScrap(scrapValue)
+				table.insert(hitPositions, part.Position)
+				part:Destroy()
+			elseif part.Name == "StormHardenedSteel" then
+				part:SetAttribute("CollectedByLootVacuum", true)
+				part:SetAttribute("MagnetTarget", player.Name)
+				part:SetAttribute("InstantPickup", true)
+				EconomyService.AddStormSteel(1)
+				table.insert(hitPositions, part.Position)
+				part:Destroy()
 			end
 		end
 	end
@@ -540,6 +613,38 @@ local function getBuildingBaseCost(buildingPart: BasePart): number
 	return 0
 end
 
+local function getBuildingType(buildingPart: BasePart): string?
+	local attrType = buildingPart:GetAttribute("BuildingType")
+	if typeof(attrType) == "string" then
+		return attrType :: string
+	end
+	for buildingType, _ in Constants.BASE_COSTS do
+		if string.find(buildingPart.Name, buildingType) ~= nil then
+			return buildingType
+		end
+	end
+	return nil
+end
+
+local function getBuildingMaxHP(buildingPart: BasePart): number
+	local buildingType = getBuildingType(buildingPart)
+	if buildingType == nil then
+		return Constants.BUILDING.DefaultHP
+	end
+	local levelAttr = buildingPart:GetAttribute("BuildingLevel")
+	local level = if typeof(levelAttr) == "number" then math.floor(levelAttr :: number) else 1
+	local typeUpgrades = Constants.BUILDING_UPGRADES[buildingType]
+	if typeUpgrades == nil then
+		return Constants.BUILDING.DefaultHP
+	end
+	local levelStats = typeUpgrades[level] or typeUpgrades[1]
+	if levelStats == nil then
+		return Constants.BUILDING.DefaultHP
+	end
+	local hp = levelStats.hp
+	return if typeof(hp) == "number" then (hp :: number) else Constants.BUILDING.DefaultHP
+end
+
 local function getTargetBuilding(): BasePart?
 	local buildings: { { part: BasePart, score: number } } = {}
 
@@ -710,6 +815,7 @@ end
 
 local spawnRatToward: (BasePart, boolean?, boolean?) -> ()
 local dismantleAndDestroyBuilding: (BasePart, Model?) -> ()
+local retreatAllRats: (() -> ())?
 
 local PATH_ZONE_SIZE = 16
 local pathCache: { [string]: { waypoints: { PathWaypoint }, time: number } } = {}
@@ -1191,7 +1297,11 @@ function EnemyService.SpawnWave(waveNumber: number): ()
 		if swarmActive then
 			swarmActive = false
 			remotes.SwarmEnded:FireAllClients()
-			retreatAllRats()
+			if retreatAllRats ~= nil then
+				retreatAllRats()
+			else
+				warn("[EnemyService] retreatAllRats missing at swarm end")
+			end
 		end
 	end)
 end
@@ -1204,7 +1314,7 @@ function EnemyService.IsSwarmActive(): boolean
 	return swarmActive
 end
 
-local function retreatAllRats()
+retreatAllRats = function()
 	local ratsToRetreat: { Model } = {}
 	for rat in activeRats do
 		local state = ratStates[rat]
@@ -1282,7 +1392,7 @@ local function findNearestPunchTarget(player: Player): Model?
 	return nearest
 end
 
-local function collectRatCache(cachePart: BasePart)
+collectRatCache = function(cachePart: BasePart)
 	if pickedRatCaches[cachePart] then
 		return
 	end
