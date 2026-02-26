@@ -79,6 +79,14 @@ local function getUpgradeStats(buildingType: string, level: number): { [string]:
 	return tiers[level]
 end
 
+local function getPlayerBuildCostMult(player: Player): number
+	local multAttr = player:GetAttribute("BuildCostMult")
+	if typeof(multAttr) == "number" then
+		return math.max(0.1, multAttr :: number)
+	end
+	return 1
+end
+
 local function refreshUpgradePrompt(part: BasePart)
 	local buildingType = part:GetAttribute("BuildingType")
 	local level = part:GetAttribute("BuildingLevel") or 1
@@ -513,14 +521,6 @@ local function failResponse(reason: string): PurchaseResponse
 		remainingScrap = EconomyService.GetScrap(),
 		reason = reason,
 	}
-end
-
-local function getPlayerBuildCostMult(player: Player): number
-	local multAttr = player:GetAttribute("BuildCostMult")
-	if typeof(multAttr) == "number" then
-		return math.max(0.1, multAttr :: number)
-	end
-	return 1
 end
 
 local function finishBlueprint(player: Player, blueprintId: string): PurchaseResponse

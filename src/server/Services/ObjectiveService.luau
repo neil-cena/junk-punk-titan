@@ -30,6 +30,7 @@ local ATTR_GAME_STATE = "GameState"
 
 local remotes = RemotesModule.Get()
 local gameStateSignal = Instance.new("BindableEvent")
+local stageCompletedSignal = Instance.new("BindableEvent")
 
 local titanModel: Model? = nil
 local titanCore: BasePart? = nil
@@ -189,6 +190,7 @@ function ObjectiveService.CompleteStage(stageNumber: number): boolean
 	remotes.TitanStageCompleted:FireAllClients(currentStage)
 	remotes.UpgradeTierUnlocked:FireAllClients(currentStage)
 
+	stageCompletedSignal:Fire(currentStage)
 	pcall(function()
 		getBuildingService().RefreshAllUpgradePrompts()
 	end)
@@ -342,6 +344,10 @@ function ObjectiveService.ConnectGameStateChanged(callback: (string) -> ()): RBX
 	return gameStateSignal.Event:Connect(callback)
 end
 
+function ObjectiveService.ConnectStageCompleted(callback: (number) -> ()): RBXScriptConnection
+	return stageCompletedSignal.Event:Connect(callback)
+end
+
 function ObjectiveService.Init(): ()
 	sessionStartTime = os.clock()
 
@@ -352,6 +358,12 @@ function ObjectiveService.Init(): ()
 	updateTitanVisuals(0)
 	updatePromptText()
 	startIntegrityDrainLoop()
+
+	stageCompletedSignal.Event:Connect(function(_newStage: number)
+		pcall(function()
+			getBuildingService().RefreshAllUpgradePrompts()
+		end)
+	end)
 
 	remotes.RequestSessionStats.OnServerInvoke = function(_player: Player)
 		local EnemyService = require(script.Parent:WaitForChild("EnemyService"))
