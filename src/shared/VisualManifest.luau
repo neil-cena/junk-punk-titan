@@ -120,10 +120,8 @@ local VisualManifest = {
 
 	Loot = {
 		JunkBlock = {
-			color = Color3.fromRGB(170, 146, 96),
+			color = Color3.fromRGB(220, 185, 60),
 			material = Enum.Material.CorrodedMetal,
-			shardColor = Color3.fromRGB(112, 106, 98),
-			shardMaterial = Enum.Material.Metal,
 		},
 		RatCache = {
 			color = Color3.fromRGB(188, 132, 72),

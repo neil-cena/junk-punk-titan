@@ -100,8 +100,11 @@ local function playImpactFx(position: Vector3, color: Color3)
 end
 
 local PUNCH_ANIM_ID = "rbxassetid://148840371"
+local SHOT_ANIM_ID = "rbxassetid://94245658919699"
 local cachedPunchTrack: AnimationTrack? = nil
 local cachedPunchAnimHumanoid: Humanoid? = nil
+local cachedShotTrack: AnimationTrack? = nil
+local cachedShotAnimHumanoid: Humanoid? = nil
 
 local function getPunchTrack(humanoid: Humanoid): AnimationTrack?
 	if cachedPunchTrack ~= nil and cachedPunchAnimHumanoid == humanoid then
@@ -124,6 +127,30 @@ local function getPunchTrack(humanoid: Humanoid): AnimationTrack?
 	track.Looped = false
 	cachedPunchTrack = track
 	cachedPunchAnimHumanoid = humanoid
+	return track
+end
+
+local function getShotTrack(humanoid: Humanoid): AnimationTrack?
+	if cachedShotTrack ~= nil and cachedShotAnimHumanoid == humanoid then
+		return cachedShotTrack
+	end
+	local animator = humanoid:FindFirstChildOfClass("Animator")
+	if animator == nil then
+		animator = Instance.new("Animator")
+		animator.Parent = humanoid
+	end
+	local anim = Instance.new("Animation")
+	anim.AnimationId = SHOT_ANIM_ID
+	local ok, track = pcall(function()
+		return (animator :: Animator):LoadAnimation(anim)
+	end)
+	if not ok or track == nil then
+		return nil
+	end
+	track.Priority = Enum.AnimationPriority.Action
+	track.Looped = false
+	cachedShotTrack = track
+	cachedShotAnimHumanoid = humanoid
 	return track
 end
 
@@ -283,6 +310,11 @@ local function playShotEffects(rayOrigin: Vector3, rayDirection: Vector3)
 				humanoid.CameraOffset = Vector3.zero
 			end
 		end)
+
+		local track = getShotTrack(humanoid)
+		if track ~= nil then
+			track:Play(0.05, 1, 2)
+		end
 	end
 end
 

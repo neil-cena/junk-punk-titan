@@ -177,9 +177,13 @@ local function updateStormSteel(newStormSteel: number)
 end
 
 local function formatTimer(secondsRemaining: number): string
-	local seconds = math.max(0, math.floor(secondsRemaining + 0.5))
+	local abs = math.abs(secondsRemaining)
+	local seconds = math.max(0, math.floor(abs + 0.5))
 	local mins = math.floor(seconds / 60)
 	local secs = seconds % 60
+	if secondsRemaining < 0 then
+		return ("SWARM ENDS: %02d:%02d"):format(mins, secs)
+	end
 	return ("NEXT SWARM: %02d:%02d"):format(mins, secs)
 end
 
@@ -205,24 +209,28 @@ local function pulseWaveTimer()
 end
 
 local function updateWaveTimer(secondsRemaining: number)
-	local seconds = math.max(0, math.floor(secondsRemaining + 0.5))
+	local abs = math.abs(secondsRemaining)
+	local seconds = math.max(0, math.floor(abs + 0.5))
+	local isSwarmActive = secondsRemaining < 0
 	if waveTimerLabel == nil then
 		lastWaveSeconds = seconds
 		return
 	end
 
-	waveTimerLabel.Text = formatTimer(seconds)
-	if seconds > 10 then
+	waveTimerLabel.Text = formatTimer(secondsRemaining)
+	if isSwarmActive then
+		waveTimerLabel.TextColor3 = Theme.Colors.WaveTimerActive
+	elseif seconds > 10 then
 		waveTimerLabel.TextColor3 = Theme.Colors.WaveTimerNormal
 	else
 		waveTimerLabel.TextColor3 = Theme.Colors.WaveTimerUrgent
 	end
 
-	if seconds <= 5 and seconds ~= lastWaveSeconds then
+	if not isSwarmActive and seconds <= 5 and seconds ~= lastWaveSeconds then
 		pulseWaveTimer()
 	end
 
-	if seconds == 0 and lastWaveSeconds ~= 0 then
+	if seconds == 0 and lastWaveSeconds ~= 0 and not isSwarmActive then
 		waveTimerSignal:Fire()
 	end
 	lastWaveSeconds = seconds

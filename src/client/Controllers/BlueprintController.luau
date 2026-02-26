@@ -37,6 +37,40 @@ local holdDuration: number = 0
 local holdRenderConn: RBXScriptConnection? = nil
 local buildProgressCallback: ((number) -> ())? = nil
 
+local BUILD_ANIM_ID = "rbxassetid://507768375"
+local cachedBuildTrack: AnimationTrack? = nil
+local cachedBuildHumanoid: Humanoid? = nil
+
+local function getBuildTrack(humanoid: Humanoid): AnimationTrack?
+	if cachedBuildTrack ~= nil and cachedBuildHumanoid == humanoid then
+		return cachedBuildTrack
+	end
+	local animator = humanoid:FindFirstChildOfClass("Animator")
+	if animator == nil then
+		animator = Instance.new("Animator")
+		animator.Parent = humanoid
+	end
+	local anim = Instance.new("Animation")
+	anim.AnimationId = BUILD_ANIM_ID
+	local ok, track = pcall(function()
+		return (animator :: Animator):LoadAnimation(anim)
+	end)
+	if not ok or track == nil then
+		return nil
+	end
+	track.Priority = Enum.AnimationPriority.Action
+	track.Looped = true
+	cachedBuildTrack = track
+	cachedBuildHumanoid = humanoid
+	return track
+end
+
+local function stopBuildAnim()
+	if cachedBuildTrack ~= nil and cachedBuildTrack.IsPlaying then
+		cachedBuildTrack:Stop(0.15)
+	end
+end
+
 local function clearGhost()
 	if renderConn ~= nil then
 		renderConn:Disconnect()
@@ -207,6 +241,7 @@ local function cancelHold()
 		holdRenderConn = nil
 	end
 	holdTarget = nil
+	stopBuildAnim()
 	if buildProgressCallback ~= nil then
 		buildProgressCallback(0)
 	end
@@ -224,6 +259,15 @@ local function startHold()
 	holdTarget = nearest
 	holdStartTime = os.clock()
 	holdDuration = getBuildTime()
+
+	local character = LocalPlayer.Character
+	local humanoid = if character then character:FindFirstChildOfClass("Humanoid") else nil
+	if humanoid then
+		local track = getBuildTrack(humanoid)
+		if track ~= nil then
+			track:Play(0.1, 1, 1.4)
+		end
+	end
 
 	holdRenderConn = RunService.RenderStepped:Connect(function()
 		if holdTarget == nil or holdTarget.Parent == nil then

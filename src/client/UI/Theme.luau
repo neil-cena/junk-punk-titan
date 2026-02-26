@@ -13,6 +13,7 @@ Theme.Colors = {
 	Bad = Color3.fromRGB(255, 105, 92),
 	WaveTimerNormal = Color3.fromRGB(255, 193, 64),
 	WaveTimerUrgent = Color3.fromRGB(255, 60, 60),
+	WaveTimerActive = Color3.fromRGB(255, 90, 90),
 	DismantleBarBg = Color3.fromRGB(120, 25, 25),
 	DismantleBarFill = Color3.fromRGB(255, 70, 70),
 	DismantleBarText = Color3.fromRGB(255, 255, 255),

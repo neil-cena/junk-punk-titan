@@ -1050,6 +1050,9 @@ local function runMagnetHeartbeat(dt: number)
 		if flight.part.Parent == nil then
 			continue
 		end
+		if flight.part:GetAttribute("InstantPickup") then
+			continue
+		end
 		local targetName = flight.part:GetAttribute("MagnetTarget")
 		if typeof(targetName) ~= "string" then
 			continue
@@ -1062,6 +1065,7 @@ local function runMagnetHeartbeat(dt: number)
 		flight.elapsed += dt
 		local dist = (root.Position - flight.part.Position).Magnitude
 		if dist < 0.5 then
+			flight.part.Transparency = 1
 			continue
 		end
 		local totalDist = (root.Position - flight.startPos).Magnitude

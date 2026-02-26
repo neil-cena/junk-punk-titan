@@ -142,6 +142,7 @@ local Constants = {
 		RadiusRampCycles = 20,
 		MaxActivePiles = 60,
 		MagnetRadius = 7,
+		InstantPickupRadius = 2,
 	},
 
 	TITAN = {

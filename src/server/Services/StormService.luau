@@ -323,13 +323,25 @@ function StormService.Init(): ()
 
 			if nearestPlayer ~= nil and nearestDist <= STEEL_MAGNET_RADIUS then
 				pickedSteel[drop] = true
+				local isInstant = nearestDist <= Constants.SCRAP_SPAWNS.InstantPickupRadius
 				drop:SetAttribute("MagnetTarget", nearestPlayer.Name)
+				if isInstant then
+					drop:SetAttribute("InstantPickup", true)
+				end
 				EconomyService.AddStormSteel(1)
-				task.delay(0.5, function()
-					if drop.Parent ~= nil then
-						drop:Destroy()
-					end
-				end)
+				if isInstant then
+					task.defer(function()
+						if drop.Parent ~= nil then
+							drop:Destroy()
+						end
+					end)
+				else
+					task.delay(0.5, function()
+						if drop.Parent ~= nil then
+							drop:Destroy()
+						end
+					end)
+				end
 			else
 				if drop:GetAttribute("MagnetTarget") ~= nil then
 					drop:SetAttribute("MagnetTarget", nil)

@@ -327,6 +327,7 @@ local function createScrapRatModel(spawnPosition: Vector3, isElite: boolean?, is
 	end
 
 	local humanoid = Instance.new("Humanoid")
+	humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
 	humanoid.MaxHealth = hp
 	humanoid.Health = hp
 	humanoid.WalkSpeed = speed
@@ -413,7 +414,7 @@ function EnemyService.StartDismantle(targetBuilding: BasePart, ratModel: Model):
 	remotes.ThreatDetected:FireAllClients(targetBuilding.Name, targetBuilding.Position)
 end
 
-local moveToWithShortTimeout: (Humanoid, Vector3, number) -> boolean
+local moveToWithShortTimeout: (Humanoid, Vector3, number, Model?) -> boolean
 
 local function pickNearestBurrow(position: Vector3): Vector3
 	local nearest = burrowPositions[1]
@@ -513,7 +514,7 @@ local function fleeAndDespawnRat(ratModel: Model)
 	end)
 end
 
-moveToWithShortTimeout = function(humanoid: Humanoid, targetPosition: Vector3, timeoutSeconds: number): boolean
+moveToWithShortTimeout = function(humanoid: Humanoid, targetPosition: Vector3, timeoutSeconds: number, ratModel: Model?): boolean
 	local completed = false
 	local reached = false
 	local connection = humanoid.MoveToFinished:Connect(function(success: boolean)
@@ -525,6 +526,9 @@ moveToWithShortTimeout = function(humanoid: Humanoid, targetPosition: Vector3, t
 	local deadline = os.clock() + timeoutSeconds
 	while not completed and os.clock() < deadline do
 		if humanoid.Health <= 0 then
+			break
+		end
+		if ratModel ~= nil and isRatRetreating(ratModel) then
 			break
 		end
 		task.wait(0.15)
@@ -699,7 +703,7 @@ local function moveRatBehavior(ratModel: Model, humanoid: Humanoid, root: BasePa
 		local redirected = false
 
 		if hasLineOfSight(root.Position, currentTarget.Position) then
-			local reached = moveToWithShortTimeout(humanoid, currentTarget.Position, 1.2)
+			local reached = moveToWithShortTimeout(humanoid, currentTarget.Position, 1.2, ratModel)
 			if not reached then
 				local blocker = findBlockingBuilding(root.Position, currentTarget.Position, currentTarget, ratModel)
 				if blocker ~= nil then
@@ -730,7 +734,7 @@ local function moveRatBehavior(ratModel: Model, humanoid: Humanoid, root: BasePa
 						redirected = true
 						break
 					end
-					local reached = moveToWithShortTimeout(humanoid, waypoint.Position, 0.9)
+					local reached = moveToWithShortTimeout(humanoid, waypoint.Position, 0.9, ratModel)
 					if not reached then
 						local blocker = findBlockingBuilding(root.Position, currentTarget.Position, currentTarget, ratModel)
 						if blocker ~= nil then
@@ -741,7 +745,7 @@ local function moveRatBehavior(ratModel: Model, humanoid: Humanoid, root: BasePa
 					end
 				end
 			else
-				local reached = moveToWithShortTimeout(humanoid, currentTarget.Position, 1.2)
+				local reached = moveToWithShortTimeout(humanoid, currentTarget.Position, 1.2, ratModel)
 				if not reached then
 					local blocker = findBlockingBuilding(root.Position, currentTarget.Position, currentTarget, ratModel)
 					if blocker ~= nil then
@@ -991,10 +995,17 @@ function EnemyService.SpawnWave(waveNumber: number): ()
 	end
 
 	task.spawn(function()
-		task.wait(Constants.WAVES.SwarmDurationSeconds)
-		swarmActive = false
-		remotes.SwarmEnded:FireAllClients()
-		retreatAllRats()
+		local remaining = Constants.WAVES.SwarmDurationSeconds
+		while remaining > 0 and swarmActive and gameActive do
+			publishNextWaveTimer(-remaining)
+			task.wait(1)
+			remaining -= 1
+		end
+		if swarmActive then
+			swarmActive = false
+			remotes.SwarmEnded:FireAllClients()
+			retreatAllRats()
+		end
 	end)
 end
 
@@ -1303,16 +1314,29 @@ function EnemyService.Init(): ()
 
 			if nearestPlayer ~= nil and nearestDist <= magnetRadius then
 				pickedRatCaches[cache] = true
+				local isInstant = nearestDist <= Constants.SCRAP_SPAWNS.InstantPickupRadius
 				cache:SetAttribute("MagnetTarget", nearestPlayer.Name)
+				if isInstant then
+					cache:SetAttribute("InstantPickup", true)
+				end
 				local scrapValue = ratCacheValues[cache] or Constants.LOOT.RatCacheValue
 				ratCacheValues[cache] = nil
 				EconomyService.AddScrap(scrapValue)
-				task.delay(0.5, function()
-					if cache.Parent ~= nil then
-						returnRatCacheToPool(cache)
-					end
-					pickedRatCaches[cache] = nil
-				end)
+				if isInstant then
+					task.defer(function()
+						if cache.Parent ~= nil then
+							returnRatCacheToPool(cache)
+						end
+						pickedRatCaches[cache] = nil
+					end)
+				else
+					task.delay(0.5, function()
+						if cache.Parent ~= nil then
+							returnRatCacheToPool(cache)
+						end
+						pickedRatCaches[cache] = nil
+					end)
+				end
 			else
 				if cache:GetAttribute("MagnetTarget") ~= nil then
 					cache:SetAttribute("MagnetTarget", nil)

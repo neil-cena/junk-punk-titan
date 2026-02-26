@@ -54,21 +54,6 @@ local function spawnScrapPile()
 	pile.Position = Vector3.new(x, yPos, z)
 	pile.Parent = Workspace
 
-	local shardA = Instance.new("Part")
-	shardA.Name = "ScrapShardA"
-	shardA.Size = Vector3.new(0.9, 0.5, 0.35)
-	shardA.Material = VisualManifest.Loot.JunkBlock.shardMaterial
-	shardA.Color = VisualManifest.Loot.JunkBlock.shardColor
-	shardA.Anchored = true
-	shardA.CanCollide = false
-	shardA.CFrame = pile.CFrame * CFrame.new(-0.35, 0.6, 0.25) * CFrame.Angles(0, math.rad(22), math.rad(10))
-	shardA.Parent = pile
-
-	local shardB = shardA:Clone()
-	shardB.Name = "ScrapShardB"
-	shardB.CFrame = pile.CFrame * CFrame.new(0.3, 0.45, -0.2) * CFrame.Angles(0, math.rad(-28), math.rad(-14))
-	shardB.Parent = pile
-
 	table.insert(activeScrapPiles, pile)
 end
 
@@ -124,13 +109,25 @@ function ScrapSpawnService.Init(): ()
 
 			if nearestPlayer ~= nil and nearestDist <= magnetRadius then
 				pickedPiles[pile] = true
+				local isInstant = nearestDist <= Constants.SCRAP_SPAWNS.InstantPickupRadius
 				pile:SetAttribute("MagnetTarget", nearestPlayer.Name)
+				if isInstant then
+					pile:SetAttribute("InstantPickup", true)
+				end
 				EconomyService.AddScrap(Constants.LOOT.JunkBlockValue)
-				task.delay(0.5, function()
-					if pile.Parent ~= nil then
-						pile:Destroy()
-					end
-				end)
+				if isInstant then
+					task.defer(function()
+						if pile.Parent ~= nil then
+							pile:Destroy()
+						end
+					end)
+				else
+					task.delay(0.5, function()
+						if pile.Parent ~= nil then
+							pile:Destroy()
+						end
+					end)
+				end
 			else
 				if pile:GetAttribute("MagnetTarget") ~= nil then
 					pile:SetAttribute("MagnetTarget", nil)
