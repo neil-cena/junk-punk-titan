@@ -88,6 +88,55 @@ local function createBurrowZones(parent: Folder)
 	end
 end
 
+local function createWorldBorder(parent: Folder)
+	local border = VisualManifest.Map.WorldBorder
+	if type(border) ~= "table" then
+		return
+	end
+
+	local segmentCount = math.max(24, math.floor(border.SegmentCount or 48))
+	local colliderRadius = border.ColliderRadius or 248
+	local colliderHeight = border.ColliderHeight or 140
+	local colliderThickness = border.ColliderThickness or 14
+	local colliderYOffset = border.ColliderYOffset or 30
+	local cliffRadius = border.CliffRadius or 240
+	local cliffHeight = border.CliffHeight or 45
+	local cliffThickness = border.CliffThickness or 22
+	local cliffYOffset = border.CliffYOffset or 8
+	local cliffColor = border.CliffColor or Color3.fromRGB(106, 112, 96)
+	local cliffMaterial = border.CliffMaterial or Enum.Material.Rock
+
+	for i = 1, segmentCount do
+		local angle = (i / segmentCount) * math.pi * 2
+		local x = math.cos(angle)
+		local z = math.sin(angle)
+		local lookVec = Vector3.new(math.cos(angle + 0.06), 0, math.sin(angle + 0.06))
+
+		local cliffPos = Vector3.new(x * cliffRadius, cliffYOffset, z * cliffRadius)
+		makePart(
+			parent,
+			("CliffBorder_%d"):format(i),
+			Vector3.new(cliffThickness, cliffHeight, 26),
+			CFrame.lookAt(cliffPos, cliffPos + lookVec),
+			cliffColor,
+			cliffMaterial
+		)
+
+		local colliderPos = Vector3.new(x * colliderRadius, colliderYOffset, z * colliderRadius)
+		local blocker = makePart(
+			parent,
+			("WorldBorder_%d"):format(i),
+			Vector3.new(colliderThickness, colliderHeight, 18),
+			CFrame.lookAt(colliderPos, colliderPos + lookVec),
+			cliffColor,
+			Enum.Material.SmoothPlastic
+		)
+		blocker.Transparency = 1
+		blocker.CastShadow = false
+		blocker.CanQuery = false
+	end
+end
+
 function MapDressingService.Init(): ()
 	local existing = Workspace:FindFirstChild("MapDressing")
 	if existing ~= nil then
@@ -99,6 +148,7 @@ function MapDressingService.Init(): ()
 	folder.Parent = Workspace
 
 	createBoundary(folder)
+	createWorldBorder(folder)
 	createScatterProps(folder)
 	createBurrowZones(folder)
 end

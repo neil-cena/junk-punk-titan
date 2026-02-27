@@ -24,6 +24,14 @@ local function ensureEffect(className: string, name: string): Instance
 	return effect
 end
 
+local function lerpColor(a: Color3, b: Color3, t: number): Color3
+	return Color3.new(
+		a.R + (b.R - a.R) * t,
+		a.G + (b.G - a.G) * t,
+		a.B + (b.B - a.B) * t
+	)
+end
+
 local function applyLightingManifest()
 	local lighting = VisualManifest.Lighting
 	Lighting.Ambient = lighting.Ambient
@@ -59,6 +67,81 @@ local function applyLightingManifest()
 	sunRays.Intensity = VisualManifest.PostProcessing.SunRays.Intensity
 	sunRays.Spread = VisualManifest.PostProcessing.SunRays.Spread
 	sunRays.Enabled = true
+end
+
+local function applyGroundManifest()
+	local ground = VisualManifest.Ground
+	if type(ground) ~= "table" then
+		return
+	end
+
+	local baseplate = Workspace:FindFirstChild("Baseplate")
+	if baseplate ~= nil and baseplate:IsA("BasePart") then
+		if ground.BaseplateColor ~= nil then
+			baseplate.Color = ground.BaseplateColor
+		end
+		if ground.BaseplateMaterial ~= nil then
+			baseplate.Material = ground.BaseplateMaterial
+		end
+	end
+end
+
+local function applySkyManifest()
+	local skyManifest = VisualManifest.Sky
+	if type(skyManifest) ~= "table" then
+		return
+	end
+
+	for _, child in Lighting:GetChildren() do
+		if child:IsA("Sky") and child.Name ~= "AssetPackSky" then
+			child:Destroy()
+		end
+	end
+
+	local sky = Lighting:FindFirstChild("AssetPackSky")
+	if sky == nil or not sky:IsA("Sky") then
+		local newSky = Instance.new("Sky")
+		newSky.Name = "AssetPackSky"
+		newSky.Parent = Lighting
+		sky = newSky
+	end
+
+	local skyObj = sky :: Sky
+	skyObj.SkyboxBk = skyManifest.SkyboxBk or skyObj.SkyboxBk
+	skyObj.SkyboxDn = skyManifest.SkyboxDn or skyObj.SkyboxDn
+	skyObj.SkyboxFt = skyManifest.SkyboxFt or skyObj.SkyboxFt
+	skyObj.SkyboxLf = skyManifest.SkyboxLf or skyObj.SkyboxLf
+	skyObj.SkyboxRt = skyManifest.SkyboxRt or skyObj.SkyboxRt
+	skyObj.SkyboxUp = skyManifest.SkyboxUp or skyObj.SkyboxUp
+	skyObj.MoonTextureId = skyManifest.MoonTextureId or skyObj.MoonTextureId
+	skyObj.SunTextureId = skyManifest.SunTextureId or skyObj.SunTextureId
+	skyObj.StarCount = skyManifest.StarCount or 0
+	skyObj.CelestialBodiesShown = if skyManifest.CelestialBodiesShown == nil then true else skyManifest.CelestialBodiesShown
+
+	local cloudsManifest = skyManifest.Clouds
+	if type(cloudsManifest) ~= "table" then
+		return
+	end
+
+	local clouds = Lighting:FindFirstChild("AssetPackClouds")
+	if clouds == nil or not clouds:IsA("Clouds") then
+		local newClouds = Instance.new("Clouds")
+		newClouds.Name = "AssetPackClouds"
+		newClouds.Parent = Lighting
+		clouds = newClouds
+	end
+
+	local cloudsObj = clouds :: Clouds
+	cloudsObj.Enabled = if cloudsManifest.Enabled == nil then true else cloudsManifest.Enabled
+	if cloudsManifest.Color ~= nil then
+		cloudsObj.Color = cloudsManifest.Color
+	end
+	if cloudsManifest.Cover ~= nil then
+		cloudsObj.Cover = cloudsManifest.Cover
+	end
+	if cloudsManifest.Density ~= nil then
+		cloudsObj.Density = cloudsManifest.Density
+	end
 end
 
 local function ensurePermanentBurrowMarker(parent: Instance, position: Vector3, index: number)
@@ -113,6 +196,56 @@ local function createBurrowRing()
 	end
 end
 
+local function createHorizonBackdrop()
+	local horizon = VisualManifest.Horizon
+	if type(horizon) ~= "table" then
+		return
+	end
+
+	local existing = Workspace:FindFirstChild("HorizonBackdrop")
+	if existing ~= nil then
+		existing:Destroy()
+	end
+
+	local folder = Instance.new("Folder")
+	folder.Name = "HorizonBackdrop"
+	folder.Parent = Workspace
+
+	if horizon.Enabled == false then
+		return
+	end
+
+	local radius = horizon.Radius or 340
+	local segments = math.max(8, math.floor(horizon.Segments or 20))
+	local heightMin = horizon.HeightMin or 65
+	local heightMax = math.max(heightMin + 10, horizon.HeightMax or 130)
+	local width = horizon.Width or 70
+	local depth = horizon.Depth or 40
+	local mat = horizon.MountainMaterial or Enum.Material.Slate
+	local colorNear = horizon.MountainColorNear or Color3.fromRGB(104, 126, 107)
+	local colorFar = horizon.MountainColorFar or Color3.fromRGB(142, 162, 147)
+
+	for i = 1, segments do
+		local alpha = (i - 1) / segments
+		local angle = alpha * math.pi * 2
+		local x = math.cos(angle) * radius
+		local z = math.sin(angle) * radius
+		local yHeight = heightMin + (heightMax - heightMin) * (0.5 + 0.5 * math.sin(i * 1.73))
+		local color = lerpColor(colorNear, colorFar, 0.5 + 0.5 * math.sin(i * 0.67))
+
+		local ridge = Instance.new("WedgePart")
+		ridge.Name = ("Mountain_%d"):format(i)
+		ridge.Anchored = true
+		ridge.CanCollide = false
+		ridge.CastShadow = false
+		ridge.Material = mat
+		ridge.Color = color
+		ridge.Size = Vector3.new(width, yHeight, depth)
+		ridge.CFrame = CFrame.lookAt(Vector3.new(x, yHeight * 0.5 - 8, z), Vector3.new(0, yHeight * 0.3 - 8, 0))
+		ridge.Parent = folder
+	end
+end
+
 local function sculptTerrainBand()
 	local terrain = Workspace.Terrain
 	local materialA = VisualManifest.Map.TerrainBandMaterialA
@@ -133,8 +266,11 @@ function EnvironmentController.Init()
 	initialized = true
 
 	applyLightingManifest()
+	applyGroundManifest()
+	applySkyManifest()
 
 	createBurrowRing()
+	createHorizonBackdrop()
 	pcall(sculptTerrainBand)
 end
 

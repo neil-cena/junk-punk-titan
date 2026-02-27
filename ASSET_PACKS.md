@@ -45,6 +45,13 @@ Every pack module must return:
 - `AudioManifest` table
 - `Animations` table
 
+Optional visual sections used by environment styling:
+
+- `VisualManifest.Ground` (baseplate color/material)
+- `VisualManifest.Horizon` (mountain backdrop style)
+- `VisualManifest.Sky` (skybox + clouds override)
+- `VisualManifest.Map.WorldBorder` (server border cliffs/colliders)
+
 Minimum animation keys expected by current code:
 
 - `Punch`
