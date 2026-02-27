@@ -13,8 +13,10 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Constants = require(Shared:WaitForChild("Constants"))
 local AudioManifest = require(Shared:WaitForChild("AudioManifest"))
 local VisualManifest = require(Shared:WaitForChild("VisualManifest"))
+local AssetPackResolver = require(Shared:WaitForChild("assetpacks"):WaitForChild("AssetPackResolver"))
 local Remotes = require(Shared:WaitForChild("Remotes"))
 local BlueprintController = require(script.Parent:WaitForChild("BlueprintController"))
+local Animations = AssetPackResolver.GetAnimations()
 
 local ToolController = {}
 
@@ -99,8 +101,8 @@ local function playImpactFx(position: Vector3, color: Color3)
 	end)
 end
 
-local PUNCH_ANIM_ID = "rbxassetid://148840371"
-local SHOT_ANIM_ID = "rbxassetid://94245658919699"
+local PUNCH_ANIM_ID = Animations.Punch
+local SHOT_ANIM_ID = Animations.Shot
 local cachedPunchTrack: AnimationTrack? = nil
 local cachedPunchAnimHumanoid: Humanoid? = nil
 local cachedShotTrack: AnimationTrack? = nil

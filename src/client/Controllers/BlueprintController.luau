@@ -13,9 +13,11 @@ local Mouse = LocalPlayer:GetMouse()
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Constants = require(Shared:WaitForChild("Constants"))
 local VisualManifest = require(Shared:WaitForChild("VisualManifest"))
+local AssetPackResolver = require(Shared:WaitForChild("assetpacks"):WaitForChild("AssetPackResolver"))
 local Remotes = require(Shared:WaitForChild("Remotes"))
 local Utils = require(Shared:WaitForChild("Utils"))
 local Platform = require(Shared:WaitForChild("Platform"))
+local Animations = AssetPackResolver.GetAnimations()
 
 type BuildingType = "Turret" | "Drill" | "Wall"
 type ControllerMode = "Idle" | "Placing" | "Interacting"
@@ -53,7 +55,7 @@ local SELECTION_LINE_BASE = 0.04
 local SELECTION_LINE_AMPLITUDE = 0.03
 local PLACEMENT_OVERLAP_XZ_PADDING = 0.1
 
-local BUILD_ANIM_ID = "rbxassetid://507768375"
+local BUILD_ANIM_ID = Animations.Build
 local cachedBuildTrack: AnimationTrack? = nil
 local cachedBuildHumanoid: Humanoid? = nil
 local slowedHumanoid: Humanoid? = nil
