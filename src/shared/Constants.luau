@@ -108,8 +108,8 @@ local Constants = {
 	},
 
 	WAVES = {
-		IntervalSeconds = 55,
-		FirstWaveDelaySeconds = 90,
+		IntervalSeconds = 50,
+		FirstWaveDelaySeconds = 80,
 		SwarmDurationSeconds = 25,
 		BaseEnemyCount = 16,
 		EnemiesPerWave = 18,
@@ -121,8 +121,8 @@ local Constants = {
 		RetreatTimeoutMaxSeconds = 16,
 		RetreatTimeoutBufferSeconds = 1.25,
 		SpawnBatchIntervalSeconds = 2,
-		InitialBatchFraction = 0.15,
-		BatchGrowthRate = 1.4,
+		InitialBatchFraction = 0.3,
+		BatchGrowthRate = 2.8,
 	},
 
 	COMBAT = {

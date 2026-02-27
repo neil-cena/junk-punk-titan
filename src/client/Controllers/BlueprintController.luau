@@ -242,13 +242,9 @@ local function getPlacementResult(): (boolean, Vector3?)
 			if CollectionService:HasTag(overlap, "TitanObjective") then
 				return false, nil
 			end
-			-- Disallow stacking on blueprints or buildings
-			local p: Instance? = overlap
-			while p ~= nil and p ~= Workspace do
-				if CollectionService:HasTag(p, "Blueprint") or CollectionService:HasTag(p, "DismantlableBuilding") then
-					return false, nil
-				end
-				p = p.Parent
+			-- Disallow stacking on blueprints or buildings (only block if overlap part itself is tagged, not child parts)
+			if CollectionService:HasTag(overlap, "Blueprint") or CollectionService:HasTag(overlap, "DismantlableBuilding") then
+				return false, nil
 			end
 		end
 	end

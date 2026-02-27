@@ -244,13 +244,9 @@ local function isOverlapping(position: Vector3, buildingType: BuildingType, rota
 			if CollectionService:HasTag(overlap, "TitanObjective") then
 				return true
 			end
-			-- Disallow stacking on blueprints or buildings
-			local p: Instance? = overlap
-			while p ~= nil and p ~= Workspace do
-				if CollectionService:HasTag(p, BLUEPRINT_TAG) or CollectionService:HasTag(p, DISMANTLABLE_TAG) then
-					return true
-				end
-				p = p.Parent
+			-- Disallow stacking on blueprints or buildings (only block if overlap part itself is tagged, not child parts)
+			if CollectionService:HasTag(overlap, BLUEPRINT_TAG) or CollectionService:HasTag(overlap, DISMANTLABLE_TAG) then
+				return true
 			end
 		end
 	end
