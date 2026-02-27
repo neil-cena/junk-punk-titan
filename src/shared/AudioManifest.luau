@@ -34,4 +34,6 @@ return {
 	PowerUpRepairAura = "rbxassetid://12221991",
 	PowerUpTitanPush = "rbxassetid://9125347736",
 	PowerUpLootVacuum = "rbxassetid://6026984224",
+	PowerUpActivateAll = "rbxassetid://9114243152",
+	PowerUpRatStun = "rbxassetid://9125347736",
 }

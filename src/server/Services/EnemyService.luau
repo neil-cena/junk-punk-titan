@@ -60,7 +60,7 @@ local ratCacheValues: { [BasePart]: number } = {}
 local bundleHasIntent: { [BasePart]: boolean } = {}
 local playersInRadiusLastTick: { [BasePart]: { [Player]: true } } = {}
 local bundleTouchConnections: { [BasePart]: RBXScriptConnection } = {}
-type PowerUpType = "Lightning" | "Shockwave" | "RepairAura" | "TitanPush" | "LootVacuum"
+type PowerUpType = "Lightning" | "Shockwave" | "RepairAura" | "TitanPush" | "LootVacuum" | "ActivateAll" | "RatStun"
 local activePowerUps: { BasePart } = {}
 local pickedPowerUps: { [BasePart]: boolean } = {}
 local powerUpTypeByOrb: { [BasePart]: PowerUpType } = {}
@@ -216,7 +216,7 @@ local function getPlayerFromTouch(other: BasePart): Player?
 	return nil
 end
 
-local function spawnCollectableBundle(atPosition: Vector3, scrapValue: number): BasePart
+local function spawnCollectableBundle(atPosition: Vector3, scrapValue: number, anchorDelaySeconds: number?): BasePart
 	local bundle = acquireRatCache()
 	bundle.Anchored = false
 	bundle.CanCollide = true
@@ -242,6 +242,13 @@ local function spawnCollectableBundle(atPosition: Vector3, scrapValue: number): 
 
 	table.insert(activeRatCaches, bundle)
 	ratCacheValues[bundle] = scrapValue
+
+	local anchorDelay = if typeof(anchorDelaySeconds) == "number" then math.max(0, anchorDelaySeconds :: number) else 0.5
+	task.delay(anchorDelay, function()
+		if bundle.Parent ~= nil and not pickedRatCaches[bundle] and bundle:GetAttribute("MagnetTarget") == nil then
+			bundle.Anchored = true
+		end
+	end)
 
 	task.delay(Constants.COMBAT.ScrapBundleDespawnSeconds, function()
 		if not pickedRatCaches[bundle] and bundle.Parent ~= nil then
@@ -279,6 +286,10 @@ local function triggerDrillBonusShower()
 	local offYMin = typeof(cfg.SpawnOffsetYMin) == "number" and (cfg.SpawnOffsetYMin :: number) or 6
 	local offYMax = typeof(cfg.SpawnOffsetYMax) == "number" and (cfg.SpawnOffsetYMax :: number) or 12
 
+	if #activeRatCaches > 500 then
+		mult = mult * 0.5
+	end
+
 	local drillPositions: { Vector3 } = {}
 	for _, instance in CollectionService:GetTagged("Drill") do
 		if not instance:IsA("BasePart") or instance.Parent == nil then
@@ -294,7 +305,14 @@ local function triggerDrillBonusShower()
 					return
 				end
 				local offset = Vector3.new(math.random(-4, 4), math.random(offYMin, offYMax), math.random(-4, 4))
-				local bundle = spawnCollectableBundle(instance.Position + offset, cfg.BlockValue)
+				local bundle = spawnCollectableBundle(instance.Position + offset, cfg.BlockValue, 5)
+				local drillColors = VisualManifest.Loot.DrillShowerCache
+				bundle.Color = drillColors.color
+				for _, child in bundle:GetChildren() do
+					if child:IsA("BasePart") then
+						child.Color = drillColors.cogColor
+					end
+				end
 				bundle.AssemblyLinearVelocity = Vector3.new(
 					math.random(-20, 20),
 					math.random(velYMin, velYMax),
@@ -318,6 +336,10 @@ local function getPowerUpColor(powerUpType: PowerUpType): Color3
 		return colors.TitanPush
 	elseif powerUpType == "LootVacuum" then
 		return colors.LootVacuum
+	elseif powerUpType == "ActivateAll" then
+		return colors.ActivateAll
+	elseif powerUpType == "RatStun" then
+		return colors.RatStun
 	end
 	return colors.Shockwave
 end
@@ -468,8 +490,9 @@ local function executePowerUp(player: Player, powerUpType: PowerUpType): { Vecto
 			table.insert(hitPositions, currentPos)
 		end
 	elseif powerUpType == "LootVacuum" then
-		local radius = Constants.POWERUPS.LootVacuum.radius
-		local origin = playerRoot.Position
+		local useBaseRadius = Constants.POWERUPS.LootVacuum.useBaseRadius == true
+		local radius = if useBaseRadius then Constants.BUILDING.MaxBuildRadiusFromCenter else Constants.POWERUPS.LootVacuum.radius
+		local origin = if useBaseRadius then Vector3.new(0, 0, 0) else playerRoot.Position
 		for _, cache in activeRatCaches do
 			if cache.Parent == nil or pickedRatCaches[cache] then
 				continue
@@ -517,6 +540,40 @@ local function executePowerUp(player: Player, powerUpType: PowerUpType): { Vecto
 				part:Destroy()
 			end
 		end
+	elseif powerUpType == "ActivateAll" then
+		for _, orb in activePowerUps do
+			if orb.Parent == nil or pickedPowerUps[orb] then
+				continue
+			end
+			local orbType = powerUpTypeByOrb[orb]
+			if orbType == "ActivateAll" then
+				continue
+			end
+			collectPowerUp(orb, player)
+			table.insert(hitPositions, orb.Position)
+		end
+	elseif powerUpType == "RatStun" then
+		local duration = Constants.POWERUPS.RatStun.duration or 2
+		local ratSpeeds: { [Model]: number } = {}
+		for rat in activeRats do
+			local humanoid = rat:FindFirstChildOfClass("Humanoid")
+			local root = rat.PrimaryPart
+			if humanoid ~= nil and humanoid.Health > 0 and root ~= nil and rat.Parent ~= nil then
+				ratSpeeds[rat] = humanoid.WalkSpeed
+				humanoid.WalkSpeed = 0
+				table.insert(hitPositions, root.Position)
+			end
+		end
+		task.delay(duration, function()
+			for rat, speed in ratSpeeds do
+				if rat.Parent ~= nil and activeRats[rat] ~= nil then
+					local humanoid = rat:FindFirstChildOfClass("Humanoid")
+					if humanoid ~= nil and humanoid.Health > 0 then
+						humanoid.WalkSpeed = speed
+					end
+				end
+			end
+		end)
 	end
 
 	return hitPositions
@@ -1401,17 +1458,44 @@ function EnemyService.SpawnWave(waveNumber: number): ()
 	local baseCount = Constants.WAVES.BaseEnemyCount + (currentWave * Constants.WAVES.EnemiesPerWave)
 	local difficultyMult = EnemyService.GetDifficultyMultiplier()
 	local randomMult = 0.8 + (math.random() * 0.7)
-	local enemyCount = math.max(1, math.floor(baseCount * difficultyMult * randomMult * seasonMult + 0.5))
+	local enemyCount = math.max(1, math.floor(baseCount * difficultyMult * randomMult * seasonMult * 1.1 + 0.5))
 
 	swarmActive = true
 	local titanCore = ObjectiveService.GetTitanCore()
-	for _ = 1, enemyCount do
-		local target = titanCore or getTargetBuilding()
-		if target ~= nil then
-			local spawnThief = (not finalStandActive) and (math.random() < Constants.THIEF_RAT.SpawnChance)
-			EnemyService.SpawnScrapRat(target, false, spawnThief)
+	local batchInterval = Constants.WAVES.SpawnBatchIntervalSeconds or 2
+	local initialFrac = Constants.WAVES.InitialBatchFraction or 0.15
+	local growthRate = Constants.WAVES.BatchGrowthRate or 1.4
+
+	task.spawn(function()
+		local batchSizes: { number } = {}
+		local firstBatch = math.max(1, math.floor(enemyCount * initialFrac))
+		local acc = firstBatch
+		table.insert(batchSizes, firstBatch)
+		while acc < enemyCount do
+			local nextSize = math.min(math.max(1, math.floor(batchSizes[#batchSizes] * growthRate)), enemyCount - acc)
+			if nextSize <= 0 then
+				break
+			end
+			table.insert(batchSizes, nextSize)
+			acc += nextSize
 		end
-	end
+
+		for _, batchSize in batchSizes do
+			if not swarmActive or not gameActive then
+				break
+			end
+			for _ = 1, batchSize do
+				local target = titanCore or getTargetBuilding()
+				if target ~= nil then
+					local spawnThief = (not finalStandActive) and (math.random() < Constants.THIEF_RAT.SpawnChance)
+					EnemyService.SpawnScrapRat(target, false, spawnThief)
+				end
+			end
+			if swarmActive and gameActive then
+				task.wait(batchInterval)
+			end
+		end
+	end)
 
 	task.spawn(function()
 		local remaining = Constants.WAVES.SwarmDurationSeconds
@@ -1767,6 +1851,51 @@ function EnemyService.Init(): ()
 			return
 		end
 		ratCacheMagnetAcc = 0
+
+		local maxAutoCollect = Constants.LOOT.MaxActiveBeforeAutoCollect or 1000
+		local autoCollectFrac = Constants.LOOT.AutoCollectFraction or 0.5
+		local maxCaches = Constants.LOOT.MaxActiveCaches or 1500
+		local cacheCount = 0
+		for _, c in activeRatCaches do
+			if c.Parent ~= nil and not pickedRatCaches[c] then
+				cacheCount += 1
+			end
+		end
+		if cacheCount > maxAutoCollect then
+			local toCollect = math.floor(cacheCount * autoCollectFrac)
+			local collected = 0
+			for _, cache in activeRatCaches do
+				if collected >= toCollect then
+					break
+				end
+				if cache.Parent == nil or pickedRatCaches[cache] then
+					continue
+				end
+				pickedRatCaches[cache] = true
+				local scrapValue = ratCacheValues[cache] or Constants.LOOT.RatCacheValue
+				ratCacheValues[cache] = nil
+				EconomyService.AddScrap(scrapValue)
+				returnRatCacheToPool(cache)
+				collected += 1
+			end
+		elseif cacheCount > maxCaches then
+			local toCollect = cacheCount - maxCaches
+			local collected = 0
+			for _, cache in activeRatCaches do
+				if collected >= toCollect then
+					break
+				end
+				if cache.Parent == nil or pickedRatCaches[cache] then
+					continue
+				end
+				pickedRatCaches[cache] = true
+				local scrapValue = ratCacheValues[cache] or Constants.LOOT.RatCacheValue
+				ratCacheValues[cache] = nil
+				EconomyService.AddScrap(scrapValue)
+				returnRatCacheToPool(cache)
+				collected += 1
+			end
+		end
 
 		local magnetRadius = Constants.SCRAP_SPAWNS.MagnetRadius
 		local alive: { BasePart } = {}

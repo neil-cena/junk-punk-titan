@@ -158,15 +158,21 @@ local function applyStormWindDamage()
 end
 
 local function spawnStormSteelDuringStorm()
-	local radius = Constants.STORM.SteelSpawnRadius
-	for _ = 1, Constants.STORM.StormSteelDropCount do
+	local dropCount = Constants.STORM.StormSteelDropCount
+	local minRadius = Constants.STORM.SteelSpawnMinRadius or 50
+	local maxRadius = Constants.STORM.SteelSpawnMaxRadius or 58
+	for i = 1, dropCount do
+		local angle = (i / dropCount) * math.pi * 2 + math.random() * 0.3
+		local dist = minRadius + math.random() * (maxRadius - minRadius)
+		local x = math.cos(angle) * dist
+		local z = math.sin(angle) * dist
 		local drop = Instance.new("Part")
 		drop.Name = "StormHardenedSteel"
 		drop.Shape = Enum.PartType.Ball
 		drop.Material = VisualManifest.Loot.StormSteel.material
 		drop.Color = VisualManifest.Loot.StormSteel.color
 		drop.Size = Vector3.new(1.6, 1.6, 1.6)
-		drop.Position = Vector3.new(math.random(-radius, radius), 3, math.random(-radius, radius))
+		drop.Position = Vector3.new(x, 3, z)
 		drop.Anchored = false
 		drop.CanCollide = true
 		drop.Parent = Workspace

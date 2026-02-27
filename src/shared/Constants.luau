@@ -50,13 +50,14 @@ local Constants = {
 		DrillScrapPerTick = 12,
 		DrillTickInterval = 1.5,
 		DefaultHP = 100,
-		BaseBuildTimeSeconds = 3,
+		BaseBuildTimeSeconds = 2.4,
 		MaxLevel = 4,
 		-- Pacing: catch-up boost after destructive events
 		CatchupBoostSeconds = 28,
 		CatchupBuildSpeedBonus = 0.25,
 		CatchupUpgradeSpeedBonus = 0.25,
 		CatchupCooldownSeconds = 18,
+		UpgradeSpeedMultiplier = 0.8,
 		Sizes = {
 			Turret = Vector3.new(4, 4, 4),
 			Drill = Vector3.new(4, 6, 4),
@@ -119,6 +120,9 @@ local Constants = {
 		RetreatTimeoutMinSeconds = 6,
 		RetreatTimeoutMaxSeconds = 16,
 		RetreatTimeoutBufferSeconds = 1.25,
+		SpawnBatchIntervalSeconds = 2,
+		InitialBatchFraction = 0.15,
+		BatchGrowthRate = 1.4,
 	},
 
 	COMBAT = {
@@ -130,7 +134,7 @@ local Constants = {
 		PunchCooldown = 0.33,
 		RatBaseHealth = 18,
 		RatFleeSpeedMultiplier = 1.2,
-		ScrapBundleDespawnSeconds = 45,
+		ScrapBundleDespawnSeconds = 30,
 	},
 
 	THIEF_RAT = {
@@ -155,6 +159,9 @@ local Constants = {
 		LootPickupArmDelaySeconds = 0.8,
 		-- If true, scrap is only awarded after player touch or newly entering pickup radius (no passive auto-credit for already-nearby players).
 		LootPickupRequireIntent = true,
+		MaxActiveBeforeAutoCollect = 1000,
+		AutoCollectFraction = 0.5,
+		MaxActiveCaches = 1500,
 	},
 
 	DRILL_SWARM_BONUS = {
@@ -171,12 +178,14 @@ local Constants = {
 
 	POWERUPS = {
 		DropChance = 0.08,
-		Types = { "Lightning", "Shockwave", "RepairAura", "TitanPush", "LootVacuum" },
+		Types = { "Lightning", "Shockwave", "RepairAura", "TitanPush", "LootVacuum", "ActivateAll", "RatStun" },
 		Lightning = { kills = { 5, 10 } },
 		Shockwave = { radius = 20, damagePercent = 0.5 },
 		RepairAura = { radius = 25, healAmount = 40 },
 		TitanPush = { radius = 30, pushDistance = 10 },
-		LootVacuum = { radius = 15 },
+		LootVacuum = { radius = 15, useBaseRadius = true },
+		ActivateAll = {},
+		RatStun = { duration = 2 },
 		DespawnSeconds = 20,
 		OrbSize = Vector3.new(1.8, 1.8, 1.8),
 	},
@@ -196,6 +205,8 @@ local Constants = {
 		TetherPadsReducedOnLeave = 2,
 		StormSteelDropCount = 5,
 		SteelSpawnRadius = 120,
+		SteelSpawnMinRadius = 50,
+		SteelSpawnMaxRadius = 58,
 	},
 
 	SCRAP_SPAWNS = {
@@ -211,10 +222,10 @@ local Constants = {
 
 	TITAN = {
 		Stages = {
-			[1] = { scrap = 150, steel = 0 },
-			[2] = { scrap = 350, steel = 1 },
-			[3] = { scrap = 600, steel = 3 },
-			[4] = { scrap = 900, steel = 6 },
+			[1] = { scrap = 225, steel = 0 },
+			[2] = { scrap = 525, steel = 2 },
+			[3] = { scrap = 900, steel = 5 },
+			[4] = { scrap = 1350, steel = 9 },
 		},
 		IntegrityDrainPerSecond = 1.67,
 		IntegrityRepairPerStage = 25,

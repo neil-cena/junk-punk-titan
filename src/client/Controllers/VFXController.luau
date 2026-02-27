@@ -974,6 +974,8 @@ local function playPowerUpSound(powerUpType: string)
 		RepairAura = AudioManifest.PowerUpRepairAura,
 		TitanPush = AudioManifest.PowerUpTitanPush,
 		LootVacuum = AudioManifest.PowerUpLootVacuum,
+		ActivateAll = AudioManifest.PowerUpActivateAll,
+		RatStun = AudioManifest.PowerUpRatStun,
 	}
 	s.SoundId = soundByType[powerUpType] or AudioManifest.WaveSlam
 	s.Volume = 0.25
@@ -987,6 +989,10 @@ local function playPowerUpSound(powerUpType: string)
 		s.PlaybackSpeed = 0.7
 	elseif powerUpType == "LootVacuum" then
 		s.PlaybackSpeed = 1.6
+	elseif powerUpType == "ActivateAll" then
+		s.PlaybackSpeed = 1.2
+	elseif powerUpType == "RatStun" then
+		s.PlaybackSpeed = 0.9
 	else
 		s.PlaybackSpeed = 1
 	end
@@ -1186,7 +1192,7 @@ local function playDrillBonusShowerVFX(drillPositions: { Vector3 })
 		burst.Anchored = true
 		burst.CanCollide = false
 		burst.Material = Enum.Material.Neon
-		burst.Color = Color3.fromRGB(255, 220, 90)
+		burst.Color = Color3.fromRGB(255, 255, 255)
 		burst.Size = Vector3.new(2, 2, 2)
 		burst.Position = position + Vector3.new(0, 3, 0)
 		burst.Transparency = 0.2
@@ -1239,6 +1245,78 @@ local function playShockwavePowerUpVFX(origin: Vector3)
 	end)
 	bumpCamera()
 	playPowerUpSound("Shockwave")
+end
+
+local function playActivateAllVFX(origin: Vector3)
+	local ring = Instance.new("Part")
+	ring.Name = "ActivateAllRing"
+	ring.Shape = Enum.PartType.Cylinder
+	ring.Anchored = true
+	ring.CanCollide = false
+	ring.Material = Enum.Material.Neon
+	ring.Color = VisualManifest.Loot.PowerUps.ActivateAll
+	ring.Size = Vector3.new(0.4, 4, 4)
+	ring.CFrame = CFrame.new(origin + Vector3.new(0, 0.12, 0)) * CFrame.Angles(0, 0, math.rad(90))
+	ring.Transparency = 0.15
+	ring.Parent = Workspace
+	TweenService:Create(ring, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		Size = Vector3.new(0.4, 60, 60),
+		Transparency = 1,
+	}):Play()
+	task.delay(0.55, function()
+		if ring.Parent ~= nil then
+			ring:Destroy()
+		end
+	end)
+	bumpCamera()
+	playPowerUpSound("ActivateAll")
+end
+
+local function playRatStunVFX(origin: Vector3, hitPositions: { Vector3 }?)
+	local ring = Instance.new("Part")
+	ring.Name = "RatStunRing"
+	ring.Shape = Enum.PartType.Cylinder
+	ring.Anchored = true
+	ring.CanCollide = false
+	ring.Material = Enum.Material.Neon
+	ring.Color = VisualManifest.Loot.PowerUps.RatStun
+	ring.Size = Vector3.new(0.4, 4, 4)
+	ring.CFrame = CFrame.new(origin + Vector3.new(0, 0.12, 0)) * CFrame.Angles(0, 0, math.rad(90))
+	ring.Transparency = 0.2
+	ring.Parent = Workspace
+	TweenService:Create(ring, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		Size = Vector3.new(0.4, 80, 80),
+		Transparency = 1,
+	}):Play()
+	task.delay(0.45, function()
+		if ring.Parent ~= nil then
+			ring:Destroy()
+		end
+	end)
+	for _, pos in hitPositions or {} do
+		local spark = Instance.new("Part")
+		spark.Name = "RatStunSpark"
+		spark.Shape = Enum.PartType.Ball
+		spark.Anchored = true
+		spark.CanCollide = false
+		spark.Material = Enum.Material.Neon
+		spark.Color = VisualManifest.Loot.PowerUps.RatStun
+		spark.Size = Vector3.new(0.4, 0.4, 0.4)
+		spark.Position = pos + Vector3.new(0, 1, 0)
+		spark.Transparency = 0.1
+		spark.Parent = Workspace
+		TweenService:Create(spark, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			Size = Vector3.new(1.5, 1.5, 1.5),
+			Transparency = 1,
+		}):Play()
+		task.delay(0.35, function()
+			if spark.Parent ~= nil then
+				spark:Destroy()
+			end
+		end)
+	end
+	bumpCamera()
+	playPowerUpSound("RatStun")
 end
 
 local function bindRatHealthBar(ratModel: Model)
@@ -1951,6 +2029,10 @@ function VFXController.Init()
 			playTitanPushVFX(titanCenter, hitPositions)
 		elseif powerUpType == "LootVacuum" then
 			playLootVacuumVFX(position)
+		elseif powerUpType == "ActivateAll" then
+			playActivateAllVFX(position)
+		elseif powerUpType == "RatStun" then
+			playRatStunVFX(position, hitPositions)
 		end
 	end)
 

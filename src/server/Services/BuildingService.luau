@@ -136,7 +136,8 @@ local function getUpgradeHoldDuration(): number
 	local bonusPerStage = Constants.TITAN.UpgradeSpeedBonusPerStage or 0.1
 	local titanMult = math.max(Constants.TITAN.MinUpgradeHoldDuration or 0.35, 1 - (stage * bonusPerStage))
 	local catchupMult = getCatchupUpgradeMultiplier()
-	local result = baseHold * titanMult * catchupMult
+	local speedMult = Constants.BUILDING.UpgradeSpeedMultiplier or 1
+	local result = baseHold * titanMult * catchupMult * speedMult
 	return math.max(Constants.TITAN.MinUpgradeHoldDuration or 0.35, result)
 end
 

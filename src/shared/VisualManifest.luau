@@ -131,10 +131,14 @@ local VisualManifest = {
 			material = Enum.Material.CorrodedMetal,
 		},
 		RatCache = {
-			color = Color3.fromRGB(188, 132, 72),
+			color = Color3.fromRGB(20, 20, 20),
 			material = Enum.Material.Metal,
-			cogColor = Color3.fromRGB(121, 102, 83),
+			cogColor = Color3.fromRGB(40, 40, 40),
 			cogMaterial = Enum.Material.CorrodedMetal,
+		},
+		DrillShowerCache = {
+			color = Color3.fromRGB(240, 240, 240),
+			cogColor = Color3.fromRGB(200, 200, 200),
 		},
 		StormSteel = {
 			color = Color3.fromRGB(100, 160, 200),
@@ -146,6 +150,8 @@ local VisualManifest = {
 			RepairAura = Color3.fromRGB(80, 220, 120),
 			TitanPush = Color3.fromRGB(255, 180, 60),
 			LootVacuum = Color3.fromRGB(255, 255, 100),
+			ActivateAll = Color3.fromRGB(255, 255, 255),
+			RatStun = Color3.fromRGB(100, 220, 255),
 		},
 	},
 
