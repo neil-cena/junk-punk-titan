@@ -1,8 +1,38 @@
 --!strict
 
+local Players = game:GetService("Players")
 local StarterGui = game:GetService("StarterGui")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local LocalPlayer = Players.LocalPlayer
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local VisualManifest = require(Shared:WaitForChild("VisualManifest"))
+
+local function applyCameraZoomLimits()
+	local cameraConfig = VisualManifest.Camera
+	local minZoom = 6
+	local maxZoom = 28
+
+	if type(cameraConfig) == "table" then
+		if typeof(cameraConfig.MinZoomDistance) == "number" then
+			minZoom = math.max(0.5, cameraConfig.MinZoomDistance)
+		end
+		if typeof(cameraConfig.MaxZoomDistance) == "number" then
+			maxZoom = math.max(minZoom, cameraConfig.MaxZoomDistance)
+		end
+	end
+
+	LocalPlayer.CameraMinZoomDistance = minZoom
+	LocalPlayer.CameraMaxZoomDistance = maxZoom
+end
+
 pcall(function()
 	StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, false)
+end)
+
+applyCameraZoomLimits()
+LocalPlayer.CharacterAdded:Connect(function()
+	applyCameraZoomLimits()
 end)
 
 local Controllers = script:WaitForChild("Controllers")

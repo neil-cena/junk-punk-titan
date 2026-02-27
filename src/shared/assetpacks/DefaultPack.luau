@@ -211,6 +211,17 @@ return {
 				CliffColor = Color3.fromRGB(106, 112, 96),
 				CliffMaterial = Enum.Material.Rock,
 			},
+			Forest = {
+				InnerRadius = 95,
+				OuterRadius = 220,
+				TreeCount = 170,
+				OutwardDensityExponent = 0.55,
+				TrunkColor = Color3.fromRGB(96, 78, 62),
+				TrunkMaterial = Enum.Material.Wood,
+				LeafColorA = Color3.fromRGB(74, 120, 68),
+				LeafColorB = Color3.fromRGB(88, 138, 82),
+				LeafMaterial = Enum.Material.Grass,
+			},
 		},
 
 		Ground = {
@@ -248,6 +259,11 @@ return {
 				Cover = 0.78,
 				Density = 0.92,
 			},
+		},
+
+		Camera = {
+			MinZoomDistance = 6,
+			MaxZoomDistance = 28,
 		},
 
 		BurrowMarker = {

@@ -137,6 +137,72 @@ local function createWorldBorder(parent: Folder)
 	end
 end
 
+local function lerpColor(a: Color3, b: Color3, t: number): Color3
+	return Color3.new(
+		a.R + (b.R - a.R) * t,
+		a.G + (b.G - a.G) * t,
+		a.B + (b.B - a.B) * t
+	)
+end
+
+local function createTree(parent: Folder, index: number, position: Vector3, forestConfig: { [string]: any })
+	local model = Instance.new("Model")
+	model.Name = ("ForestTree_%d"):format(index)
+	model.Parent = parent
+
+	local trunkHeight = 9 + math.random() * 8
+	local trunkWidth = 1.6 + math.random() * 1.1
+
+	local trunk = Instance.new("Part")
+	trunk.Name = "Trunk"
+	trunk.Anchored = true
+	trunk.CanCollide = true
+	trunk.Material = forestConfig.TrunkMaterial or Enum.Material.Wood
+	trunk.Color = forestConfig.TrunkColor or Color3.fromRGB(96, 78, 62)
+	trunk.Size = Vector3.new(trunkWidth, trunkHeight, trunkWidth)
+	trunk.CFrame = CFrame.new(position + Vector3.new(0, trunkHeight * 0.5, 0))
+	trunk.Parent = model
+
+	local canopy = Instance.new("Part")
+	canopy.Name = "Canopy"
+	canopy.Shape = Enum.PartType.Ball
+	canopy.Anchored = true
+	canopy.CanCollide = true
+	canopy.Material = forestConfig.LeafMaterial or Enum.Material.Grass
+	local colorT = math.random()
+	canopy.Color = lerpColor(
+		forestConfig.LeafColorA or Color3.fromRGB(74, 120, 68),
+		forestConfig.LeafColorB or Color3.fromRGB(88, 138, 82),
+		colorT
+	)
+	local canopySize = 8 + math.random() * 7
+	canopy.Size = Vector3.new(canopySize, canopySize * (0.75 + math.random() * 0.15), canopySize)
+	canopy.CFrame = CFrame.new(position + Vector3.new(0, trunkHeight + canopy.Size.Y * 0.35, 0))
+	canopy.Parent = model
+end
+
+local function createForest(parent: Folder)
+	local forestConfig = VisualManifest.Map.Forest
+	if type(forestConfig) ~= "table" then
+		return
+	end
+
+	local count = math.max(0, math.floor(forestConfig.TreeCount or 170))
+	local innerRadius = forestConfig.InnerRadius or 95
+	local outerRadius = forestConfig.OuterRadius or 220
+	local outwardExp = math.clamp(forestConfig.OutwardDensityExponent or 0.55, 0.1, 2)
+
+	for i = 1, count do
+		local angle = math.random() * math.pi * 2
+		local radialT = math.random() ^ outwardExp
+		local dist = innerRadius + (outerRadius - innerRadius) * radialT
+		local x = math.cos(angle) * dist
+		local z = math.sin(angle) * dist
+		local y = -0.15 + math.random() * 0.6
+		createTree(parent, i, Vector3.new(x, y, z), forestConfig)
+	end
+end
+
 function MapDressingService.Init(): ()
 	local existing = Workspace:FindFirstChild("MapDressing")
 	if existing ~= nil then
@@ -149,6 +215,7 @@ function MapDressingService.Init(): ()
 
 	createBoundary(folder)
 	createWorldBorder(folder)
+	createForest(folder)
 	createScatterProps(folder)
 	createBurrowZones(folder)
 end
