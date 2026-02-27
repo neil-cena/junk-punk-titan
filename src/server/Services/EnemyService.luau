@@ -1692,7 +1692,7 @@ function EnemyService.SpawnWave(waveNumber: number): ()
 	local baseCount = Constants.WAVES.BaseEnemyCount + (currentWave * Constants.WAVES.EnemiesPerWave)
 	local difficultyMult = EnemyService.GetDifficultyMultiplier()
 	local randomMult = 0.8 + (math.random() * 0.7)
-	local enemyCount = math.max(1, math.floor(baseCount * difficultyMult * randomMult * intensityMult * 1.1 + 0.5))
+	local enemyCount = math.max(1, math.floor(baseCount * difficultyMult * randomMult * intensityMult * 1.1 * 2 + 0.5))
 
 	swarmActive = true
 	local titanCore = ObjectiveService.GetTitanCore()

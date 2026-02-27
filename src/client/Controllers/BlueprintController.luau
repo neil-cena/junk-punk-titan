@@ -51,6 +51,7 @@ local HIGHLIGHT_OUTLINE_BASE = 0
 local HIGHLIGHT_OUTLINE_AMPLITUDE = 0.2
 local SELECTION_LINE_BASE = 0.04
 local SELECTION_LINE_AMPLITUDE = 0.03
+local PLACEMENT_OVERLAP_XZ_PADDING = 0.1
 
 local BUILD_ANIM_ID = "rbxassetid://507768375"
 local cachedBuildTrack: AnimationTrack? = nil
@@ -154,7 +155,7 @@ local function clearGhost()
 	placementPosition = nil
 	placementValid = false
 	currentType = nil
-	currentRotation = 0
+	-- currentRotation preserved for next placement session
 	mode = "Idle"
 
 	if slowedHumanoid ~= nil and slowedHumanoid.Parent ~= nil and originalWalkSpeed ~= nil then
@@ -221,15 +222,34 @@ local function getPlacementResult(): (boolean, Vector3?)
 	end
 
 	local size = Constants.BUILDING.Sizes[buildType]
+	local overlapSize = Vector3.new(
+		math.max(0.05, size.X - PLACEMENT_OVERLAP_XZ_PADDING),
+		size.Y,
+		math.max(0.05, size.Z - PLACEMENT_OVERLAP_XZ_PADDING)
+	)
 	local center = placed + Vector3.new(0, size.Y * 0.5, 0)
 	local rotatedCF = CFrame.new(center) * CFrame.Angles(0, math.rad(currentRotation), 0)
 	local overlapParams = OverlapParams.new()
 	overlapParams.FilterType = Enum.RaycastFilterType.Exclude
-	overlapParams.FilterDescendantsInstances = { LocalPlayer.Character, currentGhost }
-	local overlaps = Workspace:GetPartBoundsInBox(rotatedCF, size, overlapParams)
+	local filterList: { Instance } = { LocalPlayer.Character, currentGhost }
+	if currentGroundMarker ~= nil then
+		table.insert(filterList, currentGroundMarker)
+	end
+	overlapParams.FilterDescendantsInstances = filterList
+	local overlaps = Workspace:GetPartBoundsInBox(rotatedCF, overlapSize, overlapParams)
 	for _, overlap in overlaps do
-		if overlap:IsA("BasePart") and CollectionService:HasTag(overlap, "TitanObjective") then
-			return false, nil
+		if overlap:IsA("BasePart") then
+			if CollectionService:HasTag(overlap, "TitanObjective") then
+				return false, nil
+			end
+			-- Disallow stacking on blueprints or buildings
+			local p: Instance? = overlap
+			while p ~= nil and p ~= Workspace do
+				if CollectionService:HasTag(p, "Blueprint") or CollectionService:HasTag(p, "DismantlableBuilding") then
+					return false, nil
+				end
+				p = p.Parent
+			end
 		end
 	end
 
@@ -313,7 +333,9 @@ local function placeCurrentBlueprint()
 	end
 
 	remotes.PlaceBlueprint:FireServer(currentType, placementPosition, currentRotation)
-	clearGhost()
+	-- Stay in Placing mode so user can place more without reselecting; guard against rapid double-place
+	placementPosition = nil
+	placementValid = false
 end
 
 function BlueprintController.FinishBlueprint(blueprintId: string)

@@ -44,6 +44,7 @@ type InternalBlueprintData = BlueprintData & {
 
 local BLUEPRINT_TAG = "Blueprint"
 local DISMANTLABLE_TAG = "DismantlableBuilding"
+local PLACEMENT_OVERLAP_XZ_PADDING = 0.1
 
 local BuildingService = {}
 
@@ -81,6 +82,17 @@ local function getUpgradeStats(buildingType: string, level: number): { [string]:
 		return nil
 	end
 	return tiers[level]
+end
+
+local function getCumulativeUpgradeCost(buildingType: string, fromLevel: number, toLevel: number, buildCostMult: number): number
+	local total = 0
+	for lv = fromLevel + 1, toLevel do
+		local stats = getUpgradeStats(buildingType, lv)
+		if stats ~= nil and typeof(stats.cost) == "number" and stats.cost > 0 then
+			total += math.max(1, math.floor((stats.cost * buildCostMult) + 0.5))
+		end
+	end
+	return total
 end
 
 local function getPlayerBuildCostMult(player: Player): number
@@ -215,16 +227,31 @@ end
 
 local function isOverlapping(position: Vector3, buildingType: BuildingType, rotation: number): boolean
 	local size = Constants.BUILDING.Sizes[buildingType]
+	local overlapSize = Vector3.new(
+		math.max(0.05, size.X - PLACEMENT_OVERLAP_XZ_PADDING),
+		size.Y,
+		math.max(0.05, size.Z - PLACEMENT_OVERLAP_XZ_PADDING)
+	)
 	local center = position + Vector3.new(0, size.Y * 0.5, 0)
 	local rotatedCF = CFrame.new(center) * CFrame.Angles(0, math.rad(rotation), 0)
 	local overlapParams = OverlapParams.new()
 	overlapParams.FilterType = Enum.RaycastFilterType.Exclude
 	overlapParams.FilterDescendantsInstances = {}
 
-	local overlaps = Workspace:GetPartBoundsInBox(rotatedCF, size, overlapParams)
+	local overlaps = Workspace:GetPartBoundsInBox(rotatedCF, overlapSize, overlapParams)
 	for _, overlap in overlaps do
-		if overlap:IsA("BasePart") and CollectionService:HasTag(overlap, "TitanObjective") then
-			return true
+		if overlap:IsA("BasePart") then
+			if CollectionService:HasTag(overlap, "TitanObjective") then
+				return true
+			end
+			-- Disallow stacking on blueprints or buildings
+			local p: Instance? = overlap
+			while p ~= nil and p ~= Workspace do
+				if CollectionService:HasTag(p, BLUEPRINT_TAG) or CollectionService:HasTag(p, DISMANTLABLE_TAG) then
+					return true
+				end
+				p = p.Parent
+			end
 		end
 	end
 
@@ -266,7 +293,11 @@ local function createBlueprintGhost(buildingType: BuildingType, position: Vector
 	return ghost
 end
 
-local function createFinalBuilding(buildingType: BuildingType, position: Vector3, rotation: number): BasePart
+local function createFinalBuilding(buildingType: BuildingType, position: Vector3, rotation: number, level: number?): BasePart
+	local targetLevel = if typeof(level) == "number" and level >= 1 and level <= Constants.BUILDING.MaxLevel then level else 1
+	local stats = getUpgradeStats(buildingType, targetLevel)
+	local hp = if stats ~= nil and typeof(stats.hp) == "number" then stats.hp else Constants.BUILDING.DefaultHP
+
 	local part = Instance.new("Part")
 	part.Name = string.format("%sBuilding", buildingType)
 	part.Size = Constants.BUILDING.Sizes[buildingType]
@@ -278,8 +309,8 @@ local function createFinalBuilding(buildingType: BuildingType, position: Vector3
 	part.CFrame = CFrame.new(position + Vector3.new(0, part.Size.Y * 0.5, 0)) * CFrame.Angles(0, math.rad(rotation), 0)
 	part:SetAttribute("BuildingType", buildingType)
 	part:SetAttribute("BuildingRotation", rotation)
-	part:SetAttribute("BuildingLevel", 1)
-	part:SetAttribute("BuildingHP", Constants.BUILDING.DefaultHP)
+	part:SetAttribute("BuildingLevel", targetLevel)
+	part:SetAttribute("BuildingHP", hp)
 	part.Parent = Workspace
 	finishedBuildings[part] = true
 	CollectionService:AddTag(part, DISMANTLABLE_TAG)
@@ -593,9 +624,28 @@ local function finishBlueprint(player: Player, blueprintId: string): PurchaseRes
 
 	local countForType = builtCounts[blueprint.buildingType]
 	local buildCostMult = getPlayerBuildCostMult(player)
-	local response = EconomyService.TryPurchase(blueprint.buildingType, countForType, buildCostMult)
-	if not response.success then
-		return response
+	local targetLevel = getMaxUnlockedLevel()
+
+	local rawBaseCost = Constants.BASE_COSTS[blueprint.buildingType]
+	if typeof(rawBaseCost) ~= "number" then
+		return failResponse("Unknown building type")
+	end
+	local baseCost = EconomyService.GetCost(rawBaseCost :: number, countForType)
+	baseCost = math.max(1, math.floor((baseCost * buildCostMult) + 0.5))
+	local upgradeSurcharge = getCumulativeUpgradeCost(blueprint.buildingType, 1, targetLevel, buildCostMult)
+	local totalCost = baseCost + upgradeSurcharge
+
+	if EconomyService.GetScrap() < totalCost then
+		return {
+			success = false,
+			cost = totalCost,
+			remainingScrap = EconomyService.GetScrap(),
+			reason = "Not enough scrap",
+		}
+	end
+
+	if not EconomyService.DeductScrap(totalCost) then
+		return failResponse("Not enough scrap")
 	end
 
 	blueprint.isFinished = true
@@ -604,13 +654,17 @@ local function finishBlueprint(player: Player, blueprintId: string): PurchaseRes
 		blueprint.ghostPart:Destroy()
 	end
 
-	local builtPart = createFinalBuilding(blueprint.buildingType, blueprint.position, blueprint.rotation or 0)
+	local builtPart = createFinalBuilding(blueprint.buildingType, blueprint.position, blueprint.rotation or 0, targetLevel)
 	activateBuildingBehavior(builtPart, blueprint.buildingType)
 	builtCounts[blueprint.buildingType] = countForType + 1
 	blueprints[blueprintId] = nil
 	remotes.BlueprintFinished:FireAllClients(blueprintId, blueprint.position)
 
-	return response
+	return {
+		success = true,
+		cost = totalCost,
+		remainingScrap = EconomyService.GetScrap(),
+	}
 end
 
 local function getNextBuildCosts(player: Player?): { [BuildingType]: number }
@@ -619,13 +673,23 @@ local function getNextBuildCosts(player: Player?): { [BuildingType]: number }
 		buildCostMult = getPlayerBuildCostMult(player)
 	end
 
-	local turretCost = EconomyService.GetCost(Constants.BASE_COSTS.Turret, builtCounts.Turret)
-	local drillCost = EconomyService.GetCost(Constants.BASE_COSTS.Drill, builtCounts.Drill)
-	local wallCost = EconomyService.GetCost(Constants.BASE_COSTS.Wall, builtCounts.Wall)
+	local targetLevel = getMaxUnlockedLevel()
+
+	local function totalCost(buildingType: BuildingType): number
+		local rawBase = Constants.BASE_COSTS[buildingType]
+		if typeof(rawBase) ~= "number" then
+			return 0
+		end
+		local base = EconomyService.GetCost(rawBase :: number, builtCounts[buildingType])
+		base = math.max(1, math.floor((base * buildCostMult) + 0.5))
+		local surcharge = getCumulativeUpgradeCost(buildingType, 1, targetLevel, buildCostMult)
+		return base + surcharge
+	end
+
 	return {
-		Turret = math.max(1, math.floor((turretCost * buildCostMult) + 0.5)),
-		Drill = math.max(1, math.floor((drillCost * buildCostMult) + 0.5)),
-		Wall = math.max(1, math.floor((wallCost * buildCostMult) + 0.5)),
+		Turret = totalCost("Turret"),
+		Drill = totalCost("Drill"),
+		Wall = totalCost("Wall"),
 	}
 end
 
