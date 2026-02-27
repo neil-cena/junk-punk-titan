@@ -13,6 +13,7 @@ local COLLISION_GROUP_LOOT_DROPS = "LootDrops"
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Constants = require(Shared:WaitForChild("Constants"))
+local Types = require(Shared:WaitForChild("Types"))
 local VisualManifest = require(Shared:WaitForChild("VisualManifest"))
 local RemotesModule = require(Shared:WaitForChild("Remotes"))
 local TheftComponent = require(Shared:WaitForChild("TheftComponent"))
@@ -42,6 +43,8 @@ local burrowPositions = {
 	Vector3.new(retreatBurrowDistance, 0.2, retreatBurrowDistance),
 }
 
+type EnemyType = Types.EnemyType
+
 type RatState = {
 	state: string,
 	stolenBuildingCost: number,
@@ -50,6 +53,7 @@ type RatState = {
 	isThief: boolean,
 	carriedScrap: number,
 	bagCapacity: number,
+	enemyType: EnemyType,
 }
 
 local ratStates: { [Model]: RatState } = {}
@@ -60,10 +64,16 @@ local ratCacheValues: { [BasePart]: number } = {}
 local bundleHasIntent: { [BasePart]: boolean } = {}
 local playersInRadiusLastTick: { [BasePart]: { [Player]: true } } = {}
 local bundleTouchConnections: { [BasePart]: RBXScriptConnection } = {}
-type PowerUpType = "Lightning" | "Shockwave" | "RepairAura" | "TitanPush" | "LootVacuum" | "ActivateAll" | "RatStun"
+type PowerUpType = "Lightning" | "Shockwave" | "RepairAura" | "TitanPush" | "WeakLootVacuum" | "StrongLootVacuum" | "ActivateAll" | "RatStun"
 local activePowerUps: { BasePart } = {}
 local pickedPowerUps: { [BasePart]: boolean } = {}
 local powerUpTypeByOrb: { [BasePart]: PowerUpType } = {}
+local getDeathDropCountsForEnemy: (Model, number) -> (number, number) = function(_ratModel: Model, _stolenValue: number): (number, number)
+	return math.random(Constants.LOOT.RatCacheMinDrops, Constants.LOOT.RatCacheMaxDrops), Constants.LOOT.RatCacheValue
+end
+local getCurrentPhase: () -> { [string]: any } = function(): { [string]: any }
+	return Constants.GAME_PHASES[1] or {}
+end
 
 local function getLootBonusMultiplier(player: Player): number
 	local multAttr = player:GetAttribute("LootBonusMult")
@@ -334,8 +344,10 @@ local function getPowerUpColor(powerUpType: PowerUpType): Color3
 		return colors.RepairAura
 	elseif powerUpType == "TitanPush" then
 		return colors.TitanPush
-	elseif powerUpType == "LootVacuum" then
-		return colors.LootVacuum
+	elseif powerUpType == "WeakLootVacuum" then
+		return colors.WeakLootVacuum
+	elseif powerUpType == "StrongLootVacuum" then
+		return colors.StrongLootVacuum
 	elseif powerUpType == "ActivateAll" then
 		return colors.ActivateAll
 	elseif powerUpType == "RatStun" then
@@ -361,9 +373,38 @@ local function createPowerUpOrb(atPosition: Vector3, powerUpType: PowerUpType): 
 end
 
 local function spawnPowerUpOrb(atPosition: Vector3)
-	local availableTypes = Constants.POWERUPS.Types
+	local phase = getCurrentPhase()
+	local lootVacuumWeight = phase.lootVacuumWeight or 1
+	local availableTypes: { string } = {}
+	for _, t in Constants.POWERUPS.Types do
+		table.insert(availableTypes, t)
+	end
+	for i = 1, lootVacuumWeight - 1 do
+		table.insert(availableTypes, "WeakLootVacuum")
+	end
 	local idx = math.random(1, #availableTypes)
 	local powerUpType = availableTypes[idx] :: PowerUpType
+	local orb = createPowerUpOrb(atPosition, powerUpType)
+	powerUpTypeByOrb[orb] = powerUpType
+	table.insert(activePowerUps, orb)
+	remotes.PowerUpSpawned:FireAllClients(orb, powerUpType)
+
+	task.delay(Constants.POWERUPS.DespawnSeconds, function()
+		if pickedPowerUps[orb] then
+			pickedPowerUps[orb] = nil
+			powerUpTypeByOrb[orb] = nil
+			return
+		end
+		if orb.Parent ~= nil then
+			CollectionService:RemoveTag(orb, "PowerUpOrb")
+			orb:Destroy()
+		end
+		pickedPowerUps[orb] = nil
+		powerUpTypeByOrb[orb] = nil
+	end)
+end
+
+local function spawnPowerUpOrbOfType(atPosition: Vector3, powerUpType: PowerUpType)
 	local orb = createPowerUpOrb(atPosition, powerUpType)
 	powerUpTypeByOrb[orb] = powerUpType
 	table.insert(activePowerUps, orb)
@@ -489,9 +530,10 @@ local function executePowerUp(player: Player, powerUpType: PowerUpType): { Vecto
 			humanoid:MoveTo(targetPos)
 			table.insert(hitPositions, currentPos)
 		end
-	elseif powerUpType == "LootVacuum" then
-		local useBaseRadius = Constants.POWERUPS.LootVacuum.useBaseRadius == true
-		local radius = if useBaseRadius then Constants.BUILDING.MaxBuildRadiusFromCenter else Constants.POWERUPS.LootVacuum.radius
+	elseif powerUpType == "WeakLootVacuum" or powerUpType == "StrongLootVacuum" then
+		local cfg = Constants.POWERUPS[powerUpType]
+		local useBaseRadius = cfg and cfg.useBaseRadius == true
+		local radius = if useBaseRadius then Constants.BUILDING.MaxBuildRadiusFromCenter else (cfg and cfg.radius or 20)
 		local origin = if useBaseRadius then Vector3.new(0, 0, 0) else playerRoot.Position
 		for _, cache in activeRatCaches do
 			if cache.Parent == nil or pickedRatCaches[cache] then
@@ -615,17 +657,14 @@ local function handleRatDeath(ratModel: Model)
 	local root = ratModel.PrimaryPart
 	local atPosition = if root ~= nil then root.Position else ratModel:GetPivot().Position
 
-	local dropCount = math.random(Constants.LOOT.RatCacheMinDrops, Constants.LOOT.RatCacheMaxDrops)
 	local stolenValue = math.max(state.stolenBuildingCost, state.carriedScrap)
-	if stolenValue > 0 then
-		local bonusDrops = math.clamp(
-			math.floor(stolenValue / Constants.LOOT.RatCacheBonusDivisor),
-			1,
-			if state.isThief then (Constants.LOOT.RatCacheBonusMax * 2) else Constants.LOOT.RatCacheBonusMax
-		)
-		dropCount = dropCount + bonusDrops
+	local dropCounter = getDeathDropCountsForEnemy
+	local dropCount = math.random(Constants.LOOT.RatCacheMinDrops, Constants.LOOT.RatCacheMaxDrops)
+	local scrapPerDrop = Constants.LOOT.RatCacheValue
+	if dropCounter ~= nil then
+		dropCount, scrapPerDrop = dropCounter(ratModel, stolenValue)
 	end
-	spawnRatCacheDrops(atPosition, dropCount, Constants.LOOT.RatCacheValue)
+	spawnRatCacheDrops(atPosition, dropCount, scrapPerDrop)
 	if math.random() < Constants.POWERUPS.DropChance then
 		spawnPowerUpOrb(atPosition)
 	end
@@ -641,21 +680,49 @@ local function handleRatDeath(ratModel: Model)
 	end)
 end
 
-local function createScrapRatModel(spawnPosition: Vector3, isElite: boolean?, isThief: boolean?): Model
-	local hp = Constants.COMBAT.RatBaseHealth
-	local speed = 12
+local ENEMY_HP_MULTIPLIER = 1.10
 
-	if isElite then
-		hp = math.floor(hp * Constants.TITAN.EliteRatHealthMult)
-		speed = speed * Constants.TITAN.EliteRatSpeedMult
-	elseif isThief then
-		hp = math.floor(hp * Constants.THIEF_RAT.HealthMultiplier)
+local function getEnemyStats(enemyType: EnemyType): (number, number)
+	local hp: number
+	local speed: number
+	if enemyType == "Standard" then
+		hp = Constants.COMBAT.RatBaseHealth
+		speed = 12
+	elseif enemyType == "Thief" then
+		hp = math.floor(Constants.COMBAT.RatBaseHealth * Constants.THIEF_RAT.HealthMultiplier)
 		speed = Constants.THIEF_RAT.WalkSpeed
+	elseif enemyType == "Elite" then
+		hp = math.floor(Constants.COMBAT.RatBaseHealth * Constants.TITAN.EliteRatHealthMult)
+		speed = 12 * Constants.TITAN.EliteRatSpeedMult
+	else
+		local cfg = Constants.ENEMY_TYPES[enemyType]
+		if cfg ~= nil then
+			hp = cfg.health or 18
+			speed = cfg.speed or 12
+		else
+			hp = Constants.COMBAT.RatBaseHealth
+			speed = 12
+		end
 	end
+	return math.max(1, math.floor(hp * ENEMY_HP_MULTIPLIER)), speed
+end
+
+local function getEnemyVisuals(enemyType: EnemyType)
+	local rats = VisualManifest.Rats
+	local vis = rats[enemyType]
+	if vis ~= nil then
+		return vis
+	end
+	return rats.Standard
+end
+
+local function createScrapRatModel(spawnPosition: Vector3, enemyType: EnemyType): Model
+	local hp, speed = getEnemyStats(enemyType)
+	local vis = getEnemyVisuals(enemyType)
 
 	local rat = Instance.new("Model")
 	rat.Name = "ScrapRat"
-	rat:SetAttribute("RatType", if isElite then "Elite" elseif isThief then "Thief" else "Standard")
+	rat:SetAttribute("RatType", enemyType)
 
 	local root = Instance.new("Part")
 	root.Name = "HumanoidRootPart"
@@ -664,18 +731,9 @@ local function createScrapRatModel(spawnPosition: Vector3, isElite: boolean?, is
 	root.Position = spawnPosition
 	root.Parent = rat
 
-	root.Size = VisualManifest.Rats.Standard.bodySize
-	root.Color = VisualManifest.Rats.Standard.bodyColor
-	root.Material = VisualManifest.Rats.Standard.bodyMaterial
-	if isElite then
-		root.Size = VisualManifest.Rats.Elite.bodySize
-		root.Color = VisualManifest.Rats.Elite.bodyColor
-		root.Material = VisualManifest.Rats.Elite.bodyMaterial
-	elseif isThief then
-		root.Size = VisualManifest.Rats.Thief.bodySize
-		root.Color = VisualManifest.Rats.Thief.bodyColor
-		root.Material = VisualManifest.Rats.Thief.bodyMaterial
-	end
+	root.Size = vis.bodySize
+	root.Color = vis.bodyColor
+	root.Material = vis.bodyMaterial
 
 	local head = Instance.new("Part")
 	head.Name = "Head"
@@ -702,7 +760,7 @@ local function createScrapRatModel(spawnPosition: Vector3, isElite: boolean?, is
 	eyeL.Name = "EyeL"
 	eyeL.Size = Vector3.new(0.14, 0.14, 0.14)
 	eyeL.Material = VisualManifest.Rats.EyeMaterial
-	eyeL.Color = if isElite then VisualManifest.Rats.EliteEyeColor else VisualManifest.Rats.EyeColor
+	eyeL.Color = if enemyType == "Elite" then VisualManifest.Rats.EliteEyeColor else VisualManifest.Rats.EyeColor
 	eyeL.CanCollide = false
 	eyeL.Massless = true
 	eyeL.CFrame = head.CFrame * CFrame.new(-0.15, 0.02, -head.Size.Z * 0.42)
@@ -733,13 +791,13 @@ local function createScrapRatModel(spawnPosition: Vector3, isElite: boolean?, is
 	weldEyeR.Part1 = eyeR
 	weldEyeR.Parent = head
 
-	if isThief then
+	if (enemyType == "Thief" or enemyType == "ScrapCarrier") and vis.bagColor ~= nil and vis.bagMaterial ~= nil then
 		local bag = Instance.new("Part")
 		bag.Name = "LootBag"
 		bag.Shape = Enum.PartType.Ball
 		bag.Size = Vector3.new(0.9, 1.1, 0.9)
-		bag.Material = VisualManifest.Rats.Thief.bagMaterial
-		bag.Color = VisualManifest.Rats.Thief.bagColor
+		bag.Material = vis.bagMaterial
+		bag.Color = vis.bagColor
 		bag.CanCollide = false
 		bag.Massless = true
 		bag.CFrame = root.CFrame * CFrame.new(0, root.Size.Y * 0.35, root.Size.Z * 0.2)
@@ -777,9 +835,10 @@ local function createScrapRatModel(spawnPosition: Vector3, isElite: boolean?, is
 		stolenBuildingCost = 0,
 		despawning = false,
 		targetBuilding = nil,
-		isThief = isThief == true,
+		isThief = enemyType == "Thief",
 		carriedScrap = 0,
 		bagCapacity = 0,
+		enemyType = enemyType,
 	}
 
 	rat.Parent = Workspace
@@ -849,6 +908,162 @@ local function getTargetBuilding(): BasePart?
 	return buildings[math.random(1, poolSize)].part
 end
 
+local function getTargetForEnemy(ratModel: Model): BasePart?
+	local state = ratStates[ratModel]
+	local enemyType = if state ~= nil then state.enemyType else "Standard"
+	local titanCore = ObjectiveService.GetTitanCore()
+
+	if enemyType == "Juggernaut" then
+		local turrets: { BasePart } = {}
+		for _, instance in CollectionService:GetTagged("DismantlableBuilding") do
+			if instance:IsA("BasePart") and instance.Parent ~= nil then
+				local btype = getBuildingType(instance)
+				if btype == "Turret" then
+					table.insert(turrets, instance)
+				end
+			end
+		end
+		if #turrets > 0 then
+			return turrets[math.random(1, #turrets)]
+		end
+		return titanCore
+	elseif enemyType == "Decoy" then
+		return titanCore or getTargetBuilding()
+	elseif enemyType == "WallEater" then
+		local byType: { [string]: { BasePart } } = { Wall = {}, Drill = {}, Turret = {} }
+		for _, instance in CollectionService:GetTagged("DismantlableBuilding") do
+			if instance:IsA("BasePart") and instance.Parent ~= nil then
+				local btype = getBuildingType(instance)
+				if btype == "Wall" then
+					table.insert(byType.Wall, instance)
+				elseif btype == "Drill" then
+					table.insert(byType.Drill, instance)
+				elseif btype == "Turret" then
+					table.insert(byType.Turret, instance)
+				end
+			end
+		end
+		local pickFrom = if #byType.Wall > 0 then byType.Wall elseif #byType.Drill > 0 then byType.Drill elseif #byType.Turret > 0 then byType.Turret else {}
+		if #pickFrom > 0 then
+			return pickFrom[math.random(1, #pickFrom)]
+		end
+		return titanCore
+	end
+	return getTargetBuilding() or titanCore
+end
+
+local function getDismantleMultiplierForEnemy(ratModel: Model, targetBuilding: BasePart): number
+	local state = ratStates[ratModel]
+	local enemyType = if state ~= nil then state.enemyType else "Standard"
+
+	if enemyType == "Thief" then
+		return Constants.THIEF_RAT.DismantleProgressMultiplier
+	elseif enemyType == "Decoy" then
+		return 0
+	end
+
+	local cfg = Constants.ENEMY_TYPES[enemyType]
+	if cfg == nil then
+		return 1
+	end
+	if cfg.dismantleMult and cfg.dismantleMult == 0 then
+		return 0
+	end
+	if cfg.dismantleMultByType ~= nil then
+		local btype = getBuildingType(targetBuilding)
+		if CollectionService:HasTag(targetBuilding, "TitanObjective") then
+			return cfg.dismantleMultByType.Titan or 1
+		end
+		if btype ~= nil then
+			return cfg.dismantleMultByType[btype] or 1
+		end
+		return 1
+	end
+	return cfg.dismantleMult or 1
+end
+
+local function canEnemySteal(enemyType: EnemyType): boolean
+	if enemyType == "Standard" or enemyType == "Thief" then
+		return true
+	end
+	local cfg = Constants.ENEMY_TYPES[enemyType]
+	if cfg ~= nil then
+		return cfg.canSteal == true
+	end
+	return false
+end
+
+getDeathDropCountsForEnemy = function(ratModel: Model, stolenValue: number): (number, number)
+	local state = ratStates[ratModel]
+	local enemyType = if state ~= nil then state.enemyType else "Standard"
+
+	if enemyType == "Standard" or enemyType == "Thief" then
+		local dropCount = math.random(Constants.LOOT.RatCacheMinDrops, Constants.LOOT.RatCacheMaxDrops)
+		if stolenValue > 0 then
+			local bonusDrops = math.clamp(
+				math.floor(stolenValue / Constants.LOOT.RatCacheBonusDivisor),
+				1,
+				if state ~= nil and state.isThief then (Constants.LOOT.RatCacheBonusMax * 2) else Constants.LOOT.RatCacheBonusMax
+			)
+			dropCount = dropCount + bonusDrops
+		end
+		return dropCount, Constants.LOOT.RatCacheValue
+	end
+
+	local cfg = Constants.ENEMY_TYPES[enemyType]
+	if cfg ~= nil and cfg.minCacheDrops ~= nil and cfg.maxCacheDrops ~= nil then
+		return math.random(cfg.minCacheDrops, cfg.maxCacheDrops), Constants.LOOT.RatCacheValue
+	end
+	return math.random(Constants.LOOT.RatCacheMinDrops, Constants.LOOT.RatCacheMaxDrops), Constants.LOOT.RatCacheValue
+end
+
+getCurrentPhase = function(): { [string]: any }
+	local elapsedSeconds = os.clock() - ObjectiveService.GetSessionStartTime()
+	local elapsedMinutes = elapsedSeconds / 60
+	local phases = Constants.GAME_PHASES
+	for i = 1, #phases do
+		if elapsedMinutes < phases[i].endMinute then
+			return phases[i]
+		end
+	end
+	return phases[#phases] or {}
+end
+
+local function rollEnemyTypeForPhase(phase: { [string]: any }, isLastBatch: boolean): EnemyType
+	local scrapChance = 0
+	if (phase.scrapCarrierLastBatchOnly and isLastBatch) or not phase.scrapCarrierLastBatchOnly then
+		scrapChance = phase.scrapCarrierChance or 0
+	end
+	local total = (phase.standardChance or 0) + (phase.thiefChance or 0) + (phase.wallEaterChance or 0)
+		+ (phase.juggernautChance or 0) + (phase.decoyChance or 0) + scrapChance
+	if total <= 0 then
+		return "Standard"
+	end
+	local r = math.random() * total
+	local acc = 0
+	acc += phase.standardChance or 0
+	if r < acc then
+		return "Standard"
+	end
+	acc += phase.thiefChance or 0
+	if r < acc then
+		return "Thief"
+	end
+	acc += phase.wallEaterChance or 0
+	if r < acc then
+		return "WallEater"
+	end
+	acc += phase.juggernautChance or 0
+	if r < acc then
+		return "Juggernaut"
+	end
+	acc += phase.decoyChance or 0
+	if r < acc then
+		return "Decoy"
+	end
+	return "ScrapCarrier"
+end
+
 function EnemyService.GetDifficultyMultiplier(): number
 	local playerCount = PlayerTrackingService.GetCurrentPlayerCount()
 	if playerCount <= 3 then
@@ -866,7 +1081,7 @@ function EnemyService.StartDismantle(targetBuilding: BasePart, ratModel: Model):
 		state.state = "dismantling"
 	end
 	TheftComponent.Attach(targetBuilding)
-	local speedMult = if state ~= nil and state.isThief then Constants.THIEF_RAT.DismantleProgressMultiplier else 1
+	local speedMult = getDismantleMultiplierForEnemy(ratModel, targetBuilding)
 	TheftComponent.StartDismantle(targetBuilding, ratModel, speedMult)
 	remotes.ThreatDetected:FireAllClients(targetBuilding.Name, targetBuilding.Position)
 end
@@ -944,8 +1159,10 @@ local function fleeAndDespawnRat(ratModel: Model)
 		return
 	end
 
-	attachStolenScrapVisual(ratModel)
 	local state = ratStates[ratModel]
+	if state ~= nil and (state.stolenBuildingCost > 0 or state.carriedScrap > 0) then
+		attachStolenScrapVisual(ratModel)
+	end
 	local fleeMult = Constants.COMBAT.RatFleeSpeedMultiplier
 	if state ~= nil and state.isThief then
 		fleeMult = fleeMult * Constants.THIEF_RAT.RetreatSpeedMultiplier
@@ -995,7 +1212,7 @@ moveToWithShortTimeout = function(humanoid: Humanoid, targetPosition: Vector3, t
 	return reached
 end
 
-local spawnRatToward: (BasePart, boolean?, boolean?) -> ()
+local spawnRatToward: (BasePart, EnemyType) -> ()
 local dismantleAndDestroyBuilding: (BasePart, Model?) -> ()
 local retreatAllRats: (() -> ())?
 
@@ -1097,7 +1314,10 @@ local function getAggroTarget(ratModel: Model): BasePart?
 	return nil
 end
 
-local function pickNextTarget(): BasePart?
+local function pickNextTarget(ratModel: Model?): BasePart?
+	if ratModel ~= nil then
+		return getTargetForEnemy(ratModel)
+	end
 	return getTargetBuilding() or ObjectiveService.GetTitanCore()
 end
 
@@ -1183,7 +1403,7 @@ local function moveRatBehavior(ratModel: Model, humanoid: Humanoid, root: BasePa
 						break
 					end
 					if currentTarget.Parent == nil then
-						local nextTgt = pickNextTarget()
+						local nextTgt = pickNextTarget(ratModel)
 						if nextTgt == nil then
 							despawnRat(ratModel)
 							return
@@ -1221,13 +1441,21 @@ local function moveRatBehavior(ratModel: Model, humanoid: Humanoid, root: BasePa
 			return
 		end
 		if currentTarget.Parent == nil then
-			local nextTgt = pickNextTarget()
+			local nextTgt = pickNextTarget(ratModel)
 			if nextTgt == nil then
 				despawnRat(ratModel)
 				return
 			end
 			currentTarget = nextTgt
 			continue
+		end
+
+		local dismantleMult = getDismantleMultiplierForEnemy(ratModel, currentTarget)
+		if dismantleMult <= 0 then
+			while activeRats[ratModel] ~= nil and humanoid.Health > 0 and not isRatRetreating(ratModel) do
+				task.wait(0.5)
+			end
+			return
 		end
 
 		EnemyService.StartDismantle(currentTarget, ratModel)
@@ -1259,7 +1487,7 @@ local function moveRatBehavior(ratModel: Model, humanoid: Humanoid, root: BasePa
 			continue
 		end
 		if currentTarget.Parent == nil then
-			local nextTgt = pickNextTarget()
+			local nextTgt = pickNextTarget(ratModel)
 			if nextTgt == nil then
 				despawnRat(ratModel)
 				return
@@ -1275,7 +1503,7 @@ local function retargetRat(ratModel: Model)
 	if state == nil or state.despawning or state.state == "fleeing" then
 		return
 	end
-	local newTarget = pickNextTarget()
+	local newTarget = pickNextTarget(ratModel)
 	if newTarget == nil then
 		despawnRat(ratModel)
 		return
@@ -1320,7 +1548,7 @@ dismantleAndDestroyBuilding = function(dismantledPart: BasePart, ratModel: Model
 
 	if ratModel ~= nil then
 		local state = ratStates[ratModel]
-		if state ~= nil then
+		if state ~= nil and canEnemySteal(state.enemyType) then
 			if state.isThief then
 				state.carriedScrap += baseCost
 				if state.bagCapacity <= 0 then
@@ -1413,13 +1641,13 @@ function EnemyService.StopAll(): ()
 	powerUpTypeByOrb = {}
 end
 
-spawnRatToward = function(targetBuilding: BasePart, isElite: boolean?, isThief: boolean?)
+spawnRatToward = function(targetBuilding: BasePart, enemyType: EnemyType)
 	local radius = Constants.WAVES.SpawnRadius
 	local minDist = math.min(Constants.WAVES.MinSpawnDistanceFromCenter, radius)
 	local angle = math.random() * math.pi * 2
 	local dist = minDist + (math.random() * (radius - minDist))
 	local spawnPosition = Vector3.new(math.cos(angle) * dist, 3, math.sin(angle) * dist)
-	local ratModel = createScrapRatModel(spawnPosition, isElite, isThief)
+	local ratModel = createScrapRatModel(spawnPosition, enemyType)
 	activeRats[ratModel] = true
 	ratGrid:Insert(ratModel, spawnPosition)
 
@@ -1438,41 +1666,50 @@ spawnRatToward = function(targetBuilding: BasePart, isElite: boolean?, isThief: 
 	moveRatBehavior(ratModel, humanoid, root, targetBuilding)
 end
 
-function EnemyService.SpawnScrapRat(targetBuilding: BasePart?, isElite: boolean?, isThief: boolean?): ()
+function EnemyService.SpawnScrapRat(targetBuilding: BasePart?, enemyType: EnemyType?): ()
 	if targetBuilding == nil then
 		return
 	end
 	task.spawn(function()
-		spawnRatToward(targetBuilding, isElite, isThief)
+		spawnRatToward(targetBuilding, enemyType or "Standard")
 	end)
 end
 
 function EnemyService.SpawnWave(waveNumber: number): ()
 	currentWave = waveNumber
 	publishNextWaveTimer(0)
-	local pattern = Constants.WAVES.IntensityPattern
-	local patternIdx = ((waveNumber - 1) % #pattern) + 1
-	local seasonMult = pattern[patternIdx]
-	remotes.WaveStarted:FireAllClients(currentWave, patternIdx)
+	local phase = getCurrentPhase()
+	local phaseIdx = 1
+	for i, p in Constants.GAME_PHASES do
+		if p == phase then
+			phaseIdx = i
+			break
+		end
+	end
+	remotes.WaveStarted:FireAllClients(currentWave, phaseIdx)
 
+	local intensityMult = phase.intensityMult or 1
 	local baseCount = Constants.WAVES.BaseEnemyCount + (currentWave * Constants.WAVES.EnemiesPerWave)
 	local difficultyMult = EnemyService.GetDifficultyMultiplier()
 	local randomMult = 0.8 + (math.random() * 0.7)
-	local enemyCount = math.max(1, math.floor(baseCount * difficultyMult * randomMult * seasonMult * 1.1 + 0.5))
+	local enemyCount = math.max(1, math.floor(baseCount * difficultyMult * randomMult * intensityMult * 1.1 + 0.5))
 
 	swarmActive = true
 	local titanCore = ObjectiveService.GetTitanCore()
 	local batchInterval = Constants.WAVES.SpawnBatchIntervalSeconds or 2
 	local initialFrac = Constants.WAVES.InitialBatchFraction or 0.15
 	local growthRate = Constants.WAVES.BatchGrowthRate or 1.4
+	local maxJuggernaut = phase.maxJuggernautPerWave or 999
 
 	task.spawn(function()
 		local batchSizes: { number } = {}
-		local firstBatch = math.max(1, math.floor(enemyCount * initialFrac))
+		local pulseFrac = initialFrac * 0.5
+		local pulseGrowth = math.sqrt(growthRate)
+		local firstBatch = math.max(1, math.floor(enemyCount * pulseFrac))
 		local acc = firstBatch
 		table.insert(batchSizes, firstBatch)
 		while acc < enemyCount do
-			local nextSize = math.min(math.max(1, math.floor(batchSizes[#batchSizes] * growthRate)), enemyCount - acc)
+			local nextSize = math.min(math.max(1, math.floor(batchSizes[#batchSizes] * pulseGrowth)), enemyCount - acc)
 			if nextSize <= 0 then
 				break
 			end
@@ -1480,15 +1717,23 @@ function EnemyService.SpawnWave(waveNumber: number): ()
 			acc += nextSize
 		end
 
-		for _, batchSize in batchSizes do
+		local juggernautSpawnedThisWave = 0
+		for batchIdx, batchSize in batchSizes do
 			if not swarmActive or not gameActive then
 				break
 			end
+			local isLastBatch = batchIdx == #batchSizes
 			for _ = 1, batchSize do
 				local target = titanCore or getTargetBuilding()
 				if target ~= nil then
-					local spawnThief = (not finalStandActive) and (math.random() < Constants.THIEF_RAT.SpawnChance)
-					EnemyService.SpawnScrapRat(target, false, spawnThief)
+					local enemyType = rollEnemyTypeForPhase(phase, isLastBatch)
+					if enemyType == "Juggernaut" and juggernautSpawnedThisWave >= maxJuggernaut then
+						enemyType = "Standard"
+					end
+					if enemyType == "Juggernaut" then
+						juggernautSpawnedThisWave += 1
+					end
+					EnemyService.SpawnScrapRat(target, enemyType)
 				end
 			end
 			if swarmActive and gameActive then
@@ -1513,6 +1758,18 @@ function EnemyService.SpawnWave(waveNumber: number): ()
 				warn("[EnemyService] retreatAllRats missing at swarm end")
 			end
 			triggerDrillBonusShower()
+			local phaseIdx: number? = nil
+			for i, p in Constants.GAME_PHASES do
+				if p == phase then
+					phaseIdx = i
+					break
+				end
+			end
+			if phaseIdx == 2 or phaseIdx == 5 or phaseIdx == 8 then
+				local titanCore = ObjectiveService.GetTitanCore()
+				local spawnPos = if titanCore ~= nil then titanCore.Position + Vector3.new(0, 0, 8) else Vector3.new(0, 2, 8)
+				spawnPowerUpOrbOfType(spawnPos, "StrongLootVacuum")
+			end
 		end
 	end)
 end
@@ -1554,7 +1811,7 @@ local function startFinalStandSpawning()
 		while finalStandActive and gameActive do
 			local target = getTargetBuilding() or ObjectiveService.GetTitanCore()
 			if target ~= nil then
-				EnemyService.SpawnScrapRat(target, true)
+				EnemyService.SpawnScrapRat(target, "Elite")
 			end
 			task.wait(Constants.TITAN.EliteSpawnIntervalSeconds)
 		end
@@ -1795,7 +2052,8 @@ function EnemyService.Init(): ()
 
 	task.spawn(function()
 		RoleService.WaitForAllPlayersReady()
-		local firstDelay = Constants.WAVES.FirstWaveDelaySeconds
+		local firstPhase = Constants.GAME_PHASES[1]
+		local firstDelay = if firstPhase and firstPhase.intervalSeconds then firstPhase.intervalSeconds else Constants.WAVES.FirstWaveDelaySeconds
 		local remaining = firstDelay
 		while remaining > 0 and gameActive do
 			publishNextWaveTimer(remaining)
@@ -1818,7 +2076,8 @@ function EnemyService.Init(): ()
 				break
 			end
 
-			remaining = Constants.WAVES.IntervalSeconds
+			local phase = getCurrentPhase()
+			remaining = phase.intervalSeconds or Constants.WAVES.IntervalSeconds
 			while remaining > 0 and gameActive do
 				publishNextWaveTimer(remaining)
 				task.wait(1)

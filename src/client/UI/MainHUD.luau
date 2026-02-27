@@ -40,6 +40,7 @@ local lastScrapUpdateAt = os.clock()
 local scrapLabel: TextLabel? = nil
 local stormSteelLabel: TextLabel? = nil
 local waveTimerLabel: TextLabel? = nil
+local stormTimerLabel: TextLabel? = nil
 local waveSeasonLabel: TextLabel? = nil
 local dismantleBars: { [BasePart]: BillboardGui } = {}
 local buildCostButtons: { [BuildingType]: TextButton } = {}
@@ -312,6 +313,35 @@ local function formatTimer(secondsRemaining: number): string
 		return ("SWARM ENDS: %02d:%02d"):format(mins, secs)
 	end
 	return ("NEXT SWARM: %02d:%02d"):format(mins, secs)
+end
+
+local function formatStormCountdown(remainingSeconds: number): string
+	local mins = math.floor(remainingSeconds / 60)
+	local secs = math.floor(remainingSeconds % 60 + 0.5)
+	return ("NEXT STORM: %02d:%02d"):format(mins, secs)
+end
+
+local function updateStormTimer()
+	if sandboxMode or stormTimerLabel == nil then
+		return
+	end
+	local nextStormAttr = remotes.Folder:GetAttribute("NextStormTime")
+	if typeof(nextStormAttr) ~= "number" then
+		stormTimerLabel.Text = ""
+		stormTimerLabel.Visible = false
+		return
+	end
+	local nextStorm = nextStormAttr :: number
+	if nextStorm <= 0 then
+		stormTimerLabel.Text = "STORM ACTIVE"
+		stormTimerLabel.TextColor3 = Theme.Colors.WaveTimerActive
+		stormTimerLabel.Visible = true
+		return
+	end
+	local remaining = math.max(0, nextStorm - os.time())
+	stormTimerLabel.Text = formatStormCountdown(remaining)
+	stormTimerLabel.TextColor3 = if remaining <= 60 then Theme.Colors.WaveTimerUrgent else Theme.Colors.TextMuted
+	stormTimerLabel.Visible = true
 end
 
 local function pulseWaveTimer()
@@ -1296,6 +1326,21 @@ local function createMainHUD()
 	waveLabel.Parent = gui
 	waveTimerLabel = waveLabel
 
+	local stormLabel = Instance.new("TextLabel")
+	stormLabel.Name = "StormTimer"
+	stormLabel.AnchorPoint = Vector2.new(0.5, 0)
+	stormLabel.Position = UDim2.new(0.5, 0, 0.12, 0)
+	stormLabel.Size = UDim2.fromOffset(300, 22)
+	stormLabel.BackgroundTransparency = 1
+	stormLabel.TextColor3 = Theme.Colors.TextMuted
+	stormLabel.Font = Enum.Font.RobotoMono
+	stormLabel.TextScaled = true
+	stormLabel.TextSize = if isMobile then 14 else 16
+	stormLabel.Text = ""
+	stormLabel.Visible = false
+	stormLabel.Parent = gui
+	stormTimerLabel = stormLabel
+
 	local seasonLabel = Instance.new("TextLabel")
 	seasonLabel.Name = "WaveSeason"
 	seasonLabel.AnchorPoint = Vector2.new(0.5, 0)
@@ -1540,6 +1585,9 @@ function MainHUD.Init()
 		if waveTimerLabel ~= nil then
 			waveTimerLabel.Visible = false
 		end
+		if stormTimerLabel ~= nil then
+			stormTimerLabel.Visible = false
+		end
 	end)
 	remotes.TitanStageCompleted.OnClientEvent:Connect(function(stage: number)
 		playUISound(AudioManifest.StageComplete, 0.5)
@@ -1650,6 +1698,15 @@ function MainHUD.Init()
 		local remaining = math.max(0, (nextWaveTimeAttr :: number) - os.time())
 		updateWaveTimer(remaining)
 	end
+
+	updateStormTimer()
+
+	task.spawn(function()
+		while isInitialized do
+			task.wait(1)
+			updateStormTimer()
+		end
+	end)
 
 	local dismantleBarAccum = 0
 	local scrapRateAccum = 0

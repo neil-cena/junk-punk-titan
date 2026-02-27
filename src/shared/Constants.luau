@@ -146,6 +146,55 @@ local Constants = {
 		RetreatSpeedMultiplier = 1.1,
 	},
 
+	ENEMY_TYPES = {
+		WallEater = {
+			speed = 18,
+			health = 14,
+			-- Dismantle multiplier per building type (Wall > Drill > Turret > Titan)
+			dismantleMultByType = { Wall = 1.8, Drill = 1.2, Turret = 0.7, Titan = 0.4 },
+			canSteal = false,
+			minCacheDrops = 3,
+			maxCacheDrops = 5,
+		},
+		Juggernaut = {
+			speed = 5,
+			health = 120,
+			dismantleMult = 2.5,
+			targetsTurretOnly = true,
+			canSteal = false,
+			minCacheDrops = 6,
+			maxCacheDrops = 8,
+		},
+		Decoy = {
+			speed = 16,
+			health = 65,
+			dismantleMult = 0,
+			canSteal = false,
+			minCacheDrops = 1,
+			maxCacheDrops = 2,
+		},
+		ScrapCarrier = {
+			speed = 7,
+			health = 30,
+			dismantleMult = 0.3,
+			canSteal = false,
+			minCacheDrops = 10,
+			maxCacheDrops = 18,
+		},
+	},
+
+	GAME_PHASES = {
+		{ endMinute = 3, intervalSeconds = 70, intensityMult = 0.35, lootVacuumWeight = 1, standardChance = 1, thiefChance = 0, wallEaterChance = 0, juggernautChance = 0, decoyChance = 0, scrapCarrierChance = 0, scrapCarrierLastBatchOnly = false },
+		{ endMinute = 5, intervalSeconds = 50, intensityMult = 0.8, lootVacuumWeight = 1, standardChance = 0.85, thiefChance = 0.15, wallEaterChance = 0, juggernautChance = 0, decoyChance = 0, scrapCarrierChance = 0, scrapCarrierLastBatchOnly = false },
+		{ endMinute = 10, intervalSeconds = 65, intensityMult = 0.45, lootVacuumWeight = 2, standardChance = 0.85, thiefChance = 0.15, wallEaterChance = 0, juggernautChance = 0, decoyChance = 0, scrapCarrierChance = 0, scrapCarrierLastBatchOnly = false },
+		{ endMinute = 13, intervalSeconds = 50, intensityMult = 1.0, lootVacuumWeight = 2, standardChance = 0.7, thiefChance = 0.1, wallEaterChance = 0.2, juggernautChance = 0, decoyChance = 0, scrapCarrierChance = 0, scrapCarrierLastBatchOnly = false },
+		{ endMinute = 15, intervalSeconds = 38, intensityMult = 1.7, lootVacuumWeight = 3, standardChance = 0.55, thiefChance = 0.1, wallEaterChance = 0.15, juggernautChance = 0.08, decoyChance = 0.12, scrapCarrierChance = 0.25, scrapCarrierLastBatchOnly = true, maxJuggernautPerWave = 3 },
+		{ endMinute = 18, intervalSeconds = 60, intensityMult = 0.5, lootVacuumWeight = 3, standardChance = 0.85, thiefChance = 0.15, wallEaterChance = 0, juggernautChance = 0, decoyChance = 0, scrapCarrierChance = 0, scrapCarrierLastBatchOnly = false },
+		{ endMinute = 20, intervalSeconds = 80, intensityMult = 0.25, lootVacuumWeight = 4, standardChance = 0.6, thiefChance = 0.1, wallEaterChance = 0, juggernautChance = 0, decoyChance = 0, scrapCarrierChance = 0.3, scrapCarrierLastBatchOnly = false },
+		{ endMinute = 23, intervalSeconds = 42, intensityMult = 1.3, lootVacuumWeight = 4, standardChance = 0.5, thiefChance = 0.1, wallEaterChance = 0.15, juggernautChance = 0.1, decoyChance = 0.15, scrapCarrierChance = 0, scrapCarrierLastBatchOnly = false, maxJuggernautPerWave = 3 },
+		{ endMinute = 25, intervalSeconds = 28, intensityMult = 2.5, lootVacuumWeight = 4, standardChance = 0.5, thiefChance = 0, wallEaterChance = 0.2, juggernautChance = 0.1, decoyChance = 0.2, scrapCarrierChance = 0, scrapCarrierLastBatchOnly = false, maxJuggernautPerWave = 3 },
+	},
+
 	LOOT = {
 		JunkBlockValue = 5,
 		RatCacheValue = 3,
@@ -159,7 +208,7 @@ local Constants = {
 		LootPickupArmDelaySeconds = 0.8,
 		-- If true, scrap is only awarded after player touch or newly entering pickup radius (no passive auto-credit for already-nearby players).
 		LootPickupRequireIntent = true,
-		MaxActiveBeforeAutoCollect = 1000,
+		MaxActiveBeforeAutoCollect = 500,
 		AutoCollectFraction = 0.5,
 		MaxActiveCaches = 1500,
 	},
@@ -178,12 +227,13 @@ local Constants = {
 
 	POWERUPS = {
 		DropChance = 0.08,
-		Types = { "Lightning", "Shockwave", "RepairAura", "TitanPush", "LootVacuum", "ActivateAll", "RatStun" },
+		Types = { "Lightning", "Shockwave", "RepairAura", "TitanPush", "WeakLootVacuum", "StrongLootVacuum", "ActivateAll", "RatStun" },
 		Lightning = { kills = { 5, 10 } },
 		Shockwave = { radius = 20, damagePercent = 0.5 },
 		RepairAura = { radius = 25, healAmount = 40 },
 		TitanPush = { radius = 30, pushDistance = 10 },
-		LootVacuum = { radius = 15, useBaseRadius = true },
+		WeakLootVacuum = { radius = 20 },
+		StrongLootVacuum = { radius = 15, useBaseRadius = true },
 		ActivateAll = {},
 		RatStun = { duration = 2 },
 		DespawnSeconds = 20,
@@ -230,7 +280,8 @@ local Constants = {
 		IntegrityDrainPerSecond = 1.67,
 		IntegrityRepairPerStage = 25,
 		DepositRange = 12,
-		FinalStandDurationSeconds = 240,
+		FinalStandDurationSeconds = 120,
+		PostGameDelaySeconds = 10,
 		EliteRatHealthMult = 2.0,
 		EliteRatSpeedMult = 1.3,
 		EliteSpawnIntervalSeconds = 3,

@@ -126,7 +126,10 @@ local function triggerGameOver()
 		return
 	end
 	setGameState("defeat")
-	remotes.GlobalGameOver:FireAllClients()
+	local delaySec = Constants.TITAN.PostGameDelaySeconds or 10
+	task.delay(delaySec, function()
+		remotes.GlobalGameOver:FireAllClients()
+	end)
 end
 
 local function triggerVictory()
@@ -134,11 +137,13 @@ local function triggerVictory()
 		return
 	end
 	setGameState("victory")
-	remotes.GlobalVictory:FireAllClients()
-
-	task.delay(8, function()
-		setGameState("sandbox")
-		remotes.SandboxStarted:FireAllClients()
+	local delaySec = Constants.TITAN.PostGameDelaySeconds or 10
+	task.delay(delaySec, function()
+		remotes.GlobalVictory:FireAllClients()
+		task.delay(8, function()
+			setGameState("sandbox")
+			remotes.SandboxStarted:FireAllClients()
+		end)
 	end)
 end
 
@@ -338,6 +343,10 @@ end
 
 function ObjectiveService.GetGameState(): string
 	return gameState
+end
+
+function ObjectiveService.GetSessionStartTime(): number
+	return sessionStartTime
 end
 
 function ObjectiveService.ConnectGameStateChanged(callback: (string) -> ()): RBXScriptConnection

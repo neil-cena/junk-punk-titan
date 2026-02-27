@@ -30,6 +30,7 @@ local StormService = {}
 
 local remotes = RemotesModule.Get()
 local activeStorm = false
+local nextStormTime = 0
 local permanentStorm = false
 local gameActive = true
 local tetherPads: { BasePart } = {}
@@ -212,6 +213,8 @@ end
 
 local function runStorm()
 	activeStorm = true
+	nextStormTime = 0
+	remotes.Folder:SetAttribute("NextStormTime", 0)
 	remotes.StormStarted:FireAllClients()
 	spawnTetherPads()
 	spawnStormSteelDuringStorm()
@@ -240,6 +243,8 @@ local function runStorm()
 	task.delay(3, clearStormSteel)
 	remotes.TetherStatus:FireAllClients(0, 0)
 	activeStorm = false
+	nextStormTime = os.time() + Constants.STORM.IntervalSeconds
+	remotes.Folder:SetAttribute("NextStormTime", nextStormTime)
 	remotes.StormEnded:FireAllClients()
 end
 
@@ -269,6 +274,16 @@ function StormService.StopStorm(): ()
 end
 
 function StormService.Init(): ()
+	nextStormTime = os.time() + Constants.STORM.IntervalSeconds
+	remotes.Folder:SetAttribute("NextStormTime", nextStormTime)
+
+	task.spawn(function()
+		while gameActive do
+			task.wait(1)
+			remotes.Folder:SetAttribute("NextStormTime", nextStormTime)
+		end
+	end)
+
 	ObjectiveService.ConnectGameStateChanged(function(state: string)
 		if state == "final_stand" then
 			StormService.StartPermanentStorm()

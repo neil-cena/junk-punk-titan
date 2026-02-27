@@ -973,7 +973,8 @@ local function playPowerUpSound(powerUpType: string)
 		Shockwave = AudioManifest.PowerUpShockwave,
 		RepairAura = AudioManifest.PowerUpRepairAura,
 		TitanPush = AudioManifest.PowerUpTitanPush,
-		LootVacuum = AudioManifest.PowerUpLootVacuum,
+		WeakLootVacuum = AudioManifest.PowerUpLootVacuum,
+		StrongLootVacuum = AudioManifest.PowerUpLootVacuum,
 		ActivateAll = AudioManifest.PowerUpActivateAll,
 		RatStun = AudioManifest.PowerUpRatStun,
 	}
@@ -987,7 +988,7 @@ local function playPowerUpSound(powerUpType: string)
 		s.PlaybackSpeed = 1.4
 	elseif powerUpType == "TitanPush" then
 		s.PlaybackSpeed = 0.7
-	elseif powerUpType == "LootVacuum" then
+	elseif powerUpType == "WeakLootVacuum" or powerUpType == "StrongLootVacuum" then
 		s.PlaybackSpeed = 1.6
 	elseif powerUpType == "ActivateAll" then
 		s.PlaybackSpeed = 1.2
@@ -1136,15 +1137,18 @@ local function playTitanPushVFX(origin: Vector3, hitPositions: { Vector3 }?)
 	playPowerUpSound("TitanPush")
 end
 
-local function playLootVacuumVFX(origin: Vector3)
+local function playLootVacuumVFX(origin: Vector3, vacuumType: "WeakLootVacuum" | "StrongLootVacuum")
+	local cfg = Constants.POWERUPS[vacuumType]
+	local radius = if cfg and cfg.useBaseRadius == true then Constants.BUILDING.MaxBuildRadiusFromCenter else (cfg and cfg.radius or 20)
+	local color = VisualManifest.Loot.PowerUps[vacuumType] or VisualManifest.Loot.PowerUps.StrongLootVacuum
 	local ring = Instance.new("Part")
 	ring.Name = "LootVacuumRing"
 	ring.Shape = Enum.PartType.Cylinder
 	ring.Anchored = true
 	ring.CanCollide = false
 	ring.Material = Enum.Material.Neon
-	ring.Color = VisualManifest.Loot.PowerUps.LootVacuum
-	local startDiameter = Constants.POWERUPS.LootVacuum.radius * 2
+	ring.Color = color
+	local startDiameter = radius * 2
 	ring.Size = Vector3.new(0.4, startDiameter, startDiameter)
 	ring.CFrame = CFrame.new(origin + Vector3.new(0, 0.12, 0)) * CFrame.Angles(0, 0, math.rad(90))
 	ring.Transparency = 0.15
@@ -1165,7 +1169,7 @@ local function playLootVacuumVFX(origin: Vector3)
 	core.Anchored = true
 	core.CanCollide = false
 	core.Material = Enum.Material.Neon
-	core.Color = VisualManifest.Loot.PowerUps.LootVacuum
+	core.Color = color
 	core.Size = Vector3.new(1.5, 1.5, 1.5)
 	core.Position = origin + Vector3.new(0, 1.2, 0)
 	core.Transparency = 0.1
@@ -1181,7 +1185,7 @@ local function playLootVacuumVFX(origin: Vector3)
 	end)
 
 	bumpCamera()
-	playPowerUpSound("LootVacuum")
+	playPowerUpSound(vacuumType)
 end
 
 local function playDrillBonusShowerVFX(drillPositions: { Vector3 })
@@ -2027,8 +2031,8 @@ function VFXController.Init()
 				end
 			end
 			playTitanPushVFX(titanCenter, hitPositions)
-		elseif powerUpType == "LootVacuum" then
-			playLootVacuumVFX(position)
+		elseif powerUpType == "WeakLootVacuum" or powerUpType == "StrongLootVacuum" then
+			playLootVacuumVFX(position, powerUpType)
 		elseif powerUpType == "ActivateAll" then
 			playActivateAllVFX(position)
 		elseif powerUpType == "RatStun" then

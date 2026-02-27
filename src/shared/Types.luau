@@ -3,6 +3,8 @@
 export type RoleName = "Scrapper" | "Fixer" | "Enforcer"
 export type BuildingType = "Turret" | "Drill" | "Wall"
 
+export type EnemyType = "Standard" | "Thief" | "Elite" | "WallEater" | "Juggernaut" | "Decoy" | "ScrapCarrier"
+
 export type RoleDefinition = {
 	speedMult: number,
 	repairMult: number,
