@@ -354,13 +354,48 @@ local function getNearestBlueprint(range: number): BasePart?
 	return nearest
 end
 
+local function getTitanStage(): number
+	for _, tagged in CollectionService:GetTagged("TitanObjective") do
+		if tagged:IsA("Model") then
+			local stageAttr = tagged:GetAttribute("TitanStage")
+			if typeof(stageAttr) == "number" then
+				return math.max(0, math.floor(stageAttr))
+			end
+		end
+	end
+	return 0
+end
+
+local function getCatchupBuildMultiplier(): number
+	local folder = remotes.Folder
+	if folder == nil then
+		return 1
+	end
+	local untilAttr = folder:GetAttribute("CatchupUntil")
+	if typeof(untilAttr) ~= "number" then
+		return 1
+	end
+	if (untilAttr :: number) > os.clock() then
+		local bonus = Constants.BUILDING.CatchupBuildSpeedBonus or 0.25
+		return math.max(0.1, 1 - bonus)
+	end
+	return 1
+end
+
 local function getBuildTime(): number
 	local base = Constants.BUILDING.BaseBuildTimeSeconds
 	local role = LocalPlayer:GetAttribute("Role")
-	if role == "Fixer" then
-		return base * 0.6
-	end
-	return base
+	local roleMult = if role == "Fixer" then 0.6 else 1.0
+
+	local stage = getTitanStage()
+	local bonusPerStage = Constants.TITAN.BuildSpeedBonusPerStage or 0.1
+	local titanMult = math.max(Constants.TITAN.MinBuildTimeMultiplier or 0.25, 1 - (stage * bonusPerStage))
+
+	local catchupMult = getCatchupBuildMultiplier()
+
+	local result = base * roleMult * titanMult * catchupMult
+	local minMult = Constants.TITAN.MinBuildTimeMultiplier or 0.25
+	return math.max(base * minMult, result)
 end
 
 local function cancelHold()

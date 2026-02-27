@@ -149,6 +149,7 @@ local function applyStormWindDamage()
 				instance:Destroy()
 				BuildingService.RegisterDestroyedSlot(destroyedPos, buildingType)
 				BuildingService.PlaceRuinGhost(destroyedPos, buildingType, buildingRotation)
+				BuildingService.TriggerCatchupBoost("storm_damage")
 			else
 				instance:SetAttribute("BuildingHP", nextHP)
 			end

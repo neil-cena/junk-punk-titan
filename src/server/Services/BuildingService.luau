@@ -4,6 +4,7 @@ local CollectionService = game:GetService("CollectionService")
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
@@ -59,6 +60,9 @@ local buildingsLostCount = 0
 local finishedBuildings: { [BasePart]: true } = {}
 local REQUEST_UPGRADE_MAX_DISTANCE = 14
 
+local catchupUntil = 0
+local lastCatchupTrigger = 0
+
 local upgradeBuilding: (player: Player, part: BasePart) -> ()
 
 local function getMaxUnlockedLevel(): number
@@ -87,6 +91,55 @@ local function getPlayerBuildCostMult(player: Player): number
 	return 1
 end
 
+function BuildingService.TriggerCatchupBoost(_reason: string?)
+	local now = os.clock()
+	local cooldown = Constants.BUILDING.CatchupCooldownSeconds or 18
+	if lastCatchupTrigger > 0 and (now - lastCatchupTrigger) < cooldown then
+		return
+	end
+	lastCatchupTrigger = now
+	local boostSec = Constants.BUILDING.CatchupBoostSeconds or 28
+	catchupUntil = now + boostSec
+	syncCatchupAttribute()
+	BuildingService.RefreshAllUpgradePrompts()
+end
+
+local function syncCatchupAttribute()
+	local folder = remotes.Folder
+	if folder == nil then
+		return
+	end
+	if catchupUntil > os.clock() then
+		folder:SetAttribute("CatchupUntil", catchupUntil)
+	else
+		folder:SetAttribute("CatchupUntil", nil)
+	end
+end
+
+local function getCatchupUpgradeMultiplier(): number
+	if catchupUntil <= os.clock() then
+		return 1
+	end
+	local bonus = Constants.BUILDING.CatchupUpgradeSpeedBonus or 0.25
+	return math.max(0.1, 1 - bonus)
+end
+
+local function getUpgradeHoldDuration(): number
+	local baseHold = 1.0
+	local stage = 0
+	local ok, s = pcall(function()
+		return getObjectiveService().GetCurrentStage()
+	end)
+	if ok and typeof(s) == "number" then
+		stage = math.max(0, math.floor(s :: number))
+	end
+	local bonusPerStage = Constants.TITAN.UpgradeSpeedBonusPerStage or 0.1
+	local titanMult = math.max(Constants.TITAN.MinUpgradeHoldDuration or 0.35, 1 - (stage * bonusPerStage))
+	local catchupMult = getCatchupUpgradeMultiplier()
+	local result = baseHold * titanMult * catchupMult
+	return math.max(Constants.TITAN.MinUpgradeHoldDuration or 0.35, result)
+end
+
 local function refreshUpgradePrompt(part: BasePart)
 	local buildingType = part:GetAttribute("BuildingType")
 	local level = part:GetAttribute("BuildingLevel") or 1
@@ -113,7 +166,6 @@ local function refreshUpgradePrompt(part: BasePart)
 	if prompt == nil then
 		prompt = Instance.new("ProximityPrompt")
 		prompt.Name = "UpgradePrompt"
-		prompt.HoldDuration = 1.0
 		prompt.MaxActivationDistance = 10
 		prompt.RequiresLineOfSight = false
 		prompt.Parent = part
@@ -123,6 +175,7 @@ local function refreshUpgradePrompt(part: BasePart)
 		end)
 	end
 
+	prompt.HoldDuration = getUpgradeHoldDuration()
 	prompt.ObjectText = ("%s Lv.%d"):format(buildingType, level)
 	prompt.ActionText = ("Upgrade to Lv.%d ($%d)"):format(nextLevel, stats.cost)
 	prompt.Enabled = true
@@ -691,6 +744,14 @@ function BuildingService.Init(): ()
 	RemoteGuard.Register("FinishBlueprint", 3, 1)
 	RemoteGuard.Register("CancelBlueprint", 5, 1)
 	RemoteGuard.Register("RequestUpgrade", 5, 1)
+
+	RunService.Heartbeat:Connect(function()
+		if catchupUntil > 0 and catchupUntil <= os.clock() then
+			catchupUntil = 0
+			syncCatchupAttribute()
+			BuildingService.RefreshAllUpgradePrompts()
+		end
+	end)
 
 	remotes.PlaceBlueprint.OnServerEvent:Connect(function(player: Player, buildingType: BuildingType, position: Vector3, rotation: number?)
 		if not RemoteGuard.Check("PlaceBlueprint", player) then

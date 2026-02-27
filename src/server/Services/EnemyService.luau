@@ -1259,6 +1259,7 @@ dismantleAndDestroyBuilding = function(dismantledPart: BasePart, ratModel: Model
 	invalidatePathCache()
 	BuildingService.RegisterDestroyedSlot(finalPosition, buildingType)
 	BuildingService.PlaceRuinGhost(finalPosition, buildingType, buildingRotation)
+	BuildingService.TriggerCatchupBoost("rat_dismantle")
 
 	if ratModel ~= nil then
 		local state = ratStates[ratModel]

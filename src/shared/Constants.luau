@@ -52,6 +52,11 @@ local Constants = {
 		DefaultHP = 100,
 		BaseBuildTimeSeconds = 3,
 		MaxLevel = 4,
+		-- Pacing: catch-up boost after destructive events
+		CatchupBoostSeconds = 28,
+		CatchupBuildSpeedBonus = 0.25,
+		CatchupUpgradeSpeedBonus = 0.25,
+		CatchupCooldownSeconds = 18,
 		Sizes = {
 			Turret = Vector3.new(4, 4, 4),
 			Drill = Vector3.new(4, 6, 4),
@@ -218,6 +223,11 @@ local Constants = {
 		EliteRatHealthMult = 2.0,
 		EliteRatSpeedMult = 1.3,
 		EliteSpawnIntervalSeconds = 3,
+		-- Pacing: build/upgrade speed scales with titan stage
+		BuildSpeedBonusPerStage = 0.1,
+		UpgradeSpeedBonusPerStage = 0.1,
+		MinBuildTimeMultiplier = 0.25,
+		MinUpgradeHoldDuration = 0.35,
 	},
 }
 
